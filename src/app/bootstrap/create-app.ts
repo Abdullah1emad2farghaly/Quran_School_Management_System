@@ -1,6 +1,8 @@
 import cors from 'cors';
 import express, { type Express } from 'express';
 import { env } from '../../config/env';
+import { logger } from '../../config/logger';
+import { createRequestLogger } from '../../modules/05-logging-request-context/public';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.middleware';
 import { requestContextMiddleware } from '../middleware/request-context.middleware';
 import { API_BASE_PATH, buildApiRouter } from '../routes';
@@ -13,6 +15,7 @@ export function createApp(): Express {
   app.disable('x-powered-by');
 
   app.use(requestContextMiddleware);
+  app.use(createRequestLogger(logger));
   app.use(
     cors({
       origin: env.corsOrigins.length ? [...env.corsOrigins] : false,

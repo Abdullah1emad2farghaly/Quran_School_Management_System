@@ -4,3 +4,4 @@ export { loadConfig, type EnvSource } from '../infrastructure/services/config-lo
 export { redactConfig } from '../infrastructure/services/config-redaction';
 export { ConfigurationError } from '../domain/errors/configuration-error';
 export { SUPPORTED_LOCALES, FALLBACK_LOCALE, isLocale, type Locale } from '../domain/value-objects/locale';
+export { LOG_LEVELS, isLogLevel, type LogLevel } from '../domain/value-objects/log-level';

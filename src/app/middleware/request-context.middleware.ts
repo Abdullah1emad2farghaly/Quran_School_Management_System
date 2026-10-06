@@ -1,15 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { env, type Locale } from '../../config/env';
-import { requestContext } from '../../modules/05-logging-request-context/infrastructure/services/request-context';
 import { resolveLocale } from '../../modules/03-error-localization/public';
-
-const SAFE_REQUEST_ID = /^[A-Za-z0-9._-]{8,64}$/;
-
-/** Reuses a client-provided request ID only if it is safe; otherwise generates one. */
-export function resolveRequestId(incoming: string | undefined): string {
-  return incoming && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
-}
+import { requestContext, resolveRequestId } from '../../modules/05-logging-request-context/public';
 
 declare module 'express-serve-static-core' {
   interface Request {

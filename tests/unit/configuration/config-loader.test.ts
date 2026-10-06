@@ -45,6 +45,18 @@ describe('loadConfig defaults', () => {
   });
 });
 
+describe('log level', () => {
+  it('defaults to info, and to silent in test', () => {
+    expect(loadConfig({}).logLevel).toBe('info');
+    expect(loadConfig({ NODE_ENV: 'test' }).logLevel).toBe('silent');
+    expect(loadConfig(prod).logLevel).toBe('info');
+  });
+  it('accepts an explicit level and rejects invalid ones', () => {
+    expect(loadConfig({ LOG_LEVEL: 'debug' }).logLevel).toBe('debug');
+    expect(issuesOf({ LOG_LEVEL: 'verbose' })).toHaveLength(1);
+  });
+});
+
 describe('loadConfig validation', () => {
   it('rejects invalid values and reports all issues at once', () => {
     const issues = issuesOf({ NODE_ENV: 'staging', PORT: 'abc', DEFAULT_LOCALE: 'fr', APP_TIMEZONE: 'Mars/Base' });

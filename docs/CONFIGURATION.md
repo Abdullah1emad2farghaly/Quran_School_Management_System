@@ -11,6 +11,7 @@ On any invalid value the server refuses to start and prints **all** problems at 
 | CORS_ORIGINS | (empty = browsers denied) | comma-separated `scheme://host[:port]`; no path, no `*` |
 | APP_TIMEZONE | Africa/Cairo | valid IANA timezone |
 | DEFAULT_LOCALE | ar | ar, en |
+| LOG_LEVEL | info (silent when NODE_ENV=test) | silent, error, warn, info, debug |
 | DATABASE_HOST / PORT | 127.0.0.1 / 3306 | port 1–65535 |
 | DATABASE_NAME / USER / PASSWORD | empty | **required in production** |
 | JWT_ACCESS_SECRET / JWT_REFRESH_SECRET | empty | **required in production**, ≥ 32 chars, must differ |

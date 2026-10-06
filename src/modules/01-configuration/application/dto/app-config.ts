@@ -1,4 +1,5 @@
 import type { Locale } from '../../domain/value-objects/locale';
+import type { LogLevel } from '../../domain/value-objects/log-level';
 
 export type NodeEnvironment = 'development' | 'test' | 'production';
 
@@ -10,6 +11,8 @@ export interface AppConfig {
   /** Business/display timezone (IANA name). Database timestamps stay UTC. */
   readonly timezone: string;
   readonly defaultLocale: Locale;
+  /** Minimum level written to logs. Defaults to "silent" in test, "info" otherwise. */
+  readonly logLevel: LogLevel;
   readonly database: {
     readonly host: string;
     readonly port: number;

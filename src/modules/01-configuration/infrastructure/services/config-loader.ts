@@ -1,5 +1,6 @@
 import { ConfigurationError } from '../../domain/errors/configuration-error';
 import { isLocale, type Locale } from '../../domain/value-objects/locale';
+import { LOG_LEVELS, isLogLevel, type LogLevel } from '../../domain/value-objects/log-level';
 import type { AppConfig, NodeEnvironment } from '../../application/dto/app-config';
 
 export type EnvSource = Readonly<Record<string, string | undefined>>;
@@ -79,6 +80,12 @@ export function loadConfig(source: EnvSource): AppConfig {
   if (isLocale(rawLocale)) defaultLocale = rawLocale;
   else issues.push('DEFAULT_LOCALE: must be a supported locale (ar, en)');
 
+  // Log level
+  const rawLogLevel = read('LOG_LEVEL') ?? (nodeEnv === 'test' ? 'silent' : 'info');
+  let logLevel: LogLevel = 'info';
+  if (isLogLevel(rawLogLevel)) logLevel = rawLogLevel;
+  else issues.push(`LOG_LEVEL: must be one of ${LOG_LEVELS.join(', ')}`);
+
   // Timezone
   const timezone = read('APP_TIMEZONE') ?? 'Africa/Cairo';
   if (!isValidTimezone(timezone)) issues.push('APP_TIMEZONE: must be a valid IANA timezone');
@@ -151,6 +158,7 @@ export function loadConfig(source: EnvSource): AppConfig {
     corsOrigins,
     timezone,
     defaultLocale,
+    logLevel,
     database,
     jwt,
     redis,

@@ -53,3 +53,12 @@
 - `validate(...chains)`: express-validator integration using stable error codes as messages.
 - Arabic/English messages for all validation codes; registered once at startup.
 - Documented in `docs/API-STANDARDS.md`.
+
+## 0.7.0 — Module 05: Logging & Request Context
+- Dependency-free structured JSON logger with levels, child loggers, and automatic request context fields.
+- Central redaction: sensitive keys (password, OTP, tokens, secrets, authorization, cookies…), JWTs, Bearer tokens, and URL credentials; circular/deep/large values handled safely.
+- Access log middleware (method, path without query, status, duration; never headers or bodies).
+- Request ID policy moved into the module; request context now supports `actorUserId`.
+- New `LOG_LEVEL` setting in Module 01 (default `info`, `silent` in test).
+- Error handler logs unhandled errors through the logger (full detail in logs only).
+- Documented in `docs/LOGGING.md`.
