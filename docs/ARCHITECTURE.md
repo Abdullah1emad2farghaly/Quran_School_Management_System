@@ -32,3 +32,6 @@ Business operations that touch several resources run inside `UnitOfWork.run`. Se
 
 ## Errors & localization (Module 03)
 Domain code throws `AppError(code, kind, details?, params?)`. Only the HTTP boundary turns it into a localized response via Module 03; see `docs/LOCALIZATION.md`.
+
+## Events & outbox (Module 06)
+Asynchronous side effects go through `Business Action → Domain Event → Outbox → Handlers`; see `docs/EVENTS-OUTBOX.md`.

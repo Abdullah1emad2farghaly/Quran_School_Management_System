@@ -15,8 +15,8 @@ Project bootstrap is in place (structure, TypeScript strict, Express, Sequelize/
 | 02 | Database & Transaction Infrastructure | COMPLETED |
 | 03 | Error & Localization | COMPLETED |
 | 04 | Validation & API Standards | COMPLETED |
-| 05 | Logging & Request Context | IMPLEMENTED (unit logic verified on Node's runner; vitest/tsc and HTTP tests pending) |
-| 06 | Domain Events & Transactional Outbox | NOT_STARTED |
+| 05 | Logging & Request Context | COMPLETED |
+| 06 | Domain Events & Transactional Outbox | IMPLEMENTED (unit logic verified on Node's runner; vitest/tsc, migration and `npm run test:db` pending) |
 | 07 | File Infrastructure | NOT_STARTED |
 | 08 | Identity Core | NOT_STARTED |
 | 09 | Roles & Permissions | NOT_STARTED |

@@ -62,3 +62,13 @@
 - New `LOG_LEVEL` setting in Module 01 (default `info`, `silent` in test).
 - Error handler logs unhandled errors through the logger (full detail in logs only).
 - Documented in `docs/LOGGING.md`.
+
+## 0.8.0 — Module 06: Domain Events & Transactional Outbox
+- `createDomainEvent` (UUID id, clock time, request-context metadata) and validation.
+- `OutboxService.publish/publishFrom`: events written inside the caller's transaction (atomic with the business change).
+- `OutboxProcessor`: at-least-once delivery, exponential backoff (30 s … 1 h), dead after 5 attempts, per-handler failure isolation, handlers run in the original request context.
+- Safe concurrent claiming with lock leases (works on MariaDB 10.4, no SKIP LOCKED).
+- `OutboxScheduler`: non-overlapping polling, graceful stop, log-flood protection. No Redis/BullMQ required yet.
+- `SequelizeOutboxStore`, `InMemoryOutboxStore`, migration `create-outbox-messages`.
+- `startOutbox()/stopOutbox()` wired into `server.ts`; handlers register on `getEventHandlerRegistry()`.
+- Documented in `docs/EVENTS-OUTBOX.md`.
