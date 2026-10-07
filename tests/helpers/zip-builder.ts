@@ -13,7 +13,7 @@ export function buildZip(entries: ZipTestEntry[]): Buffer {
   let offset = 0;
   for (const e of entries) {
     const name = Buffer.from(e.name, 'utf8');
-    const data = Buffer.from(e.data ?? '', 'utf8');
+    const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(e.data ?? '', 'utf8');
     const flags = e.encrypted ? 1 : 0;
     const declared = e.declaredSize ?? data.length;
 
