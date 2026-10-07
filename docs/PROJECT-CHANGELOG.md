@@ -72,3 +72,11 @@
 - `SequelizeOutboxStore`, `InMemoryOutboxStore`, migration `create-outbox-messages`.
 - `startOutbox()/stopOutbox()` wired into `server.ts`; handlers register on `getEventHandlerRegistry()`.
 - Documented in `docs/EVENTS-OUTBOX.md`.
+
+## 0.9.0 — Module 07: File Infrastructure
+- Private file storage for Excel `.xlsx` (10 MB, row limit constant for Module 36); no public URLs.
+- Content-based validation: ZIP/OOXML structure, macros, embedded objects, encryption, path tricks, zip-bomb limits; client content-type ignored.
+- `FileService` (save/read/delete) with server-generated storage keys, sanitized display names, SHA-256 integrity verification.
+- `LocalFileStorage` (path-safe, atomic writes), `SequelizeStoredFileRepository`, in-memory adapters; migration `create-stored-files`.
+- Localized (ar/en) file error messages registered at startup; `getFileService()` in `src/config/files.ts`.
+- Documented in `docs/FILES.md`.
