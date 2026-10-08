@@ -22,7 +22,7 @@ Create a MySQL database matching `DATABASE_NAME`, then `npm run db:migrate`. Sch
 Base path `/api/v1`. Localization: `ar` (default), `en`. See `docs/ARCHITECTURE.md`.
 
 ## Status
-See `docs/IMPLEMENTATION-STATUS.md`. Currently: bootstrap only.
+See `docs/IMPLEMENTATION-STATUS.md`. Currently: Foundation phase complete (Modules 00–07); Module 08 (Identity Core) implemented; next is Module 09 Roles & Permissions.
 
 # _____________________________________________________________________________________
 

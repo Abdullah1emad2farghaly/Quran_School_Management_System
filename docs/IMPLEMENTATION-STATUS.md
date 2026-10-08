@@ -4,7 +4,7 @@ Statuses: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · COMPLETED
 
 ## Bootstrap (§94 / §116)
 
-Project bootstrap is in place (structure, TypeScript strict, Express, Sequelize/MySQL config, env handling, CORS, request context, error foundation, health endpoint, test and migration foundations). Dependency installation, typecheck, and tests have **not yet been run** (no network in the authoring environment). No business modules have been started.
+Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Module 08 is implemented; Modules 09–40 have not been started and only have skeleton folders.
 
 ## Modules
 
@@ -17,8 +17,8 @@ Project bootstrap is in place (structure, TypeScript strict, Express, Sequelize/
 | 04 | Validation & API Standards | COMPLETED |
 | 05 | Logging & Request Context | COMPLETED |
 | 06 | Domain Events & Transactional Outbox | COMPLETED |
-| 07 | File Infrastructure | IMPLEMENTED (unit logic verified on Node's runner; vitest/tsc, migration and `npm run test:db` pending) |
-| 08 | Identity Core | NOT_STARTED |
+| 07 | File Infrastructure | COMPLETED |
+| 08 | Identity Core | IMPLEMENTED (unit tests pass; `npm run db:migrate` and `npm run test:db` pending on the user machine) |
 | 09 | Roles & Permissions | NOT_STARTED |
 | 10 | Sessions & JWT | NOT_STARTED |
 | 11 | OTP & Password Recovery | NOT_STARTED |

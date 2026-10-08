@@ -35,3 +35,9 @@ Domain code throws `AppError(code, kind, details?, params?)`. Only the HTTP boun
 
 ## Events & outbox (Module 06)
 Asynchronous side effects go through `Business Action → Domain Event → Outbox → Handlers`; see `docs/EVENTS-OUTBOX.md`.
+
+## Files (Module 07)
+Uploaded Excel files are stored privately (no public URLs) behind `FileService`, with content-based validation and SHA-256 integrity checks; see `docs/FILES.md`.
+
+## Identity (Module 08)
+The login identity (normalized phone, bcrypt hash, ACTIVE/INACTIVE) is owned by `IdentityService`; other modules use only its public contract and authorize their own callers. No HTTP routes until Modules 10 and 12; see `docs/IDENTITY.md`.

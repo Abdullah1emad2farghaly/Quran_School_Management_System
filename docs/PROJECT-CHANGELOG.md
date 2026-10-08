@@ -9,7 +9,7 @@
 - `GET /api/v1/health` (liveness) and `GET /api/v1/health/ready` (database readiness).
 - sequelize-cli configuration and empty migrations/seeders folders.
 - Vitest + supertest testing foundation.
-- BullMQ/Redis intentionally not installed yet; added with Module 06 (Outbox).
+- BullMQ/Redis intentionally not installed yet; not required by Module 06 (the outbox uses database polling) and to be added only if a later module needs it.
 
 ## 0.2.0 — Module 00: Shared Kernel
 - `AppError` is now transport-agnostic (`code` + `kind`); HTTP status mapping moved to `src/app/middleware/http-status.ts`.
@@ -80,3 +80,13 @@
 - `LocalFileStorage` (path-safe, atomic writes), `SequelizeStoredFileRepository`, in-memory adapters; migration `create-stored-files`.
 - Localized (ar/en) file error messages registered at startup; `getFileService()` in `src/config/files.ts`.
 - Documented in `docs/FILES.md`.
+
+## 0.10.0 — Module 08: Identity Core
+- `User` aggregate: normalized E.164 phone (globally unique), bcrypt password hash, `ACTIVE`/`INACTIVE` lifecycle (reversible, history preserved), optimistic-lock version.
+- Shared phone normalization: Egyptian local mobiles (010/011/012/015) become `+20…`; `+`/`00` international numbers are validated; Arabic-Indic digits and separators accepted; ambiguous input is rejected, never guessed.
+- Password policy (4–12 characters) and initial-password helper (last 4 digits of the phone).
+- `IdentityService` public contract (create, find, verify password, deactivate/activate, change password) with optional caller transaction; duplicate phone always conflicts (no silent merge).
+- Events `UserCreated`, `UserDeactivated`, `UserActivated`, `UserPasswordChanged` through the outbox (payload `{ userId }` only).
+- `SequelizeUserRepository`, `InMemoryUserRepository`, `BcryptPasswordHasher`, migration `create-users`; localized (ar/en) error messages registered at startup; `getIdentityService()` in `src/config/identity.ts`.
+- No HTTP routes (authentication and authorization arrive with Modules 10 and 12).
+- Documented in `docs/IDENTITY.md`.
