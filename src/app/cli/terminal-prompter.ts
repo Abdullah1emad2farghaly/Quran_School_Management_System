@@ -1,9 +1,10 @@
 import { createInterface, type Interface } from 'node:readline';
 import { Writable } from 'node:stream';
 import type { CredentialPrompter } from './bootstrap-main-admin-cli';
+import type { OrganizationPrompter } from './bootstrap-organization-cli';
 
 /** Interactive prompts on the real terminal; typed passwords are not echoed. */
-export class TerminalPrompter implements CredentialPrompter {
+export class TerminalPrompter implements CredentialPrompter, OrganizationPrompter {
   private muted = false;
   private readonly rl: Interface;
 
@@ -26,6 +27,10 @@ export class TerminalPrompter implements CredentialPrompter {
 
   askPhone(): Promise<string> {
     return this.ask('Phone number: ', false);
+  }
+
+  askOrganizationName(): Promise<string> {
+    return this.ask('Main Organization name (Arabic or English): ', false);
   }
 
   askPassword(label: string): Promise<string> {

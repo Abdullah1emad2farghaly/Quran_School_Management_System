@@ -48,7 +48,7 @@ Scope kinds: `MANAGEMENT` and `REPORTING`, never implied by each other. `GLOBAL_
 `BootstrapMainAdmin` creates the first Main Admin. No endpoint exists.
 
 Setup
-1. `npm run db:migrate` (creates `authorization_bootstrap_lock`).
+1. `npm run db:migrate` (creates `authorization_bootstrap_lock`). The command first ensures the Main Organization exists (Module 13, idempotent; asks its name only if none exists, see `docs/ORGANIZATION.md`).
 2. In an **interactive terminal**: `npm run bootstrap:main-admin`.
 3. Type the phone number, then the password twice (hidden prompts). Passwords are never taken from arguments, the environment, or pipes (non-interactive runs exit with code 2).
 4. The command prints the new user id (never the phone or password). Sign in with `POST /api/v1/auth/login`.

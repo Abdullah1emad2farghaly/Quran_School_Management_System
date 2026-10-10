@@ -21,6 +21,11 @@ export interface BootstrapCliDeps {
   readonly describeCode?: (code: string) => string | undefined;
   readonly out: (line: string) => void;
   readonly err: (line: string) => void;
+  /**
+   * Optional step run BEFORE the credentials are asked: ensures the Main Organization exists (idempotent, Module 13).
+   * A non-zero result stops the command, so no Main Admin is created without the organization step succeeding.
+   */
+  readonly beforeCredentials?: () => Promise<number>;
 }
 
 /**
@@ -33,6 +38,11 @@ export async function runBootstrapMainAdminCli(deps: BootstrapCliDeps): Promise<
   if (!prompter.isInteractive()) {
     err('This command needs an interactive terminal: the password is typed at a hidden prompt and is never read from arguments or the environment.');
     return EXIT_USAGE;
+  }
+
+  if (deps.beforeCredentials) {
+    const result = await deps.beforeCredentials();
+    if (result !== EXIT_OK) return result;
   }
 
   out('Create the first Main Admin (one-time setup). Nothing is created if any step fails.');

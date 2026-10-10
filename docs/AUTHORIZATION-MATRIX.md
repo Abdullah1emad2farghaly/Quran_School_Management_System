@@ -28,10 +28,10 @@ The **central record of authorization decisions** across all modules. The Master
 | 12 | Scope/ownership data is owned by other modules and reached only through registered resolver ports; Module 12 has no organizational tables | APPROVED | IMPLEMENTED | TESTED¹ |
 | 12 | Denials answer 403 `ACCESS_DENIED` with no reason; reasons are logged only | APPROVED (technical design) | IMPLEMENTED | TESTED¹ |
 | 12 | Module 12 defines **no** permissions and **no** HTTP endpoints | APPROVED | IMPLEMENTED | TESTED¹ |
-| 12 | First Main Admin only through the one-time CLI; refuses if an active Main Admin exists; no registration endpoint | APPROVED | IMPLEMENTED | Unit TESTED¹ · Real-DB NOT_TESTED² |
+| 12 | First Main Admin only through the one-time CLI; refuses if an active Main Admin exists; no registration endpoint | APPROVED | IMPLEMENTED | TESTED (unit¹; real-DB² run by the project owner) |
 
 ¹ Executed with the project's test files through a compatibility harness (native Vitest could not start in the build environment: the supplied `node_modules` contains Windows-only binaries). Re-run `npm test` on your machine to confirm.
-² `tests/db/authorization-bootstrap.test.ts` (concurrency, rollback, lock row) needs MariaDB and has **not** been executed.
+² `tests/db/authorization-bootstrap.test.ts` (lock row, atomic create, refusal, rollback, concurrent bootstraps) was run against MariaDB by the project owner: 5 of 5 passed.
 
 ## 2. Scope model (architectural direction; validated against the Master Specification)
 

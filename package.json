@@ -18,7 +18,8 @@
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:seed": "sequelize-cli db:seed:all",
-    "bootstrap:main-admin": "tsx src/app/cli/bootstrap-main-admin.ts"
+    "bootstrap:main-admin": "tsx src/app/cli/bootstrap-main-admin.ts",
+    "bootstrap:organization": "tsx src/app/cli/bootstrap-organization.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

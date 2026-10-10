@@ -141,3 +141,24 @@
 - Tests: 48 unit and 8 integration tests added; real-database test `tests/db/authorization-bootstrap.test.ts` added (not yet run).
 - Docs: `docs/AUTHORIZATION.md` and the central `docs/AUTHORIZATION-MATRIX.md` added; Architecture, Database, Roles, Implementation Status and README updated.
 - Known issues: `npm run db:migrate` and `npm run test:db` are pending on the user machine; no recovery CLI for a lost Main Admin (open decision D-4).
+
+## 0.14.1 — Module 12 marked COMPLETE
+- The first-Main-Admin real-database tests passed on the project owner's MariaDB (5 of 5). Two unrelated DB test failures seen in that run were caused by a phone-prefix collision in the new DB test file (it shared `+2010997` with `auth-sessions.test.ts`); fixed by giving it its own prefix `+2010995`. Module 12 status set to COMPLETE on the owner's instruction.
+
+## 0.15.0 — Module 13: Main Organization
+- Organization aggregate with the approved fields only (`id`, `code` ORG-000001 format, one `name` field Arabic or English, `status` ACTIVE/INACTIVE) and its `organizations` table. Name normalization/validation per the approved rules; `utf8mb4`.
+- Exactly one organization in V1, enforced by the database (`v1_single_guard` CHECK + UNIQUE index), with the future multi-organization path documented. Unique code and CHECKs on code format, status and non-blank name.
+- Idempotent creation: `OrganizationService.ensureMainOrganization` (existing organization returned unchanged; a lost creation race is rolled back and answered with the winner). CLI step shared by the new `npm run bootstrap:organization` and by `npm run bootstrap:main-admin` (which now runs it first and creates no Main Admin if it fails).
+- Event `OrganizationCreated` (payload: ids only) written through the existing outbox in the same transaction; never duplicated on re-runs.
+- Public contract `OrganizationLookup` (`getMainOrganization`, `requireMainOrganization`, `findById`) and `OrganizationDto`; errors `INVALID_ORGANIZATION_NAME`, `ORGANIZATION_ALREADY_EXISTS`, `ORGANIZATION_NOT_FOUND` (ar/en).
+- Database: migration `create-organizations`. No foreign keys from this table. No endpoints, no permissions (authorization matrix unchanged).
+- Tests: 29 unit tests added; MariaDB tests `tests/db/organizations.test.ts` added (always-rolled-back transaction; not yet run).
+- Added `.env.example` (placeholders only; referenced by the spec and docs but missing from the repository).
+- Known issues: `npm run db:migrate` and `npm run test:db` pending on the user machine. The "Main Admin relationship" for schools is unresolved (needed only by Module 16).
+
+## 0.15.1 — Module 13 fix after the first MariaDB run
+- The first real-database run showed the original code CHECK accepted a lowercase code (MariaDB `REGEXP` ignores case on a `_ci` collation). Corrective migration `fix-organizations-code-check` replaces the CHECK with a byte-exact prefix test (`BINARY LEFT(code, 4) = 'ORG-'`) plus a digits-only regex; the already-applied migration was not edited and no data is touched.
+- DB tests: every read/write now uses the test's single transaction (the earlier read from another connection could not see the uncommitted row), a precondition checks the table is empty inside that transaction, and mixed-case / non-digit codes were added.
+
+## 0.15.2 — Module 13 marked COMPLETE
+- On the project owner's MariaDB: both Module 13 migrations applied and `tests/db/organizations.test.ts` passed (14 of 14). One unrelated pre-existing test in `tests/db/auth-sessions.test.ts` ("survives two simultaneous logins", Module 10) failed in that run although it passed in the two previous runs; it is being tracked separately and does not involve Module 13.

@@ -36,3 +36,8 @@ Rows written before this fix by a non-UTC machine (test data only, in this proje
 
 ## Authorization (Module 12)
 `authorization_bootstrap_lock`: a single row (`id = 1`, enforced by a CHECK) locked with `SELECT ... FOR UPDATE` by the first-Main-Admin bootstrap so concurrent runs are serialized; it also records the last bootstrap's user id and time. It is never used for authorization decisions (roles stay in `user_roles`).
+
+## Main Organization (Module 13)
+`organizations` (`id` CHAR(36) PK, `code` unique `ORG-000001` format, `name` VARCHAR(200) utf8mb4, `status` ACTIVE/INACTIVE, `v1_single_guard`, timestamps). CHECKs on status, code format, non-blank name; `v1_single_guard = 1` with a UNIQUE index enforces exactly one organization in V1 (drop the index in a future migration for multi-organization). No foreign keys from this table; later modules reference `organizations.id` with `ON DELETE RESTRICT`. See `docs/ORGANIZATION.md`.
+
+Note (Module 13): the `ck_organizations_code_format` CHECK was corrected by migration `20261010140000-fix-organizations-code-check` to be case-sensitive (see changelog 0.15.1).
