@@ -78,6 +78,14 @@ export class SequelizeRoleAssignmentRepository implements RoleAssignmentReposito
     return this.find(`${SELECT} WHERE user_id = :userId AND active = 1 ORDER BY assigned_at, id`, userId, tx);
   }
 
+  async countActiveByRole(roleCode: RoleCode, tx?: TransactionContext): Promise<number> {
+    const rows = await this.db.query<{ total: number | string }>(
+      'SELECT COUNT(*) AS total FROM user_roles WHERE role_code = :roleCode AND active = 1',
+      { replacements: { roleCode }, type: QueryTypes.SELECT, transaction: sequelizeTransactionOf(tx) ?? null },
+    );
+    return Number(rows[0]?.total ?? 0);
+  }
+
   findHistoryByUser(userId: string, tx?: TransactionContext): Promise<RoleAssignment[]> {
     return this.find(`${SELECT} WHERE user_id = :userId ORDER BY assigned_at, id`, userId, tx);
   }

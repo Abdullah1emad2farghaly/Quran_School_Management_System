@@ -5,6 +5,7 @@ import { IDENTITY_ERROR_MESSAGES } from '../../modules/08-identity-core/public';
 import { ROLE_ERROR_MESSAGES } from '../../modules/09-roles-permissions/public';
 import { SESSION_ERROR_MESSAGES } from '../../modules/10-sessions-jwt/public';
 import { RECOVERY_ERROR_MESSAGES } from '../../modules/11-otp-password-recovery/public';
+import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
 let registered = false;
 
@@ -18,4 +19,5 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(ROLE_ERROR_MESSAGES);
   registerErrorMessages(SESSION_ERROR_MESSAGES);
   registerErrorMessages(RECOVERY_ERROR_MESSAGES);
+  registerErrorMessages(AUTHORIZATION_ERROR_MESSAGES);
 }

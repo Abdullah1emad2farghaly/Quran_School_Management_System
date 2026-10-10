@@ -124,6 +124,12 @@ export class RoleService {
     return (await this.repository.findHistoryByUser(userId, tx)).map(toRoleAssignmentDto);
   }
 
+  /** Number of ACTIVE assignments of `role` across all users. */
+  async countActiveByRole(role: RoleCode, tx?: TransactionContext): Promise<number> {
+    if (!isRoleCode(role)) throw roleError('INVALID_ROLE');
+    return this.repository.countActiveByRole(role, tx);
+  }
+
   async hasRole(userId: string, role: RoleCode, tx?: TransactionContext): Promise<boolean> {
     return (await this.listActiveRoles(userId, tx)).includes(role);
   }

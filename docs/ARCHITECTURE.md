@@ -50,3 +50,6 @@ Login, refresh-token rotation, logout and access-token verification. One active 
 
 ## OTP & password recovery (Module 11)
 Forgot-password with an OTP and a single-use reset token; keyed-hash storage, no account enumeration, concurrency-safe MySQL rate limits, OTP delivery behind the `OtpSender` port (provider chosen later). A reset revokes all sessions through Module 10. See `docs/PASSWORD-RECOVERY.md`.
+
+## Authorization engine (Module 12)
+Roles -> permissions -> scope -> ownership, deny by default and fail closed. Each module registers its own permissions (with an explicit management/reporting/unscoped policy) and the scope/ownership resolvers for the data it owns; routes use `requirePermission`, other code injects `Authorizer`. Module 12 defines no permissions or endpoints and owns no organizational data. It also provides the one-time first-Main-Admin CLI. See `docs/AUTHORIZATION.md` and the central `docs/AUTHORIZATION-MATRIX.md`.

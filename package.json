@@ -17,7 +17,8 @@
     "test:db": "vitest run --config vitest.db.config.ts",
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
-    "db:seed": "sequelize-cli db:seed:all"
+    "db:seed": "sequelize-cli db:seed:all",
+    "bootstrap:main-admin": "tsx src/app/cli/bootstrap-main-admin.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

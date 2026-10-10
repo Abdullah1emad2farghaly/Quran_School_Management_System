@@ -129,3 +129,15 @@
 - Module 00/03/app: new error kind `RATE_LIMITED` (HTTP 429) and `Retry-After` header in the error handler. Module 01: `OTP_HMAC_SECRET`, `OTP_SENDER` and `TRUSTED_PROXIES` (explicit proxies only; trust-everything values rejected); `createApp` applies them. The existing production-config test now also requires `OTP_HMAC_SECRET`.
 - Event `PasswordResetCompleted` through the outbox; migration `create-password-recovery` (3 tables, null-safe CHECKs); localized (ar/en) errors; `src/config/password-recovery.ts`.
 - Documented in `docs/PASSWORD-RECOVERY.md` and `docs/CONFIGURATION.md`. The first-Main-Admin setup script remains deferred.
+
+## 0.14.0 — Module 12: Authorization Engine
+- Generic engine only: roles -> permissions -> scope -> ownership, deny by default and fail closed. `AuthorizationService` (implements the `Authorizer` contract), `AuthorizationPolicyRegistry` (permission registration and lookup; grants stay in Module 09, plus an explicit `MANAGEMENT` / `REPORTING` / `UNSCOPED` scope and per-role ownership), `AuthorizationResolvers` (scope resolvers per scope kind and target type; ownership resolvers per resource type), and the `requirePermission` Express middleware (sets `req.authorization`).
+- Rules: unknown permission, inactive/unknown user, no active role, no grant, missing or invalid scope/ownership input, missing resolver, resolver error or non-`true` answer all deny. Scope and ownership must hold under the same role that holds the permission. Management and reporting scope are separate. Denials are 403 `ACCESS_DENIED` (ar/en) with no reason; reasons are logged only. Identity/role service failures propagate and never become an allow.
+- Main Admin global scope is configuration (`GLOBAL_SCOPE_ROLES` in `src/config/authorization.ts`), PROPOSED in the matrix. No permissions are defined and no HTTP endpoints exist.
+- One-time CLI `npm run bootstrap:main-admin`: interactive hidden prompts, one transaction under a row lock, refuses when an active Main Admin exists, reuses Module 08 (phone/password rules) and Module 09 (`assignedBy = null`). Never prints or logs secrets.
+- Database: migration `create-authorization-bootstrap-lock` (single-row lock table with a CHECK).
+- Module 09 (additive): `RoleService.countActiveByRole` and the matching repository port method (Sequelize and in-memory).
+- Events: none new (the bootstrap emits the existing `UserCreated` and `RoleAssigned`).
+- Tests: 48 unit and 8 integration tests added; real-database test `tests/db/authorization-bootstrap.test.ts` added (not yet run).
+- Docs: `docs/AUTHORIZATION.md` and the central `docs/AUTHORIZATION-MATRIX.md` added; Architecture, Database, Roles, Implementation Status and README updated.
+- Known issues: `npm run db:migrate` and `npm run test:db` are pending on the user machine; no recovery CLI for a lost Main Admin (open decision D-4).

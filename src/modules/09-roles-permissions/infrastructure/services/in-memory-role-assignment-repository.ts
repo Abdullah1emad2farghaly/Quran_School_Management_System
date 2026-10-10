@@ -2,6 +2,7 @@ import type { TransactionContext } from '../../../00-shared-kernel/public';
 import type { RoleAssignmentRepository } from '../../application/ports/role-assignment-repository';
 import { RoleAssignment, type RoleAssignmentSnapshot } from '../../domain/entities/role-assignment';
 import { roleError } from '../../domain/errors/role-errors';
+import type { RoleCode } from '../../domain/value-objects/role-code';
 
 /** In-memory RoleAssignmentRepository with the same uniqueness and optimistic-lock behavior. For tests of other modules. */
 export class InMemoryRoleAssignmentRepository implements RoleAssignmentRepository {
@@ -28,6 +29,10 @@ export class InMemoryRoleAssignmentRepository implements RoleAssignmentRepositor
 
   async findActiveByUser(userId: string, _tx?: TransactionContext): Promise<RoleAssignment[]> {
     return this.history(userId).filter((a) => a.isActive);
+  }
+
+  async countActiveByRole(roleCode: RoleCode, _tx?: TransactionContext): Promise<number> {
+    return [...this.rows.values()].filter((r) => r.roleCode === roleCode && r.revokedAt === null).length;
   }
 
   async findHistoryByUser(userId: string, _tx?: TransactionContext): Promise<RoleAssignment[]> {

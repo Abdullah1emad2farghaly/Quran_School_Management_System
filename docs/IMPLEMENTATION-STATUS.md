@@ -4,7 +4,7 @@ Statuses: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · COMPLETED
 
 ## Bootstrap (§94 / §116)
 
-Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Modules 08–10 are completed and Module 11 is implemented; Modules 12–40 have not been started and only have skeleton folders.
+Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Modules 08–10 are completed and Modules 11–12 are implemented; Modules 13–40 have not been started and only have skeleton folders.
 
 ## Modules
 
@@ -22,7 +22,7 @@ Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integrati
 | 09 | Roles & Permissions | COMPLETED |
 | 10 | Sessions & JWT | COMPLETED |
 | 11 | OTP & Password Recovery | IMPLEMENTED (unit and HTTP tests pass; `npm run db:migrate` and `npm run test:db` pending on the user machine) |
-| 12 | Authorization Engine | NOT_STARTED |
+| 12 | Authorization Engine | IMPLEMENTED (engine, `requirePermission`, resolver ports, first-Main-Admin CLI; unit and integration tests pass; `npm run db:migrate` and `npm run test:db` pending on the user machine; no permissions defined by design) |
 | 13 | Organization Core | NOT_STARTED |
 | 14 | Geography | NOT_STARTED |
 | 15 | Unified Address | NOT_STARTED |

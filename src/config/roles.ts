@@ -8,7 +8,8 @@ import { getSequelize, getUnitOfWork } from './database';
 import { getIdentityService } from './identity';
 import { getOutboxService } from './outbox';
 
-// Each module registers its own permissions (and the approved role grants) here when it is implemented.
+// Role -> permission grants are stored here (Module 09), but modules register them through
+// `getAuthorizationPolicyRegistry()` in ./authorization (Module 12), which also records scope/ownership policy.
 // V1 starts with an empty catalog: nothing is granted until a module defines and gets approval for it.
 const permissionRegistry = new PermissionRegistry();
 let service: RoleService | undefined;

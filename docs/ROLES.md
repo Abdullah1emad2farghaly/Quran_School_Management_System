@@ -39,3 +39,6 @@ Table `user_roles`, one row per assignment, **never deleted**: `assigned_at`, `a
 
 ## Tests
 Unit: `tests/unit/roles`. Real database: `tests/db/user-roles.test.ts` (`npm run test:db`, needs `npm run db:migrate`).
+
+## Addition for Module 12
+`RoleService.countActiveByRole(role)` returns the number of ACTIVE assignments of a role across all users (port `RoleAssignmentRepository.countActiveByRole`, implemented for Sequelize and in memory). Used by the first-Main-Admin bootstrap; additive, no existing behavior changed. Permissions are now registered through Module 12's `AuthorizationPolicyRegistry`; see `docs/AUTHORIZATION.md`.
