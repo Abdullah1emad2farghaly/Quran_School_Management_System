@@ -14,6 +14,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return;
   }
   const { status, body } = toErrorResponse(err, { locale: req.locale, requestId: req.requestId });
+  // Rate-limited requests tell the client when to retry (seconds, as HTTP requires).
+  if (err instanceof AppError && err.kind === 'RATE_LIMITED') {
+    const seconds = (err.details as { retryAfterSeconds?: unknown } | undefined)?.retryAfterSeconds;
+    if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0) res.setHeader('Retry-After', String(Math.ceil(seconds)));
+  }
   // Full details (stack, cause) go to the log only; the client never sees them.
   if (status >= 500) logger.error('unhandled error', { requestId: req.requestId, err });
   res.status(status).json(body);

@@ -2,6 +2,9 @@ import { registerErrorMessages } from '../../modules/03-error-localization/publi
 import { VALIDATION_ERROR_MESSAGES } from '../../modules/04-validation-api/public';
 import { FILE_ERROR_MESSAGES } from '../../modules/07-file-infrastructure/public';
 import { IDENTITY_ERROR_MESSAGES } from '../../modules/08-identity-core/public';
+import { ROLE_ERROR_MESSAGES } from '../../modules/09-roles-permissions/public';
+import { SESSION_ERROR_MESSAGES } from '../../modules/10-sessions-jwt/public';
+import { RECOVERY_ERROR_MESSAGES } from '../../modules/11-otp-password-recovery/public';
 
 let registered = false;
 
@@ -12,4 +15,7 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(VALIDATION_ERROR_MESSAGES);
   registerErrorMessages(FILE_ERROR_MESSAGES);
   registerErrorMessages(IDENTITY_ERROR_MESSAGES);
+  registerErrorMessages(ROLE_ERROR_MESSAGES);
+  registerErrorMessages(SESSION_ERROR_MESSAGES);
+  registerErrorMessages(RECOVERY_ERROR_MESSAGES);
 }

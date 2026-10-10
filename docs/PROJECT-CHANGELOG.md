@@ -90,3 +90,42 @@
 - `SequelizeUserRepository`, `InMemoryUserRepository`, `BcryptPasswordHasher`, migration `create-users`; localized (ar/en) error messages registered at startup; `getIdentityService()` in `src/config/identity.ts`.
 - No HTTP routes (authentication and authorization arrive with Modules 10 and 12).
 - Documented in `docs/IDENTITY.md`.
+
+## 0.11.0 — Module 09: Roles & Permissions
+- Fixed V1 role catalog (exactly nine roles, Arabic/English names); Student is in the catalog but not assignable (no login).
+- Role assignments with full history (`assignedAt/By`, `revokedAt/By`): one active assignment per user and role, re-assignment creates a new row, nothing is deleted, a user always keeps at least one active role (revocation is race-safe).
+- `PermissionRegistry`: deny-by-default role -> permission grants, registered by each owning module; the V1 catalog starts empty (no permission is invented).
+- `RoleService` public contract (assign, revoke, list active roles, history, hasRole, hasPermission, listPermissions) with optional caller transaction; no per-user permissions.
+- Events `RoleAssigned`, `RoleRevoked` through the outbox.
+- `SequelizeRoleAssignmentRepository`, `InMemoryRoleAssignmentRepository`, migrations `create-user-roles` (unique active-role index, CHECK constraints for the role list and assignment state) and `fix-user-roles-state-check` (makes the state CHECK null-safe so an inactive row without `revoked_at` is rejected); localized (ar/en) error messages; `getRoleService()` / `getPermissionRegistry()` in `src/config/roles.ts`.
+- No HTTP routes (authorization of role changes arrives with Modules 10 and 12).
+- Documented in `docs/ROLES.md`.
+
+## 0.12.0 — Module 10: Sessions & JWT
+- Authentication: `POST /api/v1/auth/login`, `/refresh`, `/logout`, `/logout-all`; `requireAuthentication` middleware sets `req.auth` (and the actor in the request log context).
+- Access token: HS256 JWT, 15 minutes, claims `sub`/`sid` only (no roles). Refresh token: opaque 256-bit token, 30 days, stored only as an HMAC hash, rotated on every refresh.
+- One active session per user: a new login revokes the previous session; sessions and tokens are never deleted (history kept). Enforced by the application and by a unique index.
+- Reuse of a rotated refresh token is rejected and revokes the session (`REFRESH_TOKEN_REUSE`); the revocation is committed even though the request fails.
+- Every authenticated request checks the session and the user, so logout, replacement and deactivation take effect immediately. `UserDeactivated` (Module 08) revokes the user's sessions.
+- Login does not reveal whether the phone exists (same error and similar timing); token responses are `no-store`.
+- Events `AuthSessionStarted` / `AuthSessionRevoked` through the outbox; `SessionService.revokeAllForUser` for Module 11.
+- Migration `create-auth-sessions` (tables `auth_sessions`, `refresh_tokens`, null-safe CHECK constraints); localized (ar/en) errors; `src/config/sessions.ts`; handler registered in `server.ts` before the outbox starts.
+- Token lifetimes are constants, not environment settings. Documented in `docs/SESSIONS.md`.
+
+## 0.12.1 — Fix: timestamps shifted on non-UTC servers (Module 02)
+- Found by the Module 10 real-database test: a refresh token's 30-day expiry read back 1 hour short on a machine in Cairo time (daylight-saving change between issue and expiry).
+- Cause: Sequelize formats `Date` replacements in the Node process' local time zone (and drops milliseconds) but reads DATETIME values back as UTC, so every stored timestamp of every module was shifted by the server's offset.
+- Fix: `createSequelize` now formats every `Date` replacement in UTC with milliseconds (`utc-replacements.ts`); no repository changes needed.
+- Tests: unit tests run in UTC, Cairo and New York time zones; new `tests/db/datetime.test.ts`. Documented in `docs/DATABASE.md`.
+- Also fixed a row-order assumption in `tests/db/auth-sessions.test.ts` (sessions created in the same millisecond have no fixed order).
+
+## 0.13.0 — Module 11: OTP & Password Recovery
+- Endpoints `POST /api/v1/auth/password-recovery/request`, `/verify`, `/reset`: phone -> OTP -> single-use reset token -> new password (4–12 characters).
+- OTP: 6 digits, 5 minutes, single use, 5 wrong attempts invalidate it, a resend supersedes the previous one. Reset token: 256-bit, single use, 10 minutes, bound to the verifying user. Everything stored only as keyed HMAC hashes using the dedicated `OTP_HMAC_SECRET`.
+- Rate limits (approved): first OTP + 3 resends per phone per rolling hour; 5 per phone+IP per rolling 15 minutes. Concurrency-safe in MySQL through a per-phone exclusive row lock; answered with HTTP 429 `RATE_LIMITED` and `Retry-After`. Every request counts, so limits reveal nothing about accounts.
+- No account enumeration: identical answers for active, unknown and disabled accounts; OTP delivery runs in the background after the commit; delivery failures are invisible and logged by error name only.
+- A successful reset changes the password, closes the recovery and revokes all sessions (`PASSWORD_RESET`) in one transaction.
+- `OtpSender` port with `DisabledOtpSender` (default), `InMemoryOtpSender` (tests) and `DevFileOtpSender` (development only); the real provider is chosen later.
+- Module 00/03/app: new error kind `RATE_LIMITED` (HTTP 429) and `Retry-After` header in the error handler. Module 01: `OTP_HMAC_SECRET`, `OTP_SENDER` and `TRUSTED_PROXIES` (explicit proxies only; trust-everything values rejected); `createApp` applies them. The existing production-config test now also requires `OTP_HMAC_SECRET`.
+- Event `PasswordResetCompleted` through the outbox; migration `create-password-recovery` (3 tables, null-safe CHECKs); localized (ar/en) errors; `src/config/password-recovery.ts`.
+- Documented in `docs/PASSWORD-RECOVERY.md` and `docs/CONFIGURATION.md`. The first-Main-Admin setup script remains deferred.

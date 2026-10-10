@@ -41,3 +41,12 @@ Uploaded Excel files are stored privately (no public URLs) behind `FileService`,
 
 ## Identity (Module 08)
 The login identity (normalized phone, bcrypt hash, ACTIVE/INACTIVE) is owned by `IdentityService`; other modules use only its public contract and authorize their own callers. No HTTP routes until Modules 10 and 12; see `docs/IDENTITY.md`.
+
+## Roles & permissions (Module 09)
+Roles are a fixed catalog; assignments keep full history; role -> permission grants are registered by each owning module and are deny-by-default. Module 09 does not authorize its callers and has no HTTP routes until Modules 10 and 12; see `docs/ROLES.md`.
+
+## Sessions & authentication (Module 10)
+Login, refresh-token rotation, logout and access-token verification. One active session per user; refresh tokens stored only as keyed hashes; each protected request checks the session and the user. Authentication only: authorization is Module 12. See `docs/SESSIONS.md`.
+
+## OTP & password recovery (Module 11)
+Forgot-password with an OTP and a single-use reset token; keyed-hash storage, no account enumeration, concurrency-safe MySQL rate limits, OTP delivery behind the `OtpSender` port (provider chosen later). A reset revokes all sessions through Module 10. See `docs/PASSWORD-RECOVERY.md`.

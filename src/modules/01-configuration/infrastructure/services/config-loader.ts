@@ -1,12 +1,15 @@
+import { isIP } from 'node:net';
 import { ConfigurationError } from '../../domain/errors/configuration-error';
 import { isLocale, type Locale } from '../../domain/value-objects/locale';
 import { LOG_LEVELS, isLogLevel, type LogLevel } from '../../domain/value-objects/log-level';
-import type { AppConfig, NodeEnvironment } from '../../application/dto/app-config';
+import type { AppConfig, NodeEnvironment, OtpSenderKind } from '../../application/dto/app-config';
 
 export type EnvSource = Readonly<Record<string, string | undefined>>;
 
 const NODE_ENVIRONMENTS: readonly NodeEnvironment[] = ['development', 'test', 'production'];
 const MIN_PRODUCTION_SECRET_LENGTH = 32;
+const OTP_SENDERS: readonly OtpSenderKind[] = ['disabled', 'dev-file'];
+const PROXY_KEYWORDS = ['loopback', 'linklocal', 'uniquelocal'];
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function deepFreeze<T>(value: T): T {
@@ -24,6 +27,23 @@ function isValidTimezone(tz: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * A trusted proxy is an explicit IP, a CIDR range, or one of Express' named ranges. "true", hop counts, "*" and
+ * "match everything" ranges (/0) are rejected: they would let any client forge X-Forwarded-For.
+ */
+function isValidTrustedProxy(entry: string): boolean {
+  if (PROXY_KEYWORDS.includes(entry)) return true;
+  const parts = entry.split('/');
+  if (parts.length > 2) return false;
+  const version = isIP(parts[0] ?? '');
+  if (version === 0) return false;
+  if (parts.length === 1) return true;
+  const prefix = parts[1] ?? '';
+  if (!/^\d+$/.test(prefix)) return false;
+  const bits = Number(prefix);
+  return bits >= 1 && bits <= (version === 4 ? 32 : 128);
 }
 
 function isValidOrigin(origin: string): boolean {
@@ -117,6 +137,26 @@ export function loadConfig(source: EnvSource): AppConfig {
     refreshSecret: read('JWT_REFRESH_SECRET') ?? '',
   };
 
+  // HTTP (reverse proxy)
+  const trustedProxies = (source.TRUSTED_PROXIES ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const entry of trustedProxies) {
+    if (!isValidTrustedProxy(entry)) {
+      issues.push(`TRUSTED_PROXIES: invalid entry "${entry}" (use an IP, a CIDR range, or loopback/linklocal/uniquelocal)`);
+    }
+  }
+  const http = { trustedProxies };
+
+  // OTP
+  const rawOtpSender = read('OTP_SENDER') ?? 'disabled';
+  let otpSender: OtpSenderKind = 'disabled';
+  if ((OTP_SENDERS as readonly string[]).includes(rawOtpSender)) otpSender = rawOtpSender as OtpSenderKind;
+  else issues.push(`OTP_SENDER: must be one of ${OTP_SENDERS.join(', ')}`);
+  if (isProduction && otpSender === 'dev-file') issues.push('OTP_SENDER: "dev-file" is for development only and is not allowed in production');
+  const otp = { hmacSecret: read('OTP_HMAC_SECRET') ?? '', sender: otpSender };
+
   // Redis
   const redis = { host: read('REDIS_HOST') ?? '127.0.0.1', port: readInt('REDIS_PORT', 6379, 1, 65535) };
 
@@ -148,6 +188,13 @@ export function loadConfig(source: EnvSource): AppConfig {
     if (jwt.accessSecret && jwt.accessSecret === jwt.refreshSecret) {
       issues.push('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET: must be different');
     }
+    if (!otp.hmacSecret) issues.push('OTP_HMAC_SECRET: required in production');
+    else if (otp.hmacSecret.length < MIN_PRODUCTION_SECRET_LENGTH) {
+      issues.push(`OTP_HMAC_SECRET: must be at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production`);
+    }
+    if (otp.hmacSecret && (otp.hmacSecret === jwt.accessSecret || otp.hmacSecret === jwt.refreshSecret)) {
+      issues.push('OTP_HMAC_SECRET: must be different from the JWT secrets');
+    }
   }
 
   if (issues.length > 0) throw new ConfigurationError(issues);
@@ -161,6 +208,8 @@ export function loadConfig(source: EnvSource): AppConfig {
     logLevel,
     database,
     jwt,
+    http,
+    otp,
     redis,
     files,
   });

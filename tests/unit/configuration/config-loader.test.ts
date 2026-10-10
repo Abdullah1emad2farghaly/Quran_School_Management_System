@@ -9,6 +9,7 @@ const prod = {
   DATABASE_PASSWORD: 'p',
   JWT_ACCESS_SECRET: strong('a'),
   JWT_REFRESH_SECRET: strong('b'),
+  OTP_HMAC_SECRET: strong('c'),
 };
 
 function issuesOf(source: Record<string, string>): readonly string[] {
@@ -87,7 +88,7 @@ describe('loadConfig production rules', () => {
     expect(loadConfig(prod).nodeEnv).toBe('production');
   });
   it('requires database settings and secrets', () => {
-    expect(issuesOf({ NODE_ENV: 'production' })).toHaveLength(5);
+    expect(issuesOf({ NODE_ENV: 'production' })).toHaveLength(6);
   });
   it('rejects short secrets', () => {
     expect(issuesOf({ ...prod, JWT_ACCESS_SECRET: 'short' })).toHaveLength(1);

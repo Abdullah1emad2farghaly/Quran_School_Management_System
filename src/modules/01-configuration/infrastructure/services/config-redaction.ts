@@ -14,5 +14,6 @@ export function redactConfig(config: AppConfig): AppConfig {
       accessSecret: mask(config.jwt.accessSecret),
       refreshSecret: mask(config.jwt.refreshSecret),
     },
+    otp: { ...config.otp, hmacSecret: mask(config.otp.hmacSecret) },
   };
 }

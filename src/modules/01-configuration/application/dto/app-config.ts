@@ -2,6 +2,7 @@ import type { Locale } from '../../domain/value-objects/locale';
 import type { LogLevel } from '../../domain/value-objects/log-level';
 
 export type NodeEnvironment = 'development' | 'test' | 'production';
+export type OtpSenderKind = 'disabled' | 'dev-file';
 
 /** Typed, validated, immutable application configuration. */
 export interface AppConfig {
@@ -23,6 +24,19 @@ export interface AppConfig {
   readonly jwt: {
     readonly accessSecret: string;
     readonly refreshSecret: string;
+  };
+  readonly http: {
+    /**
+     * Proxies whose X-Forwarded-* headers are trusted (IP, CIDR, or loopback/linklocal/uniquelocal).
+     * Empty (the default) means forwarding headers are NEVER trusted.
+     */
+    readonly trustedProxies: readonly string[];
+  };
+  readonly otp: {
+    /** Dedicated secret for OTP / reset-token hashing (never reuse the JWT secrets). */
+    readonly hmacSecret: string;
+    /** How OTPs are delivered. `disabled` = no delivery; `dev-file` = development only. Real providers come later. */
+    readonly sender: OtpSenderKind;
   };
   readonly redis: {
     readonly host: string;

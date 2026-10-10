@@ -12,6 +12,7 @@ export const HTTP_STATUS_BY_KIND: Record<ErrorKind, number> = {
   CONFLICT: 409,
   BUSINESS_RULE: 422,
   PAYLOAD_TOO_LARGE: 413,
+  RATE_LIMITED: 429,
   INTERNAL: 500,
 };
 

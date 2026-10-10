@@ -10,6 +10,7 @@ export const ErrorKinds = [
   'CONFLICT',
   'BUSINESS_RULE',
   'PAYLOAD_TOO_LARGE',
+  'RATE_LIMITED',
   'INTERNAL',
 ] as const;
 export type ErrorKind = (typeof ErrorKinds)[number];

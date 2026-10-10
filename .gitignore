@@ -6,5 +6,6 @@ dist/
 logs/
 *.log
 storage/
+.dev-otp/
 coverage/
 .DS_Store

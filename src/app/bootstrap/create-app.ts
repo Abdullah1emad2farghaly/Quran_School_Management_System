@@ -7,12 +7,14 @@ import { errorHandler, notFoundHandler } from '../middleware/error-handler.middl
 import { requestContextMiddleware } from '../middleware/request-context.middleware';
 import { API_BASE_PATH, buildApiRouter } from '../routes';
 import { registerAllErrorMessages } from './register-error-messages';
+import { applyTrustedProxies } from './trusted-proxies';
 
 export function createApp(): Express {
   registerAllErrorMessages();
 
   const app = express();
   app.disable('x-powered-by');
+  applyTrustedProxies(app, env.http.trustedProxies);
 
   app.use(requestContextMiddleware);
   app.use(createRequestLogger(logger));

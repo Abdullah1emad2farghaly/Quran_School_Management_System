@@ -5,6 +5,7 @@
 export { SequelizeUnitOfWork, type TransactionRunner } from '../infrastructure/services/sequelize-unit-of-work';
 export { sequelizeTransactionOf } from '../infrastructure/services/sequelize-transaction-context';
 export { createSequelize, checkConnection } from '../infrastructure/services/sequelize-connection';
+export { toUtcSqlDate, withUtcReplacements } from '../infrastructure/services/utc-replacements';
 export {
   buildSequelizeOptions,
   DB_CHARSET,

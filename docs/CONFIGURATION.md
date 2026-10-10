@@ -15,6 +15,9 @@ On any invalid value the server refuses to start and prints **all** problems at 
 | DATABASE_HOST / PORT | 127.0.0.1 / 3306 | port 1–65535 |
 | DATABASE_NAME / USER / PASSWORD | empty | **required in production** |
 | JWT_ACCESS_SECRET / JWT_REFRESH_SECRET | empty | **required in production**, ≥ 32 chars, must differ |
+| OTP_HMAC_SECRET | empty | **required in production**, ≥ 32 chars, must differ from both JWT secrets (dedicated key for OTP / reset-token hashing) |
+| OTP_SENDER | disabled | `disabled` or `dev-file` (development only; rejected in production) |
+| TRUSTED_PROXIES | empty (none trusted) | comma-separated IPs, CIDR ranges or `loopback`/`linklocal`/`uniquelocal`; `true`, hop counts, `*` and `/0` ranges are rejected |
 | REDIS_HOST / PORT | 127.0.0.1 / 6379 | port 1–65535 |
 | FILE_STORAGE_PATH | ./storage | |
 | MAX_FILE_SIZE | 10485760 | positive integer (bytes) |
