@@ -170,3 +170,9 @@
 - No delete/rename/reactivation operations, no HTTP endpoints, no permissions (authorization matrix unchanged), no outbox events.
 - Database: migration `create-geography`. Tests: 30 unit tests added; MariaDB tests `tests/db/geography.test.ts` added (always-rolled-back transaction, transaction passed explicitly; not yet run).
 - Known issues: `npm run db:migrate` and `npm run test:db` pending on the user machine; centers/cities/villages data source not defined.
+
+## 0.16.1 — Module 10 fix: simultaneous logins no longer fail on an InnoDB deadlock
+- Cause of the intermittent `tests/db/auth-sessions.test.ts` failure ("survives two simultaneous logins of the same user"): both logins run `SELECT ... FOR UPDATE` on an empty range and then insert; InnoDB resolves this by rolling one transaction back with a deadlock error (errno 1213), not a unique violation. `SessionService.startSession` retried only `SESSION_CONCURRENT_MODIFICATION`, so the deadlock escaped and one login failed.
+- Fix (infrastructure only): `SequelizeSessionRepository` now reports a deadlock as the existing retryable `SESSION_CONCURRENT_MODIFICATION` (`isDeadlockError`, applied to the session/refresh-token inserts, updates and `FOR UPDATE` reads). No change to the service, schema, API or events.
+- Tests: `tests/unit/sessions/session-repository-deadlock.test.ts` added. The real-database test is unchanged; whether the flake is gone must be confirmed by running `npm run test:db` several times on the project machine (not run here: no `node_modules` and no database in this environment).
+- Docs: `IMPLEMENTATION-STATUS.md` intro now mentions Module 11.

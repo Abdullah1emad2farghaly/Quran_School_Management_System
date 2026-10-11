@@ -4,7 +4,7 @@ Statuses: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · COMPLETED
 
 ## Bootstrap (§94 / §116)
 
-Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Modules 08–10 are completed and Modules 12–13 are complete and Module 14 is implemented; Modules 15–40 have not been started and only have skeleton folders.
+Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Modules 08–10 are completed, Module 11 is implemented (real-database verification pending), Modules 12–13 are complete and Module 14 is implemented (real-database verification pending); Modules 15–40 have not been started and only have skeleton folders.
 
 ## Modules
 

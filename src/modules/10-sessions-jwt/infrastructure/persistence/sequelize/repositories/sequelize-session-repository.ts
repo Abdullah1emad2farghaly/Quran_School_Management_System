@@ -32,6 +32,21 @@ interface TokenRow {
   version: number | string;
 }
 
+interface DriverError {
+  errno?: number;
+  code?: string;
+}
+/**
+ * MySQL/MariaDB InnoDB deadlock (ER_LOCK_DEADLOCK, 1213). Two simultaneous logins of the same user both run
+ * `SELECT ... FOR UPDATE` on an empty range and then insert, which InnoDB resolves by rolling one of them back
+ * with a deadlock error instead of a unique violation. It is the same race as a unique violation, so it is
+ * reported with the same retryable code.
+ */
+export function isDeadlockError(error: unknown): boolean {
+  const e = error as (DriverError & { parent?: DriverError; original?: DriverError }) | null | undefined;
+  return [e, e?.parent, e?.original].some((c) => c != null && (c.errno === 1213 || c.code === 'ER_LOCK_DEADLOCK'));
+}
+
 const SELECT_SESSION = `
   SELECT id, user_id AS userId, created_at AS createdAt, revoked_at AS revokedAt,
          revoked_reason AS revokedReason, version
@@ -53,13 +68,13 @@ export class SequelizeSessionRepository implements SessionRepository {
       );
     } catch (error) {
       // The unique (user_id, active) index is the final guard: only one active session per user.
-      if (error instanceof UniqueConstraintError) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
+      if (error instanceof UniqueConstraintError || isDeadlockError(error)) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
       throw error;
     }
   }
 
   async updateSession(s: AuthSession, tx: TransactionContext): Promise<void> {
-    const [, affected] = await this.db.query(
+    const [, affected] = await this.guarded(() => this.db.query(
       `UPDATE auth_sessions
           SET revoked_at = :revokedAt, revoked_reason = :reason, active = IF(:revokedAt IS NULL, 1, NULL),
               updated_at = :updatedAt, version = version + 1
@@ -75,7 +90,7 @@ export class SequelizeSessionRepository implements SessionRepository {
         type: QueryTypes.UPDATE,
         transaction: sequelizeTransactionOf(tx) ?? null,
       },
-    );
+    ));
     if (Number(affected) !== 1) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
   }
 
@@ -111,13 +126,13 @@ export class SequelizeSessionRepository implements SessionRepository {
         },
       );
     } catch (error) {
-      if (error instanceof UniqueConstraintError) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
+      if (error instanceof UniqueConstraintError || isDeadlockError(error)) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
       throw error;
     }
   }
 
   async updateRefreshToken(t: RefreshTokenRecord, tx: TransactionContext): Promise<void> {
-    const [, affected] = await this.db.query(
+    const [, affected] = await this.guarded(() => this.db.query(
       `UPDATE refresh_tokens
           SET revoked_at = :revokedAt, replaced_by_id = :replacedById, active = IF(:revokedAt IS NULL, 1, NULL),
               updated_at = :updatedAt, version = version + 1
@@ -133,7 +148,7 @@ export class SequelizeSessionRepository implements SessionRepository {
         type: QueryTypes.UPDATE,
         transaction: sequelizeTransactionOf(tx) ?? null,
       },
-    );
+    ));
     if (Number(affected) !== 1) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
   }
 
@@ -149,12 +164,24 @@ export class SequelizeSessionRepository implements SessionRepository {
     return this.oneToken(`${SELECT_TOKEN} WHERE session_id = :v AND active = 1 FOR UPDATE`, sessionId, tx);
   }
 
+  /** Reports an InnoDB deadlock as the retryable SESSION_CONCURRENT_MODIFICATION; every other error passes through. */
+  private async guarded<T>(work: () => Promise<T>): Promise<T> {
+    try {
+      return await work();
+    } catch (error) {
+      if (isDeadlockError(error)) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
+      throw error;
+    }
+  }
+
   private async oneSession(sql: string, value: string, tx?: TransactionContext): Promise<AuthSession | undefined> {
-    const rows = await this.db.query<SessionRow>(sql, {
-      replacements: { v: value },
-      type: QueryTypes.SELECT,
-      transaction: sequelizeTransactionOf(tx) ?? null,
-    });
+    const rows = await this.guarded(() =>
+      this.db.query<SessionRow>(sql, {
+        replacements: { v: value },
+        type: QueryTypes.SELECT,
+        transaction: sequelizeTransactionOf(tx) ?? null,
+      }),
+    );
     const r = rows[0];
     if (!r) return undefined;
     return AuthSession.rehydrate({
@@ -168,11 +195,13 @@ export class SequelizeSessionRepository implements SessionRepository {
   }
 
   private async oneToken(sql: string, value: string, tx?: TransactionContext): Promise<RefreshTokenRecord | undefined> {
-    const rows = await this.db.query<TokenRow>(sql, {
-      replacements: { v: value },
-      type: QueryTypes.SELECT,
-      transaction: sequelizeTransactionOf(tx) ?? null,
-    });
+    const rows = await this.guarded(() =>
+      this.db.query<TokenRow>(sql, {
+        replacements: { v: value },
+        type: QueryTypes.SELECT,
+        transaction: sequelizeTransactionOf(tx) ?? null,
+      }),
+    );
     const r = rows[0];
     if (!r) return undefined;
     return RefreshTokenRecord.rehydrate({
