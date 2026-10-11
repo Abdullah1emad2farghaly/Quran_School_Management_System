@@ -41,3 +41,6 @@ Rows written before this fix by a non-UTC machine (test data only, in this proje
 `organizations` (`id` CHAR(36) PK, `code` unique `ORG-000001` format, `name` VARCHAR(200) utf8mb4, `status` ACTIVE/INACTIVE, `v1_single_guard`, timestamps). CHECKs on status, code format, non-blank name; `v1_single_guard = 1` with a UNIQUE index enforces exactly one organization in V1 (drop the index in a future migration for multi-organization). No foreign keys from this table; later modules reference `organizations.id` with `ON DELETE RESTRICT`. See `docs/ORGANIZATION.md`.
 
 Note (Module 13): the `ck_organizations_code_format` CHECK was corrected by migration `20261010140000-fix-organizations-code-check` to be case-sensitive (see changelog 0.15.1).
+
+## Geography (Module 14)
+Global reference data (no `organization_id`): `countries` -> `governorates` -> `centers` (Center/City, `kind` CENTER|CITY) -> `villages`. Each level has `id` CHAR(36), `code` (`CNT-`/`GOV-`/`CTR-`/`VIL-` + 6 digits, case-sensitive CHECK, unique), `name` VARCHAR(200) utf8mb4, `status` ACTIVE/INACTIVE, timestamps, and a real foreign key to its parent with `ON DELETE RESTRICT` / `ON UPDATE RESTRICT`. Unique names: country; per country; per governorate and kind; per center. See `docs/GEOGRAPHY.md`.

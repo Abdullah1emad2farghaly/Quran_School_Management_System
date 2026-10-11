@@ -4,7 +4,7 @@ Statuses: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · COMPLETED
 
 ## Bootstrap (§94 / §116)
 
-Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Modules 08–10 are completed and Modules 12–13 are complete; Modules 14–40 have not been started and only have skeleton folders.
+Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integration tests and the real-database tests (`npm run test:db`) pass. Modules 08–10 are completed and Modules 12–13 are complete and Module 14 is implemented; Modules 15–40 have not been started and only have skeleton folders.
 
 ## Modules
 
@@ -24,7 +24,7 @@ Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integrati
 | 11 | OTP & Password Recovery | IMPLEMENTED (unit and HTTP tests pass; `npm run db:migrate` and `npm run test:db` pending on the user machine) |
 | 12 | Authorization Engine | COMPLETE (engine, `requirePermission`, resolver ports, first-Main-Admin CLI; unit, integration and real-database tests pass on the user machine; no permissions defined by design) |
 | 13 | Organization Core | COMPLETE (single Main Organization, idempotent bootstrap, `OrganizationCreated`, `OrganizationLookup` contract; unit and MariaDB tests pass on the user machine; no endpoints or permissions by design) |
-| 14 | Geography | NOT_STARTED |
+| 14 | Geography | IMPLEMENTED (global reference data: countries, governorates, centers/cities, villages with real FKs ON DELETE RESTRICT; read-only `GeographyLookup` with `validateHierarchy`; idempotent seed of Egypt + 27 governorates only; unit tests pass; `npm run db:migrate` and `npm run test:db` pending on the user machine; no endpoints, permissions or events by design) |
 | 15 | Unified Address | NOT_STARTED |
 | 16 | Schools | NOT_STARTED |
 | 17 | Parents | NOT_STARTED |

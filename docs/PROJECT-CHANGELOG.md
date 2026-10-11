@@ -162,3 +162,11 @@
 
 ## 0.15.2 — Module 13 marked COMPLETE
 - On the project owner's MariaDB: both Module 13 migrations applied and `tests/db/organizations.test.ts` passed (14 of 14). One unrelated pre-existing test in `tests/db/auth-sessions.test.ts` ("survives two simultaneous logins", Module 10) failed in that run although it passed in the two previous runs; it is being tracked separately and does not involve Module 13.
+
+## 0.16.0 — Module 14: Geography
+- Global shared reference data (decision: not organization-owned, no `organization_id`, no FK to `organizations`): separate tables `countries`, `governorates`, `centers` (one Center/City level with `kind` CENTER|CITY) and `villages`, each with `id`, `code`, one required `name` (Arabic or English), `status` ACTIVE/INACTIVE, timestamps, and a real foreign key to its parent with `ON DELETE RESTRICT`. Case-sensitive code CHECKs (`CNT-`/`GOV-`/`CTR-`/`VIL-`), unique names per parent (and kind for centers).
+- Read-only public contract `GeographyLookup` (`get*`, `list*`, `validateHierarchy` with the Master Specification §28 rules; inactive nodes rejected by default) and `GeographyNodeDto`; error codes with ar/en messages.
+- Idempotent reference seed `npm run seed:geography`: Egypt and its 27 governorates only. Centers, cities and villages are NOT seeded and the dataset is explicitly not complete.
+- No delete/rename/reactivation operations, no HTTP endpoints, no permissions (authorization matrix unchanged), no outbox events.
+- Database: migration `create-geography`. Tests: 30 unit tests added; MariaDB tests `tests/db/geography.test.ts` added (always-rolled-back transaction, transaction passed explicitly; not yet run).
+- Known issues: `npm run db:migrate` and `npm run test:db` pending on the user machine; centers/cities/villages data source not defined.

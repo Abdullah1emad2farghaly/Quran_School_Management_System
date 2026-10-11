@@ -6,6 +6,7 @@ import { ROLE_ERROR_MESSAGES } from '../../modules/09-roles-permissions/public';
 import { SESSION_ERROR_MESSAGES } from '../../modules/10-sessions-jwt/public';
 import { RECOVERY_ERROR_MESSAGES } from '../../modules/11-otp-password-recovery/public';
 import { ORGANIZATION_ERROR_MESSAGES } from '../../modules/13-organization-core/public';
+import { GEOGRAPHY_ERROR_MESSAGES } from '../../modules/14-geography/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
 let registered = false;
@@ -22,4 +23,5 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(RECOVERY_ERROR_MESSAGES);
   registerErrorMessages(AUTHORIZATION_ERROR_MESSAGES);
   registerErrorMessages(ORGANIZATION_ERROR_MESSAGES);
+  registerErrorMessages(GEOGRAPHY_ERROR_MESSAGES);
 }

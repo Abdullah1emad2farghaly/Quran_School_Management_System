@@ -56,3 +56,6 @@ Roles -> permissions -> scope -> ownership, deny by default and fail closed. Eac
 
 ## Main Organization (Module 13)
 Owns the single Main Organization (V1) and exposes the read-only `OrganizationLookup` contract. Created only by the idempotent bootstrap CLI step (shared by `bootstrap:organization` and `bootstrap:main-admin`); no endpoints, no permissions. See `docs/ORGANIZATION.md`.
+
+## Geography (Module 14)
+Global, organization-independent reference data exposed through the read-only `GeographyLookup` contract (including `validateHierarchy` for Unified Address and Schools). Reference data is loaded by the idempotent `seed:geography` CLI; no endpoints, permissions, deletion or events. See `docs/GEOGRAPHY.md`.

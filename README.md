@@ -22,7 +22,7 @@ Create a MySQL database matching `DATABASE_NAME`, then `npm run db:migrate`. Sch
 Base path `/api/v1`. Localization: `ar` (default), `en`. See `docs/ARCHITECTURE.md`.
 
 ## Status
-See `docs/IMPLEMENTATION-STATUS.md`. Currently: Foundation phase complete (Modules 00–07); Modules 08 (Identity Core), 09 (Roles & Permissions), 10 (Sessions & JWT) 11 (OTP & Password Recovery) and 12 (Authorization Engine) implemented; 13 (Main Organization) implemented; next is Module 14 Geography. Fresh install: `npm run db:migrate`, then `npm run bootstrap:main-admin` (creates the Main Organization, then the first Main Admin). Authorization decisions: `docs/AUTHORIZATION-MATRIX.md`; first Main Admin: `npm run bootstrap:main-admin` (see `docs/AUTHORIZATION.md`).
+See `docs/IMPLEMENTATION-STATUS.md`. Currently: Foundation phase complete (Modules 00–07); Modules 08 (Identity Core), 09 (Roles & Permissions), 10 (Sessions & JWT) 11 (OTP & Password Recovery) and 12 (Authorization Engine) implemented; 13 (Main Organization) implemented; 14 (Geography) implemented; next is Module 15 Unified Address. After `npm run db:migrate`, `npm run seed:geography` loads Egypt and its 27 governorates (not a complete dataset). Fresh install: `npm run db:migrate`, then `npm run bootstrap:main-admin` (creates the Main Organization, then the first Main Admin). Authorization decisions: `docs/AUTHORIZATION-MATRIX.md`; first Main Admin: `npm run bootstrap:main-admin` (see `docs/AUTHORIZATION.md`).
 
 # _____________________________________________________________________________________
 
