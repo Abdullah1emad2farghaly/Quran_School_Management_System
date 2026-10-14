@@ -25,6 +25,11 @@ async function inRollback(work: (tx: TransactionContext, q: <T extends object>(s
       const transaction = sequelizeTransactionOf(tx);
       const q = <T extends object>(sql: string, replacements: Record<string, string> = {}) =>
         sequelize.query<T>(sql, { replacements, type: QueryTypes.SELECT, transaction: transaction ?? null });
+      // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
+      for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction ?? null });
+      await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: transaction ?? null });
+      await sequelize.query('DELETE FROM schools', { transaction: transaction ?? null });
+      await sequelize.query('DELETE FROM organization_admins', { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM organizations', { transaction: transaction ?? null });
       const left = await q<{ n: number }>('SELECT COUNT(*) AS n FROM organizations');
       if (Number(left[0]?.n) !== 0) throw new Error('Test precondition failed: organizations is not empty inside the test transaction');
@@ -49,24 +54,24 @@ afterAll(async () => {
 });
 
 describe('organizations schema (migration)', () => {
-  it('has the approved columns only, unique code and V1 single-organization indexes, and no foreign keys', async () => {
+  it('has the approved columns, unique code and unique NAME (the V1 single-organization guard is gone), and the geography foreign keys', async () => {
     const columns = await sequelize.query<{ COLUMN_NAME: string }>(
       "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' ORDER BY ORDINAL_POSITION",
       { type: QueryTypes.SELECT },
     );
-    expect(columns.map((c) => c.COLUMN_NAME)).toEqual(['id', 'code', 'name', 'status', 'v1_single_guard', 'created_at', 'updated_at']);
+    expect(columns.map((c) => c.COLUMN_NAME)).toEqual(['id', 'code', 'name', 'status', 'country_id', 'governorate_id', 'center_id', 'village_id', 'v1_single_guard', 'created_at', 'updated_at']);
 
     const unique = await sequelize.query<{ INDEX_NAME: string }>(
       "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND NON_UNIQUE = 0",
       { type: QueryTypes.SELECT },
     );
-    expect(unique.map((i) => i.INDEX_NAME).sort()).toEqual(['PRIMARY', 'uq_organizations_code', 'uq_organizations_v1_single']);
+    expect(unique.map((i) => i.INDEX_NAME).sort()).toEqual(['PRIMARY', 'uq_organizations_code', 'uq_organizations_id_country', 'uq_organizations_name']);
 
-    const fks = await sequelize.query(
-      "SELECT 1 FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND REFERENCED_TABLE_NAME IS NOT NULL",
+    const fks = await sequelize.query<{ COLUMN_NAME: string; REFERENCED_TABLE_NAME: string }>(
+      "SELECT COLUMN_NAME, REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND REFERENCED_TABLE_NAME IS NOT NULL",
       { type: QueryTypes.SELECT },
     );
-    expect(fks).toHaveLength(0);
+    expect(fks.map((f) => `${f.COLUMN_NAME}>${f.REFERENCED_TABLE_NAME}`).sort()).toEqual(['center_id>centers', 'country_id>countries', 'governorate_id>governorates', 'village_id>villages']);
 
     const [name] = await sequelize.query<{ CHARACTER_SET_NAME: string }>(
       "SELECT CHARACTER_SET_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND COLUMN_NAME = 'name'",
@@ -81,7 +86,7 @@ describe('OrganizationService (MariaDB)', () => {
     await inRollback(async (tx) => {
       const service = makeService();
       const { organization } = await service.ensureMainOrganization('مؤسسة النور لتحفيظ القرآن الكريم - Al-Noor 🌙', tx);
-      expect(organization.code).toBe('ORG-000001');
+      expect(organization.code).toMatch(/^ORG-\d{6}$/);
       // Reads use the same transaction: the row is not committed, so another connection could not see it.
       expect((await service.getMainOrganization(tx))?.name).toBe('مؤسسة النور لتحفيظ القرآن الكريم - Al-Noor 🌙');
       expect((await service.findById(organization.id, tx))?.status).toBe('ACTIVE');
@@ -102,7 +107,7 @@ describe('OrganizationService (MariaDB)', () => {
       );
       expect(events).toHaveLength(1);
       expect(events[0]?.event_type).toBe('OrganizationCreated');
-      expect(JSON.parse(events[0]!.payload)).toEqual({ organizationId: first.organization.id, code: 'ORG-000001' });
+      expect(JSON.parse(events[0]!.payload)).toEqual({ organizationId: first.organization.id, code: first.organization.code });
     });
   });
 
@@ -111,6 +116,11 @@ describe('OrganizationService (MariaDB)', () => {
     const orgsBefore = await sequelize.query<{ n: number }>('SELECT COUNT(*) AS n FROM organizations', { type: QueryTypes.SELECT });
     await expect(
       uow.run(async (tx) => {
+        // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
+        for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: sequelizeTransactionOf(tx) ?? null });
+        await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: sequelizeTransactionOf(tx) ?? null });
+        await sequelize.query('DELETE FROM schools', { transaction: sequelizeTransactionOf(tx) ?? null });
+        await sequelize.query('DELETE FROM organization_admins', { transaction: sequelizeTransactionOf(tx) ?? null });
         await sequelize.query('DELETE FROM organizations', { transaction: sequelizeTransactionOf(tx) ?? null });
         await makeService().ensureMainOrganization('Will be rolled back', tx);
         throw new Error('later step failed');
@@ -122,7 +132,7 @@ describe('OrganizationService (MariaDB)', () => {
     expect(Number(orgsAfter[0]!.n)).toBe(Number(orgsBefore[0]!.n));
   });
 
-  it('answers a creation race with the existing row: the DB guard rejects the insert, no duplicate, no extra event', async () => {
+  it('answers a creation race with the existing row: the unique name rejects the insert, no duplicate, no extra event', async () => {
     await inRollback(async (tx, q) => {
       const winner = await makeService().ensureMainOrganization('Winner', tx);
       // The service's first look is made to miss the row (as if another process committed in between); the insert must hit the unique guard.
@@ -135,7 +145,7 @@ describe('OrganizationService (MariaDB)', () => {
         unitOfWork: uow,
         outbox: new OutboxService(new SequelizeOutboxStore(sequelize)),
       });
-      const loser = await racing.ensureMainOrganization('Loser', tx);
+      const loser = await racing.ensureMainOrganization('winner', tx); // same name (case-insensitive): the unique NAME is what the loser hits
       expect(loser).toMatchObject({ created: false, organization: { id: winner.organization.id } });
       expect(await q('SELECT id FROM organizations')).toHaveLength(1);
       expect(await q("SELECT id FROM outbox_messages WHERE aggregate_type = 'Organization' AND aggregate_id = :id", { id: winner.organization.id })).toHaveLength(1);
@@ -144,18 +154,20 @@ describe('OrganizationService (MariaDB)', () => {
 });
 
 describe('database guards', () => {
-  it('rejects a second organization (V1 single-organization guard), even with a different code', async () => {
-    await inRollback(async (tx) => {
+  it('allows many organizations (the V1 single-organization guard was removed)', async () => {
+    await inRollback(async (tx, q) => {
       await insertRaw(tx, ID1, 'ORG-000001', 'First');
-      await expect(insertRaw(tx, ID2, 'ORG-000002', 'Second')).rejects.toThrow();
+      await insertRaw(tx, ID2, 'ORG-000002', 'Second');
+      expect(await q('SELECT id FROM organizations')).toHaveLength(2);
     });
   });
 
-  it('rejects a duplicate code and a second row that tries to bypass the guard value', async () => {
+  it('rejects a duplicate code and a duplicate NAME across the whole system (case-insensitive)', async () => {
     await inRollback(async (tx) => {
-      await insertRaw(tx, ID1, 'ORG-000001', 'First');
+      await insertRaw(tx, ID1, 'ORG-000001', 'Dar Al-Quran');
       await expect(insertRaw(tx, ID2, 'ORG-000001', 'Second')).rejects.toThrow();
-      await expect(insertRaw(tx, ID2, 'ORG-000002', 'Second', 'ACTIVE', 2)).rejects.toThrow();
+      await expect(insertRaw(tx, ID2, 'ORG-000002', 'dar al-quran')).rejects.toThrow();
+      await expect(insertRaw(tx, ID2, 'ORG-000002', 'DAR AL-QURAN')).rejects.toThrow();
     });
   });
 
@@ -172,18 +184,16 @@ describe('database guards', () => {
     });
   });
 
-  it('maps the unique-index violation to ORGANIZATION_ALREADY_EXISTS in the repository', async () => {
+  it('maps the unique-index violations to ORGANIZATION_NAME_ALREADY_EXISTS (name) and ORGANIZATION_ALREADY_EXISTS (code) in the repository', async () => {
     await inRollback(async (tx) => {
       const service = makeService();
       const { organization } = await service.ensureMainOrganization('First', tx);
-      const second = (await import('../../src/modules/13-organization-core/domain/entities/organization')).Organization.create({
-        name: 'Second',
-        code: 'ORG-000002',
-        clock: { now: () => organization.createdAt },
-      });
-      const error = await repository.insert(second, tx).catch((e: unknown) => e);
-      expect(error).toBeInstanceOf(AppError);
-      expect((error as AppError).code).toBe('ORGANIZATION_ALREADY_EXISTS');
+      const { Organization } = await import('../../src/modules/13-organization-core/domain/entities/organization');
+      const clock = { now: () => organization.createdAt };
+      const sameName = await repository.insert(Organization.create({ name: 'FIRST', code: 'ORG-900002', clock }), tx).catch((e: unknown) => e);
+      expect((sameName as AppError).code).toBe('ORGANIZATION_NAME_ALREADY_EXISTS');
+      const sameCode = await repository.insert(Organization.create({ name: 'Second', code: organization.code, clock }), tx).catch((e: unknown) => e);
+      expect((sameCode as AppError).code).toBe('ORGANIZATION_ALREADY_EXISTS');
     });
   });
 });

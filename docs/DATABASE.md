@@ -37,10 +37,19 @@ Rows written before this fix by a non-UTC machine (test data only, in this proje
 ## Authorization (Module 12)
 `authorization_bootstrap_lock`: a single row (`id = 1`, enforced by a CHECK) locked with `SELECT ... FOR UPDATE` by the first-Main-Admin bootstrap so concurrent runs are serialized; it also records the last bootstrap's user id and time. It is never used for authorization decisions (roles stay in `user_roles`).
 
-## Main Organization (Module 13)
-`organizations` (`id` CHAR(36) PK, `code` unique `ORG-000001` format, `name` VARCHAR(200) utf8mb4, `status` ACTIVE/INACTIVE, `v1_single_guard`, timestamps). CHECKs on status, code format, non-blank name; `v1_single_guard = 1` with a UNIQUE index enforces exactly one organization in V1 (drop the index in a future migration for multi-organization). No foreign keys from this table; later modules reference `organizations.id` with `ON DELETE RESTRICT`. See `docs/ORGANIZATION.md`.
+## Organizations (Module 13)
+`organizations` (`id` CHAR(36) PK, `code` unique `ORG-000001` format, `name` VARCHAR(200) utf8mb4, `status` ACTIVE/INACTIVE, `v1_single_guard`, timestamps). CHECKs on status, code format, non-blank name; `v1_single_guard = 1` with a UNIQUE index enforces exactly one organization in V1 (drop the index in a future migration for multi-organization). Plus `country_id` (`CHAR(36)` NULL, the primary key of a `countries` row; foreign key `fk_organizations_country` → `countries.id`, `ON DELETE RESTRICT` / `ON UPDATE RESTRICT`; migration `20261011100000-add-organizations-country`; immutable once assigned, enforced by the application, not by a trigger). Later modules reference `organizations.id` with `ON DELETE RESTRICT`. See `docs/ORGANIZATION.md`.
 
 Note (Module 13): the `ck_organizations_code_format` CHECK was corrected by migration `20261010140000-fix-organizations-code-check` to be case-sensitive (see changelog 0.15.1).
 
 ## Geography (Module 14)
 Global reference data (no `organization_id`): `countries` -> `governorates` -> `centers` (Center/City, `kind` CENTER|CITY) -> `villages`. Each level has `id` CHAR(36), `code` (`CNT-`/`GOV-`/`CTR-`/`VIL-` + 6 digits, case-sensitive CHECK, unique), `name` VARCHAR(200) utf8mb4, `status` ACTIVE/INACTIVE, timestamps, and a real foreign key to its parent with `ON DELETE RESTRICT` / `ON UPDATE RESTRICT`. Unique names: country; per country; per governorate and kind; per center. See `docs/GEOGRAPHY.md`.
+
+## Unified Address (Module 15)
+No tables and no migration: Module 15 only normalizes and validates a Parent Address. Persistence and history of a Parent's address belong to the Parents module (17); the contract it must follow (columns, history table, name snapshot, constraints) is in `docs/UNIFIED-ADDRESS.md`.
+
+## Schools (Module 16)
+Migrations `20261012100000-create-schools`, `20261013100000-add-schools-applicant-name` and `20261013110000-fix-schools-holds-name-check` (nullable `applicant_name`): `schools`, `school_managers`, `school_status_history`, `school_gps_history`, `school_code_sequence`. Foreign keys `RESTRICT` to `organizations`, `governorates`, `centers`, `villages` and between school tables; users are referenced without foreign keys (as in `user_roles`). Unique per organization among non-rejected schools (`holds_name`), one active manager per school (`active`), gap-free codes from one locked sequence row, CHECKs for GPS ranges and the 20 m accuracy. See `docs/SCHOOLS.md`.
+
+## Organizations as many, school country invariant (migrations 20261014100000 and 20261014110000)
+`organizations`: V1 single-organization index and CHECK dropped; `governorate_id`, `center_id`, `village_id` (FK `RESTRICT`, village needs center); unique `uq_organizations_name` and `uq_organizations_id_country (id, country_id)`; `organization_code_sequence` (locked row); `organization_admins` (organization scope of MAIN_ADMIN, with history; backfilled for current MAIN_ADMIN holders). `governorates`: unique `uq_governorates_id_country`. `schools.country_id` NOT NULL with composite foreign keys `fk_schools_org_country` and `fk_schools_gov_country` (RESTRICT), so a school's country always equals its organization's country. Migrations are forward-only additions; the school migration stops with a report if existing rows are inconsistent. See `docs/ORGANIZATION.md` and `docs/SCHOOLS.md`.

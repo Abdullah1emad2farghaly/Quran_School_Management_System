@@ -1,5 +1,5 @@
 import { SystemClock } from '../modules/00-shared-kernel/public';
-import { OrganizationService, SequelizeOrganizationRepository } from '../modules/13-organization-core/public';
+import { OrganizationService, SequelizeOrganizationAdminRepository, SequelizeOrganizationRepository } from '../modules/13-organization-core/public';
 import { getSequelize, getUnitOfWork } from './database';
 import { getOutboxService } from './outbox';
 
@@ -10,6 +10,7 @@ export function getOrganizationService(): OrganizationService {
   if (!service) {
     service = new OrganizationService({
       repository: new SequelizeOrganizationRepository(getSequelize()),
+      admins: new SequelizeOrganizationAdminRepository(getSequelize()),
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
       clock: new SystemClock(),

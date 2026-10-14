@@ -6,6 +6,12 @@ export interface OrganizationDto {
   readonly code: string;
   readonly name: string;
   readonly status: OrganizationStatus;
+  /** Primary key of the organization's country (`countries.id`); `null` until assigned. Immutable once set. */
+  readonly countryId: string | null;
+  /** The organization's own address (null only for an organization created before addresses existed). */
+  readonly governorateId: string | null;
+  readonly centerId: string | null;
+  readonly villageId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -15,6 +21,10 @@ export const toOrganizationDto = (o: Organization): OrganizationDto => ({
   code: o.code,
   name: o.name,
   status: o.status,
+  countryId: o.countryId,
+  governorateId: o.governorateId,
+  centerId: o.centerId,
+  villageId: o.villageId,
   createdAt: o.createdAt,
   updatedAt: o.updatedAt,
 });

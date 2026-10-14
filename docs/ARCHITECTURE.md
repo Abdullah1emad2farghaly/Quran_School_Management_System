@@ -54,8 +54,14 @@ Forgot-password with an OTP and a single-use reset token; keyed-hash storage, no
 ## Authorization engine (Module 12)
 Roles -> permissions -> scope -> ownership, deny by default and fail closed. Each module registers its own permissions (with an explicit management/reporting/unscoped policy) and the scope/ownership resolvers for the data it owns; routes use `requirePermission`, other code injects `Authorizer`. Module 12 defines no permissions or endpoints and owns no organizational data. It also provides the one-time first-Main-Admin CLI. See `docs/AUTHORIZATION.md` and the central `docs/AUTHORIZATION-MATRIX.md`.
 
-## Main Organization (Module 13)
-Owns the single Main Organization (V1) and exposes the read-only `OrganizationLookup` contract. Created only by the idempotent bootstrap CLI step (shared by `bootstrap:organization` and `bootstrap:main-admin`); no endpoints, no permissions. See `docs/ORGANIZATION.md`.
+## Organizations (Module 13)
+Owns the organizations (many; each with a required country and its own address, a system-wide unique name and administrator links that give the MAIN_ADMIN role its organization scope) and exposes the read-only `OrganizationLookup` contract. The bootstrap CLI creates the first organization; organizations are registered through the Module 16 endpoint `POST /organizations`. See `docs/ORGANIZATION.md`.
 
 ## Geography (Module 14)
 Global, organization-independent reference data exposed through the read-only `GeographyLookup` contract (including `validateHierarchy` for Unified Address and Schools). Reference data is loaded by the idempotent `seed:geography` CLI; no endpoints, permissions, deletion or events. See `docs/GEOGRAPHY.md`.
+
+## Unified Address (Module 15)
+Pure application logic (no tables, no migration, no endpoints, no permissions, no events): normalization, raw-text parsing and validation of a **Parent Address** (registered Governorate of the Main Organization's country + free-text Center/City and Village). Depends only on the public contracts of Module 13 (`OrganizationLookup`) and Module 14 (`GeographyLookup`); exposes `UnifiedAddressLookup`. The Parents module (17) owns the persistence and history of the address. School addresses keep their structured rules and do not go through this module. See `docs/UNIFIED-ADDRESS.md`.
+
+## Schools (Module 16)
+Main Schools and Sub-School requests, the school-scoped manager link with history, GPS rules and gap-free codes. Depends only on the public contracts of Modules 00, 02, 03, 06, 08 (identity), 09 (roles), 13 (organization) and 14 (geography). Approval (school ACTIVE + manager link + SCHOOL_MANAGER role + history + events) runs in one UnitOfWork transaction. Has its own REST API under `/api/v1/schools` (public submissions with applicant account creation through IAM, approval/rejection, reads, lifecycle) and no permission-registry entries yet (matrix deferred); downstream modules use `SchoolLookup`. See `docs/SCHOOLS.md`.

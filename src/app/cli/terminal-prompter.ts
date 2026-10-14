@@ -1,10 +1,10 @@
 import { createInterface, type Interface } from 'node:readline';
 import { Writable } from 'node:stream';
 import type { CredentialPrompter } from './bootstrap-main-admin-cli';
-import type { OrganizationPrompter } from './bootstrap-organization-cli';
+import type { CountryPrompter, OrganizationPrompter } from './bootstrap-organization-cli';
 
 /** Interactive prompts on the real terminal; typed passwords are not echoed. */
-export class TerminalPrompter implements CredentialPrompter, OrganizationPrompter {
+export class TerminalPrompter implements CredentialPrompter, OrganizationPrompter, CountryPrompter {
   private muted = false;
   private readonly rl: Interface;
 
@@ -31,6 +31,11 @@ export class TerminalPrompter implements CredentialPrompter, OrganizationPrompte
 
   askOrganizationName(): Promise<string> {
     return this.ask('Main Organization name (Arabic or English): ', false);
+  }
+
+  async confirm(question: string): Promise<boolean> {
+    const answer = (await this.ask(`${question} [y/N]: `, false)).trim().toLowerCase();
+    return answer === 'y' || answer === 'yes';
   }
 
   askPassword(label: string): Promise<string> {

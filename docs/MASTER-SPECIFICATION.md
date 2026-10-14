@@ -1103,6 +1103,24 @@ Geography is master data.
 
 Used geography records must not be casually hard-deleted.
 
+Organizations (approved amendment, replaces the earlier "one Main Organization" assumption):
+
+-   Organization creation is its own workflow and endpoint, independent of school creation. An Organization exists before any School; no Main School is required and no placeholder is created. Every School belongs to an existing Organization.
+
+-   Organization data: name (required, unique across the whole system), country (required, a registered Country), its own address (Governorate required, Center / City optional, Village only with a Center; all registered, active and under the right parents, the Governorate inside the chosen country), and the applicant (name and phone) who becomes its manager.
+
+-   The applicant's account follows the IAM rules (phone normalized to E.164; an existing phone is a conflict, never a reuse by phone alone). The applicant receives the MAIN_ADMIN role scoped exclusively to that Organization: the role alone never grants access to another Organization's data.
+
+-   The Organization's country is assigned at creation and is immutable (it cannot change while schools exist).
+
+Country of a School (approved invariant):
+
+-   Every School has the same country as its Organization. The country is derived from the Organization on the server; a client-supplied country is only compared, never used. It is enforced in the application and by the database.
+
+-   Each School keeps its own address (Governorate, Center / City, Village) anywhere inside that country; only the country is shared.
+
+-   A user never enters a country as part of a Parent Address; it is the country of the parent's Organization.
+
 * * *
 
 # 28\. UNIFIED ADDRESS
@@ -1122,6 +1140,28 @@ Rules:
 -   Village optional.
 
 -   Village cannot exist without Center.
+
+Parent Address (approved amendment):
+
+-   Stored in three separate fields, never as one combined string: Governorate, Center / City, Village.
+
+-   Governorate: must be a registered Governorate of the country of the parent's Organization (stored as its id) and must be active when a Parent Address is created or changed.
+
+-   Center / City: optional free text. It does not need to be registered in the geography tables.
+
+-   Village: optional free text. It does not need to be registered in the geography tables. A Village cannot be provided without a Center / City.
+
+-   Whitespace is trimmed and normalized (Unicode NFC, runs of whitespace collapsed). Each free-text field has at most 200 characters. A missing optional part is stored as NULL.
+
+-   An address is never rejected because its Center / City or Village is not registered.
+
+-   Address history stays auditable: a change keeps the previous address, including the Governorate name as it was at the time. A historical address stays readable even if its Governorate later becomes inactive.
+
+-   Raw text (for example an Excel cell) uses `Governorate / Center or City / Village`: `/` is the only separator, the Governorate name must match a registered Governorate exactly (after trimming and collapsing whitespace; no automatic Arabic letter normalization), empty components (`A//C`, `A/B/`, `/A`) are rejected, and `A` and `A/B` are valid. It goes through the same validation as any other Parent Address.
+
+School Address (unchanged): schools keep the structured hierarchy validation above (registered Governorate, Center / City and Village, Village only under its Center). These Parent Address rules do not change it.
+
+Student address is derived from the Parent.
 
 Pipeline:
 
@@ -1247,7 +1287,7 @@ Required:
 
 -   phone
 
--   unified address
+-   Parent Address (Governorate / Center or City / Village, see section 28)
 
 One Parent can have multiple children.
 
@@ -2528,6 +2568,8 @@ Required:
 11. Starting Surah *
 12. Group Schedule (optional)
 ```
+
+Parent Address * is one cell in the format `Governorate / Center or City / Village` and follows the Parent Address rules of section 28.
 
 There is NO Student Address column.
 

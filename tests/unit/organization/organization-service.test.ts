@@ -24,7 +24,8 @@ describe('OrganizationService.ensureMainOrganization', () => {
     const { organization, created } = await service.ensureMainOrganization('  مؤسسة   النور ');
     expect(created).toBe(true);
     expect(organization).toMatchObject({ code: 'ORG-000001', name: 'مؤسسة النور', status: 'ACTIVE' });
-    expect(Object.keys(organization).sort()).toEqual(['code', 'createdAt', 'id', 'name', 'status', 'updatedAt']); // approved fields only
+    expect(Object.keys(organization).sort()).toEqual(['centerId', 'code', 'countryId', 'createdAt', 'governorateId', 'id', 'name', 'status', 'updatedAt', 'villageId']); // approved fields only
+    expect(organization.countryId).toBeNull(); // the country is assigned separately, once
     expect(store.messages.map((m) => m.eventType)).toEqual([OrganizationEventTypes.ORGANIZATION_CREATED]);
     expect(JSON.parse(store.messages[0]!.payload)).toEqual({ organizationId: organization.id, code: 'ORG-000001' });
   });
@@ -62,7 +63,7 @@ describe('OrganizationService.ensureMainOrganization', () => {
     let firstLook = true;
     repository.findMain = async (tx) => (firstLook ? ((firstLook = false), undefined) : realFindMain(tx));
 
-    const loser = await service.ensureMainOrganization('Loser');
+    const loser = await service.ensureMainOrganization('WINNER'); // same name (case-insensitive): the unique name is what the loser hits
     expect(loser.created).toBe(false);
     expect(loser.organization.id).toBe(winner.organization.id);
     expect(repository.rows.size).toBe(1);
@@ -97,15 +98,15 @@ describe('Main Organization lookup contract', () => {
     expect(await service.findById('missing')).toBeUndefined();
   });
 
-  it('the in-memory repository enforces the V1 single-organization rule', async () => {
+  it('the in-memory repository allows many organizations but one name (case-insensitive) and one code', async () => {
     const { service, repository } = setup();
     await service.ensureMainOrganization('Al-Noor');
-    const stored = [...repository.rows.values()][0]!;
-    const second = (await import('../../../src/modules/13-organization-core/domain/entities/organization')).Organization.create({
-      name: 'Second',
-      code: 'ORG-000002',
-      clock: { now: () => stored.createdAt },
-    });
-    await expect(repository.insert(second, {} as TransactionContext)).rejects.toMatchObject({ code: organizationError('ORGANIZATION_ALREADY_EXISTS').code });
+    const { Organization } = await import('../../../src/modules/13-organization-core/domain/entities/organization');
+    const clock = { now: () => new Date() };
+    const insert = (name: string, code: string) => repository.insert(Organization.create({ name, code, clock }), {} as TransactionContext);
+    await insert('Second', 'ORG-000002'); // V1's single-organization guard is gone (approved change)
+    expect(repository.rows.size).toBe(2);
+    await expect(insert('al-noor', 'ORG-000003')).rejects.toMatchObject({ code: organizationError('ORGANIZATION_NAME_ALREADY_EXISTS').code });
+    await expect(insert('Third', 'ORG-000002')).rejects.toMatchObject({ code: organizationError('ORGANIZATION_ALREADY_EXISTS').code });
   });
 });

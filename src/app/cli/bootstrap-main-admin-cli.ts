@@ -26,6 +26,11 @@ export interface BootstrapCliDeps {
    * A non-zero result stops the command, so no Main Admin is created without the organization step succeeding.
    */
   readonly beforeCredentials?: () => Promise<number>;
+  /**
+   * Runs after the Main Admin was created (the user id is passed). Used to link the new Main Admin to the first organization,
+   * because the MAIN_ADMIN role is scoped to organizations. If it fails the Main Admin already exists and the failure is reported.
+   */
+  readonly afterCreated?: (userId: string) => Promise<void>;
 }
 
 /**
@@ -58,6 +63,15 @@ export async function runBootstrapMainAdminCli(deps: BootstrapCliDeps): Promise<
     const { userId } = await deps.bootstrap.execute({ phone, password });
     out('Main Admin created.');
     out(`User id: ${userId}`);
+    if (deps.afterCreated) {
+      try {
+        await deps.afterCreated(userId);
+      } catch (error) {
+        err(`The Main Admin exists but could not be linked to the organization (${error instanceof AppError ? error.code : error instanceof Error ? error.name : 'UnknownError'}). Run npm run bootstrap:organization and link the administrator before using it.`);
+        return EXIT_FAILED;
+      }
+      out('Linked as administrator of the first organization.');
+    }
     out('Sign in with POST /api/v1/auth/login using that phone number and password.');
     return EXIT_OK;
   } catch (error) {

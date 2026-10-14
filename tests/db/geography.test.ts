@@ -30,13 +30,20 @@ const clock: Clock = { now: () => new Date() };
 class Rollback extends Error {}
 type Q = <T extends object>(sql: string, replacements?: Record<string, string>) => Promise<T[]>;
 
-/** Runs `work` on EMPTY geography tables (inside the transaction only) and always rolls back. */
+/** Runs `work` on EMPTY geography tables (inside the transaction only) and always rolls back. An assigned organization country is detached first (inside the transaction only). */
 async function inRollback(work: (tx: TransactionContext, q: Q) => Promise<void>): Promise<void> {
   try {
     await uow.run(async (tx) => {
       const transaction = sequelizeTransactionOf(tx) ?? null;
       const q: Q = <T extends object>(sql: string, replacements: Record<string, string> = {}) =>
         sequelize.query<T>(sql, { replacements, type: QueryTypes.SELECT, transaction });
+      // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
+      for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction });
+      await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: transaction });
+      await sequelize.query('DELETE FROM schools', { transaction: transaction });
+      await sequelize.query('DELETE FROM organization_admins', { transaction: transaction });
+      // organizations reference countries and the governorate/center/village (RESTRICT): detach them inside this always-rolled-back transaction only.
+      await sequelize.query('UPDATE organizations SET village_id = NULL, center_id = NULL, governorate_id = NULL, country_id = NULL', { transaction });
       for (const table of ['villages', 'centers', 'governorates', 'countries']) await sequelize.query(`DELETE FROM ${table}`, { transaction });
       for (const table of ['countries', 'governorates', 'centers', 'villages']) {
         const left = await q<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`);

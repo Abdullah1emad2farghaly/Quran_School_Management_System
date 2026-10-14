@@ -7,6 +7,8 @@ import { SESSION_ERROR_MESSAGES } from '../../modules/10-sessions-jwt/public';
 import { RECOVERY_ERROR_MESSAGES } from '../../modules/11-otp-password-recovery/public';
 import { ORGANIZATION_ERROR_MESSAGES } from '../../modules/13-organization-core/public';
 import { GEOGRAPHY_ERROR_MESSAGES } from '../../modules/14-geography/public';
+import { SCHOOL_ERROR_MESSAGES } from '../../modules/16-schools/public';
+import { UNIFIED_ADDRESS_ERROR_MESSAGES } from '../../modules/15-unified-address/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
 let registered = false;
@@ -24,4 +26,6 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(AUTHORIZATION_ERROR_MESSAGES);
   registerErrorMessages(ORGANIZATION_ERROR_MESSAGES);
   registerErrorMessages(GEOGRAPHY_ERROR_MESSAGES);
+  registerErrorMessages(UNIFIED_ADDRESS_ERROR_MESSAGES);
+  registerErrorMessages(SCHOOL_ERROR_MESSAGES);
 }
