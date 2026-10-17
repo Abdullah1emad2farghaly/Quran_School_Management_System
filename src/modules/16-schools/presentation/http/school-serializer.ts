@@ -1,4 +1,4 @@
-import type { ApproveSubSchoolResult, SchoolSubmissionResult } from '../../application/services/school-service';
+import type { ApproveSchoolResult, SchoolSubmissionResult } from '../../application/services/school-service';
 import type { SchoolDto, SchoolManagerAssignmentDto } from '../../application/dto/school-dto';
 import type { OrganizationDto } from '../../../13-organization-core/public';
 import type { OrganizationRegistrationResult } from '../../application/services/organization-registration-service';
@@ -10,16 +10,15 @@ export function serializeSchool(s: SchoolDto) {
     id: s.id,
     code: s.code,
     name: s.name,
-    type: s.type,
     status: s.status,
     organizationId: s.organizationId,
     countryId: s.countryId,
-    parentSchoolId: s.parentSchoolId,
     governorateId: s.governorateId,
-    centerId: s.centerId,
-    villageId: s.villageId,
+    centerName: s.centerName,
+    villageName: s.villageName,
     gps: { latitude: s.latitude, longitude: s.longitude, accuracyMeters: s.gpsAccuracyMeters },
     createdBy: s.createdBy,
+    applicantUserId: s.applicantUserId,
     applicantName: s.applicantName,
     decidedBy: s.decidedBy,
     decidedAt: iso(s.decidedAt),
@@ -48,8 +47,8 @@ export function serializeSubmission(r: SchoolSubmissionResult) {
   return { school: serializeSchool(r.school), applicant: { userId: r.applicant.userId, accountCreated: r.applicant.accountCreated } };
 }
 
-export function serializeApproval(r: ApproveSubSchoolResult) {
-  return { school: serializeSchool(r.school), manager: serializeManager(r.manager) };
+export function serializeApproval(r: ApproveSchoolResult) {
+  return { school: serializeSchool(r.school), manager: r.manager ? serializeManager(r.manager) : null };
 }
 
 export function serializeOrganization(o: OrganizationDto) {
@@ -59,7 +58,7 @@ export function serializeOrganization(o: OrganizationDto) {
     name: o.name,
     status: o.status,
     countryId: o.countryId,
-    address: { governorateId: o.governorateId, centerId: o.centerId, villageId: o.villageId },
+    address: { governorateId: o.governorateId, centerName: o.centerName, villageName: o.villageName },
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
   };

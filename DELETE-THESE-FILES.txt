@@ -1,0 +1,2 @@
+Delete this file from your project (the Main/Sub classification was removed):
+src/modules/16-schools/domain/value-objects/school-type.ts

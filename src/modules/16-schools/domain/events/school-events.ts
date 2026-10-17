@@ -1,8 +1,8 @@
 /**
  * School domain events (outbox, same transaction as the change). Payloads carry identifiers ONLY: no names, reasons,
  * coordinates or phones. Consumers read what they are authorized to see from the school record.
- *  - SchoolCreated: a Main School (ACTIVE) or a Sub-School request (PENDING) was created.
- *  - SchoolApproved / SchoolRejected: Main Admin decision on a PENDING Sub-School.
+ *  - SchoolCreated: a school was created (always PENDING).
+ *  - SchoolApproved / SchoolRejected: the organization manager's decision on a PENDING school.
  *  - SchoolDeactivated / SchoolReactivated: ACTIVE <-> INACTIVE.
  *  - SchoolGpsCorrected: official GPS corrected while PENDING.
  *  - SchoolManagerAssigned / SchoolManagerRevoked: school-scoped manager link.

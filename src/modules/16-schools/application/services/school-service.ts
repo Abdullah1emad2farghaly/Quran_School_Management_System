@@ -3,7 +3,7 @@ import type { OutboxService } from '../../../06-domain-events-outbox/public';
 import { normalizePhone, type IdentityService } from '../../../08-identity-core/public';
 import { isAssignableRole, type RoleService } from '../../../09-roles-permissions/public';
 import type { OrganizationLookup } from '../../../13-organization-core/public';
-import type { GeographyLookup } from '../../../14-geography/public';
+import type { UnifiedAddressLookup } from '../../../15-unified-address/public';
 import { School } from '../../domain/entities/school';
 import { SchoolManagerAssignment, type SchoolManagerSource } from '../../domain/entities/school-manager-assignment';
 import { schoolError } from '../../domain/errors/school-errors';
@@ -16,7 +16,6 @@ import type { SchoolCodeSequence } from '../ports/school-code-sequence';
 import type { SchoolManagerRepository } from '../ports/school-manager-repository';
 import type { SchoolGpsHistoryEntry, SchoolRepository, SchoolSortKey, SchoolStatusHistoryEntry } from '../ports/school-repository';
 import type { SchoolStatus } from '../../domain/value-objects/school-status';
-import type { SchoolType } from '../../domain/value-objects/school-type';
 
 export interface SchoolAddressInput {
   /**
@@ -24,27 +23,22 @@ export interface SchoolAddressInput {
    * equal that country (otherwise SCHOOL_COUNTRY_MISMATCH); it cannot be used to pick a different country.
    */
   readonly countryId?: unknown;
-  readonly governorateId: string;
-  readonly centerId?: string | null;
-  readonly villageId?: string | null;
+  /** A registered, ACTIVE governorate of the organization's country. */
+  readonly governorateId: unknown;
+  /** Free text (never a registered node). */
+  readonly centerName?: unknown;
+  /** Free text; only together with a center. */
+  readonly villageName?: unknown;
 }
 
-export interface CreateMainSchoolInput extends SchoolAddressInput {
-  /** An existing organization; the actor must be its administrator. */
+export interface CreateSchoolInput extends SchoolAddressInput {
+  /** An existing organization. The caller (the route) has already proven, through the Authorization Engine, that the actor manages it. */
   readonly organizationId: string;
   readonly name: unknown;
   /** `latitude`, `longitude`, `accuracyMeters` of the physical GPS fix. */
   readonly gps: unknown;
-  /** The acting administrator of the organization. */
+  /** The acting organization manager (from the verified token). */
   readonly actorId: string;
-}
-
-export interface RequestSubSchoolInput extends SchoolAddressInput {
-  /** An existing user. Becomes the School Manager ONLY if the Main Admin approves. */
-  readonly requesterUserId: string;
-  readonly parentSchoolId: string;
-  readonly name: unknown;
-  readonly gps: unknown;
 }
 
 /** The applicant's form fields. The phone is normalized and validated by IAM rules; the name by `normalizeApplicantName`. */
@@ -53,7 +47,9 @@ export interface ApplicantInput {
   readonly phone: unknown;
 }
 
-interface SubmissionBase extends SchoolAddressInput {
+export interface SubmitSchoolInput extends SchoolAddressInput {
+  /** The organization the school will belong to. */
+  readonly organizationId: string;
   readonly applicant: ApplicantInput;
   readonly name: unknown;
   readonly gps: unknown;
@@ -65,10 +61,6 @@ interface SubmissionBase extends SchoolAddressInput {
   readonly authenticatedUserId?: string;
 }
 
-export interface SubmitSubSchoolInput extends SubmissionBase {
-  readonly parentSchoolId: string;
-}
-
 export interface SchoolSubmissionResult {
   readonly school: SchoolDto;
   readonly applicant: { readonly userId: string; readonly accountCreated: boolean };
@@ -77,7 +69,6 @@ export interface SchoolSubmissionResult {
 export interface ListSchoolsInput {
   readonly actorId: string;
   readonly statuses?: readonly SchoolStatus[];
-  readonly type?: SchoolType;
   readonly sort?: SchoolSortKey;
   readonly direction?: 'asc' | 'desc';
   readonly page: PageRequest;
@@ -90,24 +81,29 @@ export interface SchoolServiceDeps {
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
   readonly organizations: Pick<OrganizationLookup, 'requireById' | 'requireOrganizationCountryId' | 'isOrganizationAdmin' | 'listAdministeredOrganizationIds'>;
-  readonly geography: Pick<GeographyLookup, 'validateHierarchy'>;
+  /** School addresses use the shared address contract (registered governorate, free-text center and village). */
+  readonly address: Pick<UnifiedAddressLookup, 'validateSchoolAddress'>;
   readonly identity: Pick<IdentityService, 'findById' | 'createUser'>;
   readonly roles: Pick<RoleService, 'hasRole' | 'assignRole'>;
-  /** Produces the unguessable password of a newly created applicant account (see `submitSubSchool`). Required for submissions. */
+  /** Produces the unguessable password of a newly created applicant account (see `submitSchool`). Required for submissions. */
   readonly generateApplicantPassword?: () => string;
   readonly clock?: Clock;
 }
 
-export interface ApproveSubSchoolResult {
+export interface ApproveSchoolResult {
   readonly school: SchoolDto;
-  readonly manager: SchoolManagerAssignmentDto;
+  /** The applicant's School Manager link; null when the school had no applicant (an organization manager created it). */
+  readonly manager: SchoolManagerAssignmentDto | null;
 }
 
 /**
- * Module 16 application contract (Master Specification §29-31). No endpoints and no permissions: HTTP authorization
- * (Module 12) arrives with the endpoints once decisions D-1/D-2 are approved. Until then every operation that
- * changes a school still REQUIRES the actor to be an ACTIVE Main Admin (`SCHOOL_ACTION_NOT_ALLOWED` otherwise),
- * a deny-by-default check that is provisional and never replaces the engine's scope rules.
+ * Module 16 application contract (Master Specification §29-31). A school belongs directly to an organization; every new school
+ * starts PENDING and becomes ACTIVE only when the owning organization's manager approves it.
+ *
+ * AUTHORIZATION is NOT decided here: who may call each operation (ORGANIZATION_MANAGER of the owning organization, SCHOOL_MANAGER of
+ * the school...) is enforced by the shared Authorization Engine (Module 12) at the route through `requirePermission`, with the scope
+ * resolvers registered by `registerSchoolAuthorization`. This service owns the BUSINESS rules (lifecycle, GPS, address, uniqueness,
+ * manager eligibility) and trusts that its caller was authorized; `actorId` always comes from the verified token.
  *
  * Every write runs in ONE UnitOfWork transaction (or the caller's): the school change, history rows, manager link,
  * role assignment and outbox events commit together or not at all.
@@ -119,7 +115,7 @@ export class SchoolService {
   private readonly unitOfWork: UnitOfWork;
   private readonly outbox: OutboxService;
   private readonly organizations: SchoolServiceDeps['organizations'];
-  private readonly geography: SchoolServiceDeps['geography'];
+  private readonly address: SchoolServiceDeps['address'];
   private readonly identity: SchoolServiceDeps['identity'];
   private readonly roles: SchoolServiceDeps['roles'];
   private readonly applicants: ApplicantAccountResolver;
@@ -132,7 +128,7 @@ export class SchoolService {
     this.unitOfWork = deps.unitOfWork;
     this.outbox = deps.outbox;
     this.organizations = deps.organizations;
-    this.geography = deps.geography;
+    this.address = deps.address;
     this.identity = deps.identity;
     this.roles = deps.roles;
     this.applicants = new ApplicantAccountResolver(deps.identity, deps.generateApplicantPassword);
@@ -189,48 +185,28 @@ export class SchoolService {
   // ---------------------------------------------------------------------------------------------- creation
 
   /**
-   * Only an ACTIVE administrator of THE organization (MAIN_ADMIN role AND an organization link) may create a Main School under
-   * it. The organization must exist; the school's country is the organization's country. It starts ACTIVE (no approval) and
-   * grants the creator nothing.
+   * An organization manager creates a school of THEIR organization (the route proved the scope). The organization must exist and be
+   * ACTIVE; the school's country is the organization's country. It starts PENDING (never ACTIVE before approval), has no applicant and
+   * no manager yet, and grants the creator nothing.
    */
-  createMainSchool(input: CreateMainSchoolInput, tx?: TransactionContext): Promise<SchoolDto> {
+  createSchool(input: CreateSchoolInput, tx?: TransactionContext): Promise<SchoolDto> {
     return this.inTransaction(tx, async (t) => {
-      await this.requireOrganizationAdmin(input.actorId, input.organizationId, t);
-      const school = await this.buildSchool(input, input.actorId, 'MAIN', null, input.organizationId, t);
+      const school = await this.buildSchool(input, input.actorId, null, input.organizationId, t);
       await this.persistNew(school, input.actorId, t);
       return toSchoolDto(school);
     });
   }
 
   /**
-   * A Sub-School request (status PENDING). The requester must be an eligible existing user and the parent an ACTIVE
-   * Main School. It grants NOTHING: no manager link, no role. A brand-new applicant account is NOT created here
-   * (see docs/SCHOOLS.md, "Blocker").
+   * Public submission (no login needed): account creation (or logged-in reuse) + a PENDING school in one transaction. The applicant
+   * receives NO role and NO manager link until the organization's manager approves. The organization is chosen by the applicant
+   * (ORGANIZATION_NOT_FOUND / SCHOOL_ORGANIZATION_INACTIVE otherwise).
    */
-  requestSubSchool(input: RequestSubSchoolInput, tx?: TransactionContext): Promise<SchoolDto> {
-    return this.inTransaction(tx, async (t) => {
-      await this.requireEligibleManager(input.requesterUserId, t);
-      const parent = await this.repository.findById(input.parentSchoolId, t);
-      if (!parent || parent.type !== 'MAIN' || parent.status !== 'ACTIVE') throw schoolError('SCHOOL_PARENT_INVALID');
-      const school = await this.buildSchool(input, input.requesterUserId, 'SUB', parent.id, parent.organizationId, t);
-      await this.persistNew(school, input.requesterUserId, t);
-      return toSchoolDto(school);
-    });
-  }
-
-  // ---------------------------------------------------------------------------------------------- public submissions
-
-  /**
-   * Public Sub-School submission (no login needed): account creation (or logged-in reuse) + a PENDING request in one
-   * transaction. The applicant receives NO role and NO manager link until a Main Admin approves.
-   */
-  submitSubSchool(input: SubmitSubSchoolInput, tx?: TransactionContext): Promise<SchoolSubmissionResult> {
+  submitSchool(input: SubmitSchoolInput, tx?: TransactionContext): Promise<SchoolSubmissionResult> {
     return this.inTransaction(tx, async (t) => {
       const form = this.validateSubmission(input);
-      const parent = await this.repository.findById(input.parentSchoolId, t);
-      if (!parent || parent.type !== 'MAIN' || parent.status !== 'ACTIVE') throw schoolError('SCHOOL_PARENT_INVALID');
       const applicant = await this.applicants.resolve(form.phone, input.authenticatedUserId, t);
-      const school = await this.buildSchool(input, applicant.userId, 'SUB', parent.id, parent.organizationId, t, form.applicantName);
+      const school = await this.buildSchool(input, applicant.userId, applicant.userId, input.organizationId, t, form.applicantName);
       await this.persistNew(school, applicant.userId, t);
       return { school: toSchoolDto(school), applicant };
     });
@@ -239,18 +215,18 @@ export class SchoolService {
   // ---------------------------------------------------------------------------------------------- reads for an actor
 
   /**
-   * The schools the caller may see: those of the organizations they ADMINISTER (MAIN_ADMIN role and an organization link: the
-   * organization scope; this is also the review queue of §31), plus the schools they submitted or actively manage. Never another
-   * organization's schools.
+   * The schools the caller may see, derived server-side from THEIR OWN links: every school of the organizations they manage (the
+   * ORGANIZATION_MANAGER role AND an organization link; this is also the approval queue) plus the schools they actively manage (the
+   * SCHOOL_MANAGER role AND a manager link). Never another organization's schools; nothing without a link.
    */
   async listSchools(input: ListSchoolsInput, tx?: TransactionContext): Promise<PageResult<SchoolDto>> {
-    const organizationIds = await this.administeredOrganizationIds(input.actorId, tx);
+    const organizationIds = await this.managedOrganizationIds(input.actorId, tx);
+    const managerUserId = (await this.holdsActiveRole(input.actorId, 'SCHOOL_MANAGER', tx)) ? input.actorId : undefined;
     const { items, total } = await this.repository.list(
       {
-        visibleTo: input.actorId,
+        ...(managerUserId !== undefined ? { managerUserId } : {}),
         organizationIds,
         ...(input.statuses ? { statuses: input.statuses } : {}),
-        ...(input.type ? { type: input.type } : {}),
         sort: input.sort ?? 'createdAt',
         direction: input.direction ?? 'desc',
         page: input.page,
@@ -260,48 +236,37 @@ export class SchoolService {
     return buildPageResult(items.map(toSchoolDto), total, input.page);
   }
 
-  /** One school, if the caller may see it (same visibility as the list); otherwise SCHOOL_NOT_FOUND (existence is not revealed). */
-  async getSchoolForActor(schoolId: string, actorId: string, tx?: TransactionContext): Promise<SchoolDto> {
-    const school = await this.repository.findById(schoolId, tx);
-    if (!school) throw schoolError('SCHOOL_NOT_FOUND');
-    const visible =
-      school.createdBy === actorId ||
-      (await this.isOrganizationAdmin(actorId, school.organizationId, tx)) ||
-      (await this.managers.isActiveManager(actorId, school.id, tx));
-    if (!visible) throw schoolError('SCHOOL_NOT_FOUND');
-    return toSchoolDto(school);
-  }
-
   // ---------------------------------------------------------------------------------------------- decisions
 
   /**
-   * Main Admin approves a PENDING Sub-School. ONE atomic transaction: school ACTIVE + manager link for the requester
-   * (scoped to this school) + SCHOOL_MANAGER role (only if not already held) + history + events. The requester's
-   * eligibility is re-checked now; if they are no longer eligible the whole approval fails and the school stays
-   * PENDING (the Main Admin may then reject it). Never assigns MAIN_ADMIN.
+   * Approves a PENDING school. ONE atomic transaction: school ACTIVE + (when the school has an applicant) the applicant's manager link
+   * scoped to this school + SCHOOL_MANAGER role (only if not already held) + history + events. The applicant's eligibility is
+   * re-checked now; if they are no longer eligible the whole approval fails and the school stays PENDING (it may then be rejected).
+   * A school without an applicant is approved without a manager (the organization manager assigns one afterwards). Never assigns
+   * MAIN_ADMIN or ORGANIZATION_MANAGER.
    */
-  approveSubSchool(schoolId: string, actorId: string, tx?: TransactionContext): Promise<ApproveSubSchoolResult> {
+  approveSchool(schoolId: string, actorId: string, tx?: TransactionContext): Promise<ApproveSchoolResult> {
     return this.inTransaction(tx, async (t) => {
-      const school = await this.requireSchoolAdmin(schoolId, actorId, t);
+      const school = await this.requireForUpdate(schoolId, t);
       await this.requireActiveOrganization(school.organizationId, t);
-      const requesterId = school.createdBy;
-      await this.requireEligibleManager(requesterId, t);
+      const applicantId = school.applicantUserId;
+      if (applicantId !== null) await this.requireEligibleManager(applicantId, t);
 
       const previous = school.status;
       school.approve(actorId, this.clock);
       await this.repository.update(school, t);
       await this.appendStatus(school.id, previous, school.status, actorId, null, t);
 
-      const manager = await this.linkManager(school.id, requesterId, 'SUB_SCHOOL_APPROVAL', actorId, t);
+      const manager = applicantId !== null ? await this.linkManager(school.id, applicantId, 'APPROVAL', actorId, t) : null;
       await this.outbox.publishFrom(school, t);
       return { school: toSchoolDto(school), manager };
     });
   }
 
-  /** Main Admin rejects a PENDING Sub-School with a nonblank reason. Terminal. No manager link, no role, the user is untouched. */
-  rejectSubSchool(schoolId: string, actorId: string, reason: unknown, tx?: TransactionContext): Promise<SchoolDto> {
+  /** Rejects a PENDING school with a nonblank reason. Terminal. No manager link, no role, the applicant is untouched. */
+  rejectSchool(schoolId: string, actorId: string, reason: unknown, tx?: TransactionContext): Promise<SchoolDto> {
     return this.inTransaction(tx, async (t) => {
-      const school = await this.requireSchoolAdmin(schoolId, actorId, t);
+      const school = await this.requireForUpdate(schoolId, t);
       const previous = school.status;
       school.reject(actorId, reason, this.clock);
       await this.repository.update(school, t);
@@ -313,11 +278,11 @@ export class SchoolService {
 
   // ---------------------------------------------------------------------------------------------- GPS and status
 
-  /** Provisional: ACTIVE Main Admin only. Allowed only while the school is PENDING; the change is kept in the GPS history. */
+  /** Allowed only while the school is PENDING (immutable after approval); the change is kept in the GPS history. */
   correctPendingGps(schoolId: string, gps: unknown, actorId: string, tx?: TransactionContext): Promise<SchoolDto> {
     return this.inTransaction(tx, async (t) => {
       const fix = parseGpsFix(gps);
-      const school = await this.requireSchoolAdmin(schoolId, actorId, t);
+      const school = await this.requireForUpdate(schoolId, t);
       const previous = school.correctGps(fix, actorId, this.clock);
       await this.repository.update(school, t);
       await this.repository.appendGpsHistory(
@@ -329,12 +294,12 @@ export class SchoolService {
     });
   }
 
-  /** ACTIVE -> INACTIVE (explicit, audited). Provisional: ACTIVE Main Admin only. */
+  /** ACTIVE -> INACTIVE (explicit, audited). */
   deactivateSchool(schoolId: string, actorId: string, tx?: TransactionContext): Promise<SchoolDto> {
     return this.changeStatus(schoolId, actorId, (school) => school.deactivate(actorId, this.clock), tx);
   }
 
-  /** INACTIVE -> ACTIVE (explicit, audited). Provisional: ACTIVE Main Admin only. */
+  /** INACTIVE -> ACTIVE (explicit, audited). Reactivation is NOT approval: a PENDING or REJECTED school can never take this path. */
   reactivateSchool(schoolId: string, actorId: string, tx?: TransactionContext): Promise<SchoolDto> {
     return this.changeStatus(schoolId, actorId, (school) => school.reactivate(actorId, this.clock), tx);
   }
@@ -342,16 +307,16 @@ export class SchoolService {
   // ---------------------------------------------------------------------------------------------- managers
 
   /**
-   * Main Admin explicitly assigns the School Manager of an ACTIVE school (used for Main Schools, and to replace a
+   * Explicitly assigns the School Manager of an ACTIVE (approved) school (for a school created without an applicant, or to replace a
    * manager after a revocation). At most one active manager per school. The SCHOOL_MANAGER role is assigned
    * through Module 09 only when the user does not hold it yet.
    */
   assignSchoolManager(input: { schoolId: string; userId: string; actorId: string }, tx?: TransactionContext): Promise<SchoolManagerAssignmentDto> {
     return this.inTransaction(tx, async (t) => {
-      const school = await this.requireSchoolAdmin(input.schoolId, input.actorId, t);
+      const school = await this.requireForUpdate(input.schoolId, t);
       if (school.status !== 'ACTIVE') throw schoolError('SCHOOL_NOT_ACTIVE');
       await this.requireEligibleManager(input.userId, t);
-      return this.linkManager(school.id, input.userId, 'MAIN_ADMIN_ASSIGNMENT', input.actorId, t);
+      return this.linkManager(school.id, input.userId, 'ASSIGNMENT', input.actorId, t);
     });
   }
 
@@ -361,7 +326,7 @@ export class SchoolService {
    */
   revokeSchoolManager(input: { schoolId: string; actorId: string }, tx?: TransactionContext): Promise<SchoolManagerAssignmentDto> {
     return this.inTransaction(tx, async (t) => {
-      await this.requireSchoolAdmin(input.schoolId, input.actorId, t);
+      await this.requireForUpdate(input.schoolId, t);
       const active = await this.managers.lockActiveBySchool(input.schoolId, t);
       if (!active) throw schoolError('SCHOOL_MANAGER_ASSIGNMENT_NOT_FOUND');
       active.revoke(input.actorId, this.clock);
@@ -376,8 +341,7 @@ export class SchoolService {
   private async buildSchool(
     input: SchoolAddressInput & { name: unknown; gps: unknown },
     createdBy: string,
-    type: 'MAIN' | 'SUB',
-    parentSchoolId: string | null,
+    applicantUserId: string | null,
     organizationId: string,
     t: TransactionContext,
     applicantName?: string,
@@ -390,27 +354,26 @@ export class SchoolService {
     const countryId = await this.organizations.requireOrganizationCountryId(organizationId, t);
     // The country is DERIVED from the organization. A client-supplied country is never used, only compared.
     if (input.countryId !== undefined && input.countryId !== null && input.countryId !== countryId) throw schoolError('SCHOOL_COUNTRY_MISMATCH');
-    // The school keeps its OWN address (any governorate/center/village of that country): the structured rules are unchanged
-    // (Geography lookup: registered, ACTIVE nodes, each under its parent, village only under its center).
-    const centerId = input.centerId ?? null;
-    const villageId = input.villageId ?? null;
-    const validated = await this.geography.validateHierarchy({ governorateId: input.governorateId, centerId, villageId }, {}, t);
-    if (validated.country.id !== countryId) throw schoolError('SCHOOL_COUNTRY_MISMATCH');
+    // Shared address contract: registered, ACTIVE governorate of the organization's country; center/city and village are free text.
+    const address = await this.address.validateSchoolAddress(
+      { organizationId, governorateId: input.governorateId, centerName: input.centerName, villageName: input.villageName },
+      t,
+    );
     const code = await this.codes.allocate(t); // last: the sequence lock is held until this transaction ends
-    const base = {
+    return School.create({
       name,
       code,
       organizationId,
       countryId,
-      governorateId: input.governorateId,
-      centerId,
-      villageId,
+      governorateId: address.governorateId,
+      centerName: address.centerName,
+      villageName: address.villageName,
       gps,
       createdBy,
+      applicantUserId,
       ...(applicantName ? { applicantName } : {}),
       clock: this.clock,
-    };
-    return type === 'MAIN' ? School.createMain(base) : School.requestSub({ ...base, parentSchoolId: parentSchoolId as string });
+    });
   }
 
   private async persistNew(school: School, actorId: string, t: TransactionContext): Promise<void> {
@@ -421,7 +384,7 @@ export class SchoolService {
 
   private async changeStatus(schoolId: string, actorId: string, apply: (school: School) => void, tx?: TransactionContext): Promise<SchoolDto> {
     return this.inTransaction(tx, async (t) => {
-      const school = await this.requireSchoolAdmin(schoolId, actorId, t);
+      const school = await this.requireForUpdate(schoolId, t);
       const previous = school.status;
       apply(school);
       await this.repository.update(school, t);
@@ -465,35 +428,14 @@ export class SchoolService {
     if (organization.status !== 'ACTIVE') throw schoolError('SCHOOL_ORGANIZATION_INACTIVE');
   }
 
-  /**
-   * Loads the school (locked) and requires the actor to administer ITS organization. A Main Admin of another organization is
-   * refused exactly like anyone else: the role alone never grants access (SCHOOL_ACTION_NOT_ALLOWED). The role check runs first
-   * so a caller without MAIN_ADMIN learns nothing about which schools exist.
-   */
-  private async requireSchoolAdmin(schoolId: string, actorId: string, t: TransactionContext): Promise<School> {
-    if (!(await this.holdsMainAdminRole(actorId, t))) throw schoolError('SCHOOL_ACTION_NOT_ALLOWED');
-    const school = await this.requireForUpdate(schoolId, t);
-    if (!(await this.organizations.isOrganizationAdmin(actorId, school.organizationId, t))) throw schoolError('SCHOOL_ACTION_NOT_ALLOWED');
-    return school;
+  /** Organizations the caller manages: empty unless they are an ACTIVE user holding ORGANIZATION_MANAGER; then their active organization links. */
+  private async managedOrganizationIds(actorId: string, t?: TransactionContext): Promise<string[]> {
+    return (await this.holdsActiveRole(actorId, 'ORGANIZATION_MANAGER', t)) ? this.organizations.listAdministeredOrganizationIds(actorId, t) : [];
   }
 
-  /** The actor must be an existing, ACTIVE user with an active MAIN_ADMIN role AND an administrator link to this organization. */
-  private async requireOrganizationAdmin(actorId: string, organizationId: string, t: TransactionContext): Promise<void> {
-    if (!(await this.isOrganizationAdmin(actorId, organizationId, t))) throw schoolError('SCHOOL_ACTION_NOT_ALLOWED');
-  }
-
-  private async isOrganizationAdmin(actorId: string, organizationId: string, t?: TransactionContext): Promise<boolean> {
-    return (await this.holdsMainAdminRole(actorId, t)) && (await this.organizations.isOrganizationAdmin(actorId, organizationId, t));
-  }
-
-  /** Organizations the caller administers (empty unless they are an ACTIVE user holding MAIN_ADMIN). */
-  private async administeredOrganizationIds(actorId: string, t?: TransactionContext): Promise<string[]> {
-    return (await this.holdsMainAdminRole(actorId, t)) ? this.organizations.listAdministeredOrganizationIds(actorId, t) : [];
-  }
-
-  private async holdsMainAdminRole(actorId: string, t?: TransactionContext): Promise<boolean> {
+  private async holdsActiveRole(actorId: string, role: 'ORGANIZATION_MANAGER' | 'SCHOOL_MANAGER', t?: TransactionContext): Promise<boolean> {
     const actor = typeof actorId === 'string' ? await this.identity.findById(actorId, t) : undefined;
-    return !!actor && actor.isActive && (await this.roles.hasRole(actor.id, 'MAIN_ADMIN', t));
+    return !!actor && actor.isActive && (await this.roles.hasRole(actor.id, role, t));
   }
 
   /**
@@ -506,7 +448,7 @@ export class SchoolService {
   }
 
   /** Pure form validation (before anything is written): applicant name, phone (IAM normalization, E.164), school name and GPS. */
-  private validateSubmission(input: SubmissionBase): { applicantName: string; phone: string } {
+  private validateSubmission(input: SubmitSchoolInput): { applicantName: string; phone: string } {
     const applicant = (typeof input.applicant === 'object' && input.applicant !== null ? input.applicant : {}) as Partial<ApplicantInput>;
     const applicantName = normalizeApplicantName(applicant.name);
     const phone = normalizePhone(applicant.phone as string); // IAM rules; throws the IAM validation error for a bad phone

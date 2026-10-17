@@ -15,7 +15,7 @@ See `docs/LOCALIZATION.md`. Validation failures are `400 VALIDATION_FAILED` with
 { "success": false, "error": { "code": "VALIDATION_FAILED", "message": "…", "locale": "ar", "requestId": "…",
   "details": { "fields": [ { "field": "sort", "code": "UNKNOWN_SORT_FIELD", "message": "…" } ] } } }
 ```
-Field `code` is stable and language-independent; `message` is localized. Submitted values are never echoed.
+Field `code` is stable and language-independent; `message` is localized. Submitted values are never echoed. `details` is optional: `{ fields: [...] }` for validation errors, or (a few business errors, address validation) a plain array of `{ field, code }` entries that are not localized.
 
 ## List endpoints
 Each list endpoint declares a `ListQuerySpec` and calls `parseListQuery(req.query, spec)`:
@@ -54,3 +54,9 @@ Use a stable error code as the chain message (`REQUIRED_FIELD`, `INVALID_VALUE`,
 
 ## Registering messages
 Validation messages are in `VALIDATION_ERROR_MESSAGES` and registered once by `src/app/bootstrap/register-error-messages.ts`. Add each new module's messages there.
+
+## Documenting endpoints (OpenAPI)
+Every endpoint is documented in the OpenAPI document served at `/api-docs` (raw: `/api-docs.json`) and verified by `npm run api:verify`.
+Use the builder kit in `src/modules/04-validation-api/presentation/openapi/` (`listQueryParameters(spec)` generates the pagination, sort and
+filter parameters from the same `ListQuerySpec`). A module is complete only with its contract registered and its conformance test passing:
+see `docs/API-DOCUMENTATION.md`.

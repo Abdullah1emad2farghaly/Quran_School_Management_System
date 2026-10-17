@@ -25,8 +25,7 @@ async function inRollback(work: (tx: TransactionContext, q: Query) => Promise<vo
       const transaction = sequelizeTransactionOf(tx);
       const q: Query = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: QueryTypes.SELECT, transaction: transaction ?? null });
       // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
-      for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction ?? null });
-      await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: transaction ?? null });
+      for (const table of ['school_classification_archive', 'school_manager_source_archive', 'school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM schools', { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM organization_admins', { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM organizations', { transaction: transaction ?? null });

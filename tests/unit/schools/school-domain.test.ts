@@ -3,6 +3,7 @@ import { AppError, FixedClock } from '../../../src/modules/00-shared-kernel/publ
 import { School } from '../../../src/modules/16-schools/domain/entities/school';
 import { SchoolManagerAssignment } from '../../../src/modules/16-schools/domain/entities/school-manager-assignment';
 import {
+  SCHOOL_MANAGER_SOURCES,
   GPS_MAX_ACCURACY_METERS,
   SCHOOL_GEOFENCE_RADIUS_METERS,
   canTransitionSchoolStatus,
@@ -27,8 +28,13 @@ const codeOf = (work: () => unknown) => {
 };
 const gps = { latitude: 30.0444, longitude: 31.2357, accuracyMeters: 10 };
 const base = { name: 'مدرسة النور', code: 'SC-000001', organizationId: 'o1', countryId: 'c1', governorateId: 'g1', gps, createdBy: 'u1', clock };
-const main = () => School.createMain(base);
-const sub = () => School.requestSub({ ...base, parentSchoolId: 'p1' });
+const fresh = () => School.create(base);
+/** An ACTIVE school: created PENDING, then approved (the only way to become ACTIVE). */
+const approved = () => {
+  const s = School.create(base);
+  s.approve('org-manager', clock);
+  return s;
+};
 const events = (s: School) => s.pullDomainEvents().map((e) => e.eventType);
 
 describe('school code', () => {
@@ -93,29 +99,35 @@ describe('status transitions', () => {
 });
 
 describe('School aggregate', () => {
-  it('a Main School starts ACTIVE and a Sub-School request starts PENDING, each emitting SchoolCreated (ids only)', () => {
-    const m = main();
-    const s = sub();
-    expect([m.status, m.type, m.parentSchoolId]).toEqual(['ACTIVE', 'MAIN', null]);
-    expect([s.status, s.type, s.parentSchoolId]).toEqual(['PENDING', 'SUB', 'p1']);
-    const created = m.pullDomainEvents()[0]!;
+  it('every new school starts PENDING (never ACTIVE), has no type or parent, and emits SchoolCreated (ids only)', () => {
+    const s = fresh();
+    expect(s.status).toBe('PENDING');
+    expect(s.snapshot).not.toHaveProperty('type');
+    expect(s.snapshot).not.toHaveProperty('parentSchoolId');
+    expect(s.snapshot).toMatchObject({ centerName: null, villageName: null, applicantUserId: null });
+    const created = s.pullDomainEvents()[0]!;
     expect(created.eventType).toBe('SchoolCreated');
-    expect(JSON.parse(JSON.stringify(created.payload))).toEqual({ schoolId: m.id, actorId: 'u1' });
+    expect(JSON.parse(JSON.stringify(created.payload))).toEqual({ schoolId: s.id, actorId: 'u1' });
   });
 
-  it('approves a PENDING Sub-School once; a Main School cannot be approved or rejected', () => {
-    const s = sub();
-    s.approve('admin', clock);
+  it('keeps free-text center and village and the applicant link', () => {
+    const s = School.create({ ...base, centerName: 'سمالوط', villageName: 'قرية غير مسجلة', applicantUserId: 'u9' });
+    expect(s.snapshot).toMatchObject({ centerName: 'سمالوط', villageName: 'قرية غير مسجلة', applicantUserId: 'u9' });
+  });
+
+  it('is approved once: PENDING -> ACTIVE; it cannot become ACTIVE any other way', () => {
+    const s = fresh();
+    s.approve('org-manager', clock);
     expect(s.status).toBe('ACTIVE');
-    expect(s.snapshot).toMatchObject({ decidedBy: 'admin', rejectionReason: null });
-    expect(codeOf(() => s.approve('admin', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
-    expect(codeOf(() => main().approve('admin', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
-    expect(codeOf(() => main().reject('admin', 'x', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
+    expect(s.snapshot).toMatchObject({ decidedBy: 'org-manager', rejectionReason: null });
+    expect(codeOf(() => s.approve('org-manager', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
+    expect(codeOf(() => fresh().reactivate('a', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION'); // PENDING cannot be "reactivated"
+    expect(codeOf(() => fresh().deactivate('a', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
   });
 
   it('rejects with a nonblank reason, keeps it, and REJECTED is terminal and no longer holds its name', () => {
-    for (const bad of ['', '   ', undefined, null, 5, 'x'.repeat(501)]) expect(codeOf(() => sub().reject('admin', bad, clock))).toBe('INVALID_REJECTION_REASON');
-    const s = sub();
+    for (const bad of ['', '   ', undefined, null, 5, 'x'.repeat(501)]) expect(codeOf(() => fresh().reject('admin', bad, clock))).toBe('INVALID_REJECTION_REASON');
+    const s = fresh();
     s.reject('admin', '  الموقع غير مناسب  ', clock);
     expect(s.status).toBe('REJECTED');
     expect(s.snapshot.rejectionReason).toBe('الموقع غير مناسب');
@@ -126,61 +138,58 @@ describe('School aggregate', () => {
   });
 
   it('supports ACTIVE -> INACTIVE -> ACTIVE only', () => {
-    const m = main();
+    const m = approved();
     expect(codeOf(() => m.reactivate('a', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
     m.deactivate('a', clock);
     expect(m.status).toBe('INACTIVE');
     expect(codeOf(() => m.deactivate('a', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION');
     m.reactivate('a', clock);
     expect(m.status).toBe('ACTIVE');
-    expect(codeOf(() => sub().deactivate('a', clock))).toBe('SCHOOL_INVALID_STATUS_TRANSITION'); // PENDING cannot be deactivated
   });
 
   it('GPS can be corrected only while PENDING, returning the previous fix; it is immutable after approval and for any other status', () => {
-    const s = sub();
+    const s = fresh();
     const fix = { latitude: 30.05, longitude: 31.24, accuracyMeters: 8 };
     expect(s.correctGps(fix, 'admin', clock)).toEqual(gps);
     expect(s.snapshot.gps).toEqual(fix);
     s.approve('admin', clock);
     expect(codeOf(() => s.correctGps(gps, 'admin', clock))).toBe('SCHOOL_GPS_LOCKED');
     expect(s.snapshot.gps).toEqual(fix);
-    const m = main();
-    expect(codeOf(() => m.correctGps(gps, 'admin', clock))).toBe('SCHOOL_GPS_LOCKED');
-    m.deactivate('a', clock);
-    expect(codeOf(() => m.correctGps(gps, 'admin', clock))).toBe('SCHOOL_GPS_LOCKED');
-    const rejected = sub();
+    s.deactivate('a', clock);
+    expect(codeOf(() => s.correctGps(gps, 'admin', clock))).toBe('SCHOOL_GPS_LOCKED');
+    const rejected = fresh();
     rejected.reject('admin', 'no', clock);
     expect(codeOf(() => rejected.correctGps(gps, 'admin', clock))).toBe('SCHOOL_GPS_LOCKED');
   });
 
   it('emits the approved events with identifiers only', () => {
-    const s = sub();
+    const s = fresh();
     s.pullDomainEvents();
     s.approve('admin', clock);
-    const [approved] = s.pullDomainEvents();
-    expect(approved!.eventType).toBe(SchoolEventTypes.SCHOOL_APPROVED);
-    expect(JSON.parse(JSON.stringify(approved!.payload))).toEqual({ schoolId: s.id, actorId: 'admin' });
-    const r = sub();
+    const [approved1] = s.pullDomainEvents();
+    expect(approved1!.eventType).toBe(SchoolEventTypes.SCHOOL_APPROVED);
+    expect(JSON.parse(JSON.stringify(approved1!.payload))).toEqual({ schoolId: s.id, actorId: 'admin' });
+    const r = fresh();
     r.pullDomainEvents();
     r.reject('admin', 'سبب سري', clock);
     const [rejected] = r.pullDomainEvents();
     expect(rejected!.eventType).toBe('SchoolRejected');
     expect(JSON.stringify(rejected!.payload)).not.toContain('سبب');
-    expect(events(main())).toEqual(['SchoolCreated']);
+    expect(events(fresh())).toEqual(['SchoolCreated']);
   });
 
-  it('rehydrate rejects records that break the invariants', () => {
-    const ok = main().snapshot;
+  it('rehydrate rejects records that break the invariants and accepts every valid status', () => {
+    const ok = fresh().snapshot;
     expect(() => School.rehydrate({ ...ok, code: 'bad' })).toThrow();
-    expect(() => School.rehydrate({ ...ok, type: 'SUB', parentSchoolId: null })).toThrow();
-    expect(() => School.rehydrate({ ...ok, status: 'PENDING' })).toThrow(); // a Main School is never PENDING
+    expect(() => School.rehydrate({ ...ok, status: 'BOGUS' as never })).toThrow();
+    for (const status of SCHOOL_STATUSES) expect(School.rehydrate({ ...ok, status }).status).toBe(status);
     expect(School.rehydrate(ok).code).toBe('SC-000001');
   });
 });
 
 describe('SchoolManagerAssignment', () => {
   it('assigns with history fields and revokes once; events carry identifiers only', () => {
-    const a = SchoolManagerAssignment.assign({ schoolId: 's1', userId: 'u1', source: 'SUB_SCHOOL_APPROVAL', assignedBy: 'admin', clock });
+    const a = SchoolManagerAssignment.assign({ schoolId: 's1', userId: 'u1', source: 'APPROVAL', assignedBy: 'admin', clock });
     expect(a.isActive).toBe(true);
     expect(a.pullDomainEvents()[0]!.eventType).toBe('SchoolManagerAssigned');
     a.revoke('admin', clock);
@@ -188,5 +197,13 @@ describe('SchoolManagerAssignment', () => {
     expect(a.snapshot).toMatchObject({ revokedBy: 'admin', assignedBy: 'admin', schoolId: 's1', userId: 'u1' });
     expect(a.pullDomainEvents()[0]!.eventType).toBe('SchoolManagerRevoked');
     expect(() => a.revoke('admin', clock)).toThrow();
+  });
+});
+
+describe('removed classification', () => {
+  it('the manager sources are neutral and no school type is exported', async () => {
+    expect([...SCHOOL_MANAGER_SOURCES]).toEqual(['APPROVAL', 'ASSIGNMENT']);
+    const api = await import('../../../src/modules/16-schools/public');
+    expect(api).not.toHaveProperty('SCHOOL_TYPES');
   });
 });

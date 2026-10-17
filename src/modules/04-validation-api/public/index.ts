@@ -20,3 +20,4 @@ export {
   type SuccessBody,
 } from '../presentation/http/success-response';
 export { validate, fieldErrorsFromValidationResult } from '../presentation/http/validate-request';
+export * from '../presentation/openapi';

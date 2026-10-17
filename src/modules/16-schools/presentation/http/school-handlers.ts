@@ -2,17 +2,16 @@ import type { PageResult } from '../../../00-shared-kernel/public';
 import type { SchoolService } from '../../application/services/school-service';
 import type { SchoolSortKey } from '../../application/ports/school-repository';
 import type { SchoolStatus } from '../../domain/value-objects/school-status';
-import type { SchoolType } from '../../domain/value-objects/school-type';
 import { serializeApproval, serializeManager, serializeSchool, serializeSubmission } from './school-serializer';
 
 export type SchoolHandlerService = Pick<
   SchoolService,
-  | 'createMainSchool'
-  | 'submitSubSchool'
+  | 'createSchool'
+  | 'submitSchool'
   | 'listSchools'
-  | 'getSchoolForActor'
-  | 'approveSubSchool'
-  | 'rejectSubSchool'
+  | 'getById'
+  | 'approveSchool'
+  | 'rejectSchool'
   | 'deactivateSchool'
   | 'reactivateSchool'
   | 'correctPendingGps'
@@ -30,34 +29,34 @@ const obj = (value: unknown): Json => (typeof value === 'object' && value !== nu
  */
 export function createSchoolHandlers(getService: () => SchoolHandlerService) {
   return {
-    /** Authenticated: the caller (from the token) must administer the organization. */
-    createMainSchool: async (actorId: string, body: unknown) => {
+    /** The actor (from the token) was already authorized for the organization by the Authorization Engine. */
+    createSchool: async (actorId: string, body: unknown) => {
       const school = obj(obj(body).school);
       return serializeSchool(
-        await getService().createMainSchool({
+        await getService().createSchool({
           actorId,
           organizationId: obj(body).organizationId,
           name: school.name,
           countryId: school.countryId,
           governorateId: school.governorateId,
-          centerId: school.centerId ?? null,
-          villageId: school.villageId ?? null,
+          centerName: school.centerName ?? null,
+          villageName: school.villageName ?? null,
           gps: school.gps,
         }),
       );
     },
 
-    submitSubSchool: async (body: unknown, authenticatedUserId?: string) => {
+    submitSchool: async (body: unknown, authenticatedUserId?: string) => {
       const school = obj(obj(body).school);
       return serializeSubmission(
-        await getService().submitSubSchool({
+        await getService().submitSchool({
           applicant: obj(body).applicant,
-          parentSchoolId: obj(body).parentSchoolId,
+          organizationId: obj(body).organizationId,
           name: school.name,
           countryId: school.countryId,
           governorateId: school.governorateId,
-          centerId: school.centerId ?? null,
-          villageId: school.villageId ?? null,
+          centerName: school.centerName ?? null,
+          villageName: school.villageName ?? null,
           gps: school.gps,
           ...(authenticatedUserId ? { authenticatedUserId } : {}),
         }),
@@ -66,12 +65,11 @@ export function createSchoolHandlers(getService: () => SchoolHandlerService) {
 
     listSchools: async (
       actorId: string,
-      query: { statuses?: readonly string[]; type?: string; sort: { key: string; direction: 'asc' | 'desc' }; page: { page: number; pageSize: number } },
+      query: { statuses?: readonly string[]; sort: { key: string; direction: 'asc' | 'desc' }; page: { page: number; pageSize: number } },
     ): Promise<PageResult<ReturnType<typeof serializeSchool>>> => {
       const result = await getService().listSchools({
         actorId,
         ...(query.statuses ? { statuses: query.statuses as SchoolStatus[] } : {}),
-        ...(query.type ? { type: query.type as SchoolType } : {}),
         sort: query.sort.key as SchoolSortKey,
         direction: query.sort.direction,
         page: query.page,
@@ -79,11 +77,11 @@ export function createSchoolHandlers(getService: () => SchoolHandlerService) {
       return { ...result, items: result.items.map(serializeSchool) };
     },
 
-    getSchool: async (actorId: string, schoolId: string) => serializeSchool(await getService().getSchoolForActor(schoolId, actorId)),
+    getSchool: async (schoolId: string) => serializeSchool(await getService().getById(schoolId)),
 
-    approve: async (actorId: string, schoolId: string) => serializeApproval(await getService().approveSubSchool(schoolId, actorId)),
+    approve: async (actorId: string, schoolId: string) => serializeApproval(await getService().approveSchool(schoolId, actorId)),
 
-    reject: async (actorId: string, schoolId: string, body: unknown) => serializeSchool(await getService().rejectSubSchool(schoolId, actorId, obj(body).reason)),
+    reject: async (actorId: string, schoolId: string, body: unknown) => serializeSchool(await getService().rejectSchool(schoolId, actorId, obj(body).reason)),
 
     deactivate: async (actorId: string, schoolId: string) => serializeSchool(await getService().deactivateSchool(schoolId, actorId)),
 

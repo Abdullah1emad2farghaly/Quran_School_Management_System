@@ -8,6 +8,7 @@ import { createApp } from './bootstrap/create-app';
 const app = createApp();
 const server = app.listen(env.port, () => {
   logger.info('server listening', { port: env.port, environment: env.nodeEnv });
+  if (env.apiDocs.enabled) logger.info('api documentation enabled', { swaggerUi: '/api-docs', openApi: '/api-docs.json' });
 });
 registerSessionEventHandlers();
 startOutbox();

@@ -714,9 +714,7 @@ V1 includes:
 
 -   Main Organization
 
--   Schools / Branches
-
--   Main School / Sub-School
+-   Schools (every school belongs directly to an Organization; there is no Main School / Sub-School distinction)
 
 -   Geography
 
@@ -786,6 +784,7 @@ V1 roles are EXACTLY:
 
 ```plaintext
 Main Admin
+Organization Manager
 Governorate Manager
 Center Manager
 Village Manager
@@ -801,6 +800,14 @@ There is:
 -   NO Supervisor role.
 
 -   NO Competition Manager role.
+
+Main Admin and Organization Manager (approved amendment):
+
+-   Main Admin (`MAIN_ADMIN`) is the PLATFORM-WIDE administrator. It is a system-level role, not scoped to one Organization, and it is not an Organization Manager under another name. Platform-wide scope does not mean unlimited access: it holds only the platform permissions that are explicitly registered and approved (none for school or organization operations yet).
+
+-   Organization Manager (`ORGANIZATION_MANAGER`) is the manager of ONE specific Organization. Every assignment is tied to a specific Organization (the organization manager link); the manager can view all schools of that Organization and perform only the approved management operations within it, never in another Organization, and receives no platform-wide privilege. The Organization scope is enforced on the server by the Authorization Engine on every applicable operation.
+
+-   The first Main Admin is created by a platform-level bootstrap that is independent of any Organization.
 
 Student is a business entity only in V1.
 
@@ -1107,9 +1114,9 @@ Organizations (approved amendment, replaces the earlier "one Main Organization" 
 
 -   Organization creation is its own workflow and endpoint, independent of school creation. An Organization exists before any School; no Main School is required and no placeholder is created. Every School belongs to an existing Organization.
 
--   Organization data: name (required, unique across the whole system), country (required, a registered Country), its own address (Governorate required, Center / City optional, Village only with a Center; all registered, active and under the right parents, the Governorate inside the chosen country), and the applicant (name and phone) who becomes its manager.
+-   Organization data: name (required, unique across the whole system), country (required, a registered Country), its own address (Governorate required, a registered, active Governorate of the chosen country; Center / City and Village are FREE TEXT, optional, a Village only with a Center; no registered center or village record is ever required), and the applicant (name and phone) who becomes its manager.
 
--   The applicant's account follows the IAM rules (phone normalized to E.164; an existing phone is a conflict, never a reuse by phone alone). The applicant receives the MAIN_ADMIN role scoped exclusively to that Organization: the role alone never grants access to another Organization's data.
+-   The applicant's account follows the IAM rules (phone normalized to E.164; an existing phone is a conflict, never a reuse by phone alone). The applicant receives the ORGANIZATION_MANAGER role scoped exclusively to that Organization (never MAIN_ADMIN): the role alone never grants access to another Organization's data; the organization manager link does.
 
 -   The Organization's country is assigned at creation and is immutable (it cannot change while schools exist).
 
@@ -1183,12 +1190,9 @@ Persist
 
 # 29\. SCHOOL
 
-School supports:
+A School belongs directly to an existing Organization (approved amendment). There is NO Main School / Sub-School classification and no required "main" school or parent-school relationship.
 
-```plaintext
-Main School
-Sub-School
-```
+Address: the country is the Organization's country; the Governorate is a registered, active Governorate of that country; Center / City and Village are free text (same contract as the Parent address).
 
 Statuses:
 
@@ -1211,21 +1215,21 @@ Internal technical identifier should be UUID.
 
 # 30\. SCHOOL CREATION
 
-Main School creation includes:
+School creation includes:
 
 -   school name
 
--   administrative address
+-   administrative address (registered governorate, free-text center and village)
 
 -   physical GPS
 
--   organization
+-   organization (country inherited from it)
 
--   creator account
+-   creator account (an Organization Manager, or the applicant of a public submission)
 
--   Main Admin relationship
+-   the School Manager relationship (the applicant becomes the School Manager on approval; otherwise the Organization Manager assigns one after approval)
 
--   School Manager relationship
+Every newly created school starts PENDING. A school can never be ACTIVE before it is approved by the Organization Manager of the owning Organization.
 
 GPS at creation becomes the official school center.
 
@@ -1251,15 +1255,17 @@ GPS accuracy maximum:
 
 * * *
 
-# 31\. SUB-SCHOOL WORKFLOW
+# 31\. SCHOOL APPROVAL WORKFLOW
 
 ```plaintext
 PENDING
 ↓
-Main Admin
+Organization Manager of the owning Organization
 ├── APPROVE
 └── REJECT
 ```
+
+An Organization Manager cannot approve or reject a school of another Organization.
 
 Rejection requires reason and notification.
 

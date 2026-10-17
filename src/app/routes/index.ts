@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from '../../config/authorization';
 import { requireAuthentication, getSessionService } from '../../config/sessions';
 import { getOrganizationRegistrationService, getSchoolService, PUBLIC_SUBMISSION_RATE_LIMIT } from '../../config/schools';
 import { getPasswordRecoveryService } from '../../config/password-recovery';
@@ -19,6 +20,7 @@ export function buildApiRouter(): Router {
     createOrganizationRouter({
       getService: getOrganizationRegistrationService,
       requireAuthentication,
+      requirePermission,
       publicSubmissionLimit: createPublicSubmissionRateLimiter(PUBLIC_SUBMISSION_RATE_LIMIT),
     }),
   );
@@ -27,6 +29,7 @@ export function buildApiRouter(): Router {
     createSchoolRouter({
       getService: getSchoolService,
       requireAuthentication,
+      requirePermission,
       publicSubmissionLimit: createPublicSubmissionRateLimiter(PUBLIC_SUBMISSION_RATE_LIMIT),
     }),
   );

@@ -157,6 +157,16 @@ export function loadConfig(source: EnvSource): AppConfig {
   if (isProduction && otpSender === 'dev-file') issues.push('OTP_SENDER: "dev-file" is for development only and is not allowed in production');
   const otp = { hmacSecret: read('OTP_HMAC_SECRET') ?? '', sender: otpSender };
 
+  // API documentation (Swagger UI + raw OpenAPI document): on outside production, off in production unless explicitly enabled.
+  const rawApiDocs = read('API_DOCS_ENABLED');
+  let apiDocsEnabled = !isProduction;
+  if (rawApiDocs !== undefined) {
+    if (rawApiDocs === 'true') apiDocsEnabled = true;
+    else if (rawApiDocs === 'false') apiDocsEnabled = false;
+    else issues.push('API_DOCS_ENABLED: must be \"true\" or \"false\"');
+  }
+  const apiDocs = { enabled: apiDocsEnabled };
+
   // Redis
   const redis = { host: read('REDIS_HOST') ?? '127.0.0.1', port: readInt('REDIS_PORT', 6379, 1, 65535) };
 
@@ -210,6 +220,7 @@ export function loadConfig(source: EnvSource): AppConfig {
     jwt,
     http,
     otp,
+    apiDocs,
     redis,
     files,
   });

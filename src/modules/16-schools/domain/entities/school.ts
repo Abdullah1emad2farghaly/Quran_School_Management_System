@@ -5,7 +5,6 @@ import { SCHOOL_AGGREGATE_TYPE, SchoolEventTypes, type SchoolEventPayload, type 
 import type { GpsFix } from '../value-objects/gps';
 import { isSchoolCode } from '../value-objects/school-code';
 import { canTransitionSchoolStatus, isSchoolStatus, type SchoolStatus } from '../value-objects/school-status';
-import { isSchoolType, type SchoolType } from '../value-objects/school-type';
 
 export const REJECTION_REASON_MAX_LENGTH = 500;
 
@@ -13,19 +12,19 @@ export interface SchoolSnapshot {
   readonly id: string;
   readonly code: string;
   readonly name: string;
-  readonly type: SchoolType;
   readonly status: SchoolStatus;
   readonly organizationId: string;
   /** The school's country: ALWAYS its organization's country (derived by the application, enforced by composite foreign keys). */
   readonly countryId: string;
-  /** Sub-Schools only. */
-  readonly parentSchoolId: string | null;
   readonly governorateId: string;
-  readonly centerId: string | null;
-  readonly villageId: string | null;
+  /** Free text (never a registered node). */
+  readonly centerName: string | null;
+  readonly villageName: string | null;
   readonly gps: GpsFix;
-  /** Main School: the Main Admin who created it. Sub-School: the requester. NOT the manager relationship. */
+  /** The user who created the school (an organization manager, or the applicant of a public submission). NOT the manager relationship. */
   readonly createdBy: string;
+  /** The user who asked to manage this school (public submission); becomes its School Manager when the school is approved. Null when an organization manager created it. */
+  readonly applicantUserId: string | null;
   /** The name the applicant typed in the submission form (public submissions); null for schools created otherwise. */
   readonly applicantName: string | null;
   readonly decidedBy: string | null;
@@ -42,52 +41,47 @@ export interface NewSchoolInput {
   readonly organizationId: string;
   readonly countryId: string;
   readonly governorateId: string;
-  readonly centerId?: string | null;
-  readonly villageId?: string | null;
+  readonly centerName?: string | null;
+  readonly villageName?: string | null;
   readonly gps: GpsFix;
   readonly createdBy: string;
+  readonly applicantUserId?: string | null;
   readonly applicantName?: string | null;
   readonly clock: Clock;
   readonly id?: string;
 }
 
 /**
- * A school (Master Specification §29-31). Inputs are already validated by the application service (name, GPS,
- * address, organization); the aggregate owns the lifecycle and the GPS rule:
- *   Main School -> ACTIVE;  Sub-School request -> PENDING -> ACTIVE (approve) | REJECTED (terminal);
- *   ACTIVE <-> INACTIVE;  official GPS can be corrected only while PENDING.
- * The manager relationship is NOT part of this aggregate (see SchoolManagerAssignment).
+ * A school (Master Specification §29-31). It belongs directly to an organization; there is no Main/Sub distinction.
+ * Inputs are already validated by the application service (name, GPS, address, organization); the aggregate owns the lifecycle
+ * and the GPS rule:
+ *   every new school starts PENDING -> ACTIVE (approve) | REJECTED (terminal);  ACTIVE <-> INACTIVE;
+ *   official GPS can be corrected only while PENDING (immutable after approval).
+ * A school can never become ACTIVE without going through `approve`. The manager relationship is NOT part of this aggregate
+ * (see SchoolManagerAssignment).
  */
 export class School extends AggregateRoot<string> {
   private constructor(private state: SchoolSnapshot) {
     super(state.id);
   }
 
-  static createMain(input: NewSchoolInput): School {
-    return School.create(input, 'MAIN', 'ACTIVE', null);
-  }
-
-  static requestSub(input: NewSchoolInput & { parentSchoolId: string }): School {
-    return School.create(input, 'SUB', 'PENDING', input.parentSchoolId);
-  }
-
-  private static create(input: NewSchoolInput, type: SchoolType, status: SchoolStatus, parentSchoolId: string | null): School {
+  /** A new school: always PENDING until the organization manager approves it. */
+  static create(input: NewSchoolInput): School {
     if (!isSchoolCode(input.code)) throw new RangeError('Invalid school code');
     const now = input.clock.now();
     const school = new School({
       id: input.id ?? newUuid(),
       code: input.code,
       name: input.name,
-      type,
-      status,
+      status: 'PENDING',
       organizationId: input.organizationId,
       countryId: input.countryId,
-      parentSchoolId,
       governorateId: input.governorateId,
-      centerId: input.centerId ?? null,
-      villageId: input.villageId ?? null,
+      centerName: input.centerName ?? null,
+      villageName: input.villageName ?? null,
       gps: input.gps,
       createdBy: input.createdBy,
+      applicantUserId: input.applicantUserId ?? null,
       applicantName: input.applicantName ?? null,
       decidedBy: null,
       decidedAt: null,
@@ -102,25 +96,19 @@ export class School extends AggregateRoot<string> {
 
   /** Loads a stored school; stored data that breaks the invariants is rejected, never trusted. */
   static rehydrate(snapshot: SchoolSnapshot): School {
-    const mainOk = snapshot.type === 'MAIN' && snapshot.parentSchoolId === null && (snapshot.status === 'ACTIVE' || snapshot.status === 'INACTIVE');
-    const subOk = snapshot.type === 'SUB' && snapshot.parentSchoolId !== null;
-    if (!isSchoolCode(snapshot.code) || !isSchoolType(snapshot.type) || !isSchoolStatus(snapshot.status) || !(mainOk || subOk)) {
-      throw new Error('Corrupt school record');
-    }
+    if (!isSchoolCode(snapshot.code) || !isSchoolStatus(snapshot.status)) throw new Error('Corrupt school record');
     return new School(snapshot);
   }
 
-  /** Sub-School only: PENDING -> ACTIVE. The caller checks that the approver is a Main Admin. */
+  /** PENDING -> ACTIVE. Authorization (the owning organization's manager) is enforced by the Authorization Engine before this is called. */
   approve(decidedBy: string, clock: Clock): void {
-    if (this.state.type !== 'SUB') throw schoolError('SCHOOL_INVALID_STATUS_TRANSITION');
     this.transition('ACTIVE', clock);
     this.state = { ...this.state, decidedBy, decidedAt: clock.now() };
     this.record(SchoolEventTypes.SCHOOL_APPROVED, decidedBy, clock);
   }
 
-  /** Sub-School only: PENDING -> REJECTED (terminal). A nonblank reason (at most 500 characters) is required. */
+  /** PENDING -> REJECTED (terminal). A nonblank reason (at most 500 characters) is required. */
   reject(decidedBy: string, reason: unknown, clock: Clock): void {
-    if (this.state.type !== 'SUB') throw schoolError('SCHOOL_INVALID_STATUS_TRANSITION');
     const text = typeof reason === 'string' ? reason.normalize('NFC').replace(/\s+/gu, ' ').trim() : '';
     if (text === '' || /\p{Cc}/u.test(text) || [...text].length > REJECTION_REASON_MAX_LENGTH) throw schoolError('INVALID_REJECTION_REASON');
     this.transition('REJECTED', clock);
@@ -172,17 +160,14 @@ export class School extends AggregateRoot<string> {
   get name(): string {
     return this.state.name;
   }
-  get type(): SchoolType {
-    return this.state.type;
-  }
   get status(): SchoolStatus {
     return this.state.status;
   }
   get organizationId(): string {
     return this.state.organizationId;
   }
-  get parentSchoolId(): string | null {
-    return this.state.parentSchoolId;
+  get applicantUserId(): string | null {
+    return this.state.applicantUserId;
   }
   get createdBy(): string {
     return this.state.createdBy;

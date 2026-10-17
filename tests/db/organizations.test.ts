@@ -26,8 +26,7 @@ async function inRollback(work: (tx: TransactionContext, q: <T extends object>(s
       const q = <T extends object>(sql: string, replacements: Record<string, string> = {}) =>
         sequelize.query<T>(sql, { replacements, type: QueryTypes.SELECT, transaction: transaction ?? null });
       // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
-      for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction ?? null });
-      await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: transaction ?? null });
+      for (const table of ['school_classification_archive', 'school_manager_source_archive', 'school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM schools', { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM organization_admins', { transaction: transaction ?? null });
       await sequelize.query('DELETE FROM organizations', { transaction: transaction ?? null });
@@ -54,12 +53,12 @@ afterAll(async () => {
 });
 
 describe('organizations schema (migration)', () => {
-  it('has the approved columns, unique code and unique NAME (the V1 single-organization guard is gone), and the geography foreign keys', async () => {
+  it('has the approved columns, unique code and unique NAME (the V1 single-organization guard is gone), and the geography foreign keys (country and governorate only: center and village are free text)', async () => {
     const columns = await sequelize.query<{ COLUMN_NAME: string }>(
       "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' ORDER BY ORDINAL_POSITION",
       { type: QueryTypes.SELECT },
     );
-    expect(columns.map((c) => c.COLUMN_NAME)).toEqual(['id', 'code', 'name', 'status', 'country_id', 'governorate_id', 'center_id', 'village_id', 'v1_single_guard', 'created_at', 'updated_at']);
+    expect(columns.map((c) => c.COLUMN_NAME)).toEqual(['id', 'code', 'name', 'status', 'country_id', 'governorate_id', 'center_name', 'village_name', 'v1_single_guard', 'created_at', 'updated_at']);
 
     const unique = await sequelize.query<{ INDEX_NAME: string }>(
       "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND NON_UNIQUE = 0",
@@ -71,7 +70,7 @@ describe('organizations schema (migration)', () => {
       "SELECT COLUMN_NAME, REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND REFERENCED_TABLE_NAME IS NOT NULL",
       { type: QueryTypes.SELECT },
     );
-    expect(fks.map((f) => `${f.COLUMN_NAME}>${f.REFERENCED_TABLE_NAME}`).sort()).toEqual(['center_id>centers', 'country_id>countries', 'governorate_id>governorates', 'village_id>villages']);
+    expect(fks.map((f) => `${f.COLUMN_NAME}>${f.REFERENCED_TABLE_NAME}`).sort()).toEqual(['country_id>countries', 'governorate_id>governorates']);
 
     const [name] = await sequelize.query<{ CHARACTER_SET_NAME: string }>(
       "SELECT CHARACTER_SET_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND COLUMN_NAME = 'name'",
@@ -117,8 +116,7 @@ describe('OrganizationService (MariaDB)', () => {
     await expect(
       uow.run(async (tx) => {
         // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
-        for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: sequelizeTransactionOf(tx) ?? null });
-        await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: sequelizeTransactionOf(tx) ?? null });
+        for (const table of ['school_classification_archive', 'school_manager_source_archive', 'school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: sequelizeTransactionOf(tx) ?? null });
         await sequelize.query('DELETE FROM schools', { transaction: sequelizeTransactionOf(tx) ?? null });
         await sequelize.query('DELETE FROM organization_admins', { transaction: sequelizeTransactionOf(tx) ?? null });
         await sequelize.query('DELETE FROM organizations', { transaction: sequelizeTransactionOf(tx) ?? null });

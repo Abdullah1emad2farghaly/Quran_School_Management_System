@@ -2,7 +2,6 @@ import type { PageRequest, TransactionContext } from '../../../00-shared-kernel/
 import type { School } from '../../domain/entities/school';
 import type { GpsFix } from '../../domain/value-objects/gps';
 import type { SchoolStatus } from '../../domain/value-objects/school-status';
-import type { SchoolType } from '../../domain/value-objects/school-type';
 
 /** One row of the append-only status history (creation, approval, rejection, deactivation, reactivation). */
 export interface SchoolStatusHistoryEntry {
@@ -29,12 +28,11 @@ export interface SchoolGpsHistoryEntry {
 export type SchoolSortKey = 'createdAt' | 'code' | 'name' | 'status';
 
 export interface SchoolListQuery {
-  /** Schools this user created (submitted) or actively manages... */
-  readonly visibleTo?: string;
-  /** ...plus every school of these organizations (the ones the user administers). With neither, nothing is filtered. */
+  /** Schools this user ACTIVELY MANAGES (school manager link)... */
+  readonly managerUserId?: string;
+  /** ...plus every school of these organizations (the ones the user manages). Deny by default: with neither, NOTHING is returned. */
   readonly organizationIds?: readonly string[];
   readonly statuses?: readonly SchoolStatus[];
-  readonly type?: SchoolType;
   readonly sort: SchoolSortKey;
   readonly direction: 'asc' | 'desc';
   readonly page: PageRequest;

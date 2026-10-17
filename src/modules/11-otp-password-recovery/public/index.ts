@@ -44,3 +44,4 @@ export {
 export { InMemoryRecoveryRepository } from '../infrastructure/services/in-memory-recovery-repository';
 export { SequelizeRecoveryRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-recovery-repository';
 export { createRecoveryRouter, type RecoveryRouterDeps } from '../presentation/http/recovery.routes';
+export { recoveryApiDoc } from '../presentation/http/recovery.openapi';

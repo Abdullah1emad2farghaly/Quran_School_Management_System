@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { codeOf, createSchoolsHarness } from '../../helpers/schools-harness';
 
-const GOV = '11111111-1111-4111-8111-111111111111';
 const COUNTRY = '22222222-2222-4222-8222-222222222222';
 
 describe('OrganizationService.createOrganization (many organizations)', () => {
   it('creates an ACTIVE organization with a required country and its own address, independent of any school', async () => {
     const t = await createSchoolsHarness();
-    const created = await t.organizations.createOrganization({ name: '  Dar   Al-Quran ', countryId: t.country.id, governorateId: t.gov.id, centerId: t.center.id, villageId: t.village.id });
-    expect(created).toMatchObject({ name: 'Dar Al-Quran', status: 'ACTIVE', countryId: t.country.id, governorateId: t.gov.id, centerId: t.center.id, villageId: t.village.id });
+    const created = await t.organizations.createOrganization({ name: '  Dar   Al-Quran ', countryId: t.country.id, governorateId: t.gov.id, centerName: 'مركز', villageName: 'قرية' });
+    expect(created).toMatchObject({ name: 'Dar Al-Quran', status: 'ACTIVE', countryId: t.country.id, governorateId: t.gov.id, centerName: 'مركز', villageName: 'قرية' });
     expect(created.code).toMatch(/^ORG-\d{6}$/);
     expect(created.code).not.toBe(t.org.code);
     expect(t.schools.rows.size).toBe(0); // no placeholder main school was created
@@ -24,7 +23,7 @@ describe('OrganizationService.createOrganization (many organizations)', () => {
     expect(await codeOf(t.organizations.createOrganization({ ...base, countryId: 'ORG-1' }))).toBe('ORGANIZATION_COUNTRY_INVALID');
     expect(await codeOf(t.organizations.createOrganization({ ...base, governorateId: undefined }))).toBe('INVALID_ORGANIZATION_ADDRESS');
     expect(await codeOf(t.organizations.createOrganization({ ...base, governorateId: 'nope' }))).toBe('INVALID_ORGANIZATION_ADDRESS');
-    expect(await codeOf(t.organizations.createOrganization({ ...base, villageId: GOV }))).toBe('INVALID_ORGANIZATION_ADDRESS');
+    expect(await codeOf(t.organizations.createOrganization({ ...base, villageName: 'قرية' }))).toBe('INVALID_ORGANIZATION_ADDRESS'); // a village needs a center
     expect(t.orgRepo.rows.size).toBe(1); // only the harness organization
   });
 
@@ -55,11 +54,11 @@ describe('OrganizationService.createOrganization (many organizations)', () => {
   });
 });
 
-describe('organization administrator links (organization scope of MAIN_ADMIN)', () => {
+describe('organization manager links (organization scope of ORGANIZATION_MANAGER)', () => {
   it('links a user to one organization only, idempotently, with history fields and one event', async () => {
     const t = await createSchoolsHarness();
     const other = await t.newOrganization('Other');
-    const user = await t.newUser('MAIN_ADMIN');
+    const user = await t.newUser('ORGANIZATION_MANAGER');
     const first = await t.organizations.assignOrganizationAdmin({ organizationId: other.id, userId: user.id, name: 'أحمد', assignedBy: null });
     const again = await t.organizations.assignOrganizationAdmin({ organizationId: other.id, userId: user.id, assignedBy: null });
     expect(first.created).toBe(true);

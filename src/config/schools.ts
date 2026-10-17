@@ -2,13 +2,14 @@ import { SystemClock } from '../modules/00-shared-kernel/public';
 import {
   OrganizationRegistrationService,
   SchoolService,
+  registerSchoolAuthorization,
   generateApplicantPassword,
   SequelizeSchoolCodeSequence,
   SequelizeSchoolManagerRepository,
   SequelizeSchoolRepository,
 } from '../modules/16-schools/public';
+import { getAuthorizationPolicyRegistry, getAuthorizationResolvers } from './authorization';
 import { getSequelize, getUnitOfWork } from './database';
-import { getGeographyService } from './geography';
 import { getIdentityService } from './identity';
 import { getOrganizationService } from './organization';
 import { getOutboxService } from './outbox';
@@ -18,7 +19,7 @@ import { getUnifiedAddressService } from './unified-address';
 let service: SchoolService | undefined;
 let registration: OrganizationRegistrationService | undefined;
 
-/** Inject into other modules' use cases (read-only: type it as `SchoolLookup`). Writes are for later authorized endpoints/CLIs. */
+/** Inject into other modules' use cases (read-only: type it as `SchoolLookup`). Writes are protected at the routes by the Authorization Engine. */
 export function getSchoolService(): SchoolService {
   if (!service) {
     const db = getSequelize();
@@ -29,7 +30,7 @@ export function getSchoolService(): SchoolService {
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
       organizations: getOrganizationService(),
-      geography: getGeographyService(),
+      address: getUnifiedAddressService(),
       identity: getIdentityService(),
       roles: getRoleService(),
       generateApplicantPassword,
@@ -58,3 +59,17 @@ export function getOrganizationRegistrationService(): OrganizationRegistrationSe
   });
   return registration;
 }
+
+/**
+ * Schools permissions and the MANAGEMENT/SCHOOL scope resolver are registered ONCE, when this module is loaded, through the shared
+ * Authorization Engine (never a second framework). The resolver reads through lazy lookups, so nothing touches the database at import.
+ */
+registerSchoolAuthorization({
+  policies: getAuthorizationPolicyRegistry(),
+  resolvers: getAuthorizationResolvers(),
+  schools: {
+    findById: (id) => getSchoolService().findById(id),
+    isSchoolManager: (userId, schoolId) => getSchoolService().isSchoolManager(userId, schoolId),
+  },
+  organizations: { isOrganizationAdmin: (userId, organizationId) => getOrganizationService().isOrganizationAdmin(userId, organizationId) },
+});

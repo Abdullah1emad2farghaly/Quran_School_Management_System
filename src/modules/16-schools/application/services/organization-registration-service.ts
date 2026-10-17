@@ -1,4 +1,4 @@
-import { AppError, SystemClock, buildPageResult, type Clock, type PageRequest, type PageResult, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
+import { SystemClock, buildPageResult, type Clock, type PageRequest, type PageResult, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
 import { normalizePhone, type IdentityService } from '../../../08-identity-core/public';
 import type { RoleService } from '../../../09-roles-permissions/public';
 import { normalizeOrganizationName, type OrganizationDto, type OrganizationService } from '../../../13-organization-core/public';
@@ -31,14 +31,15 @@ export interface OrganizationRegistrationDeps {
 
 /**
  * Organization registration: its own workflow, independent of any school (no main school is needed or created).
- * ONE transaction: validate the form (applicant, name, country and the organization's own address) -> resolve or create the
- * applicant's account through IAM -> create the organization (ACTIVE; name unique system-wide; country immutable) ->
- * assign the applicant the MAIN_ADMIN role through Module 09 (history kept) -> link them as administrator of THAT organization
- * only (the organization scope of the role). Any failure rolls everything back, including the new account.
+ * ONE transaction: validate the form (applicant, name, country and the organization's own address: registered governorate, free-text
+ * center and village) -> resolve or create the applicant's account through IAM -> create the organization (ACTIVE; name unique
+ * system-wide; country immutable) -> assign the applicant the ORGANIZATION_MANAGER role through Module 09 (history kept) -> link them
+ * as manager of THAT organization only. MAIN_ADMIN (the platform administrator) is NEVER assigned here. Any failure rolls everything
+ * back, including the new account.
  *
  * The new account's password is random and unknown: nobody can log in as the applicant until the phone's owner sets a password
  * through the OTP recovery flow (the existing verification), so the privileged role cannot be used by an unverified identity.
- * The role grants nothing outside the linked organization: every school operation checks the organization link, not the role.
+ * The role grants nothing outside the linked organization: the Authorization Engine checks the organization link, not the role.
  */
 export class OrganizationRegistrationService {
   private readonly organizations: OrganizationRegistrationDeps['organizations'];
@@ -69,38 +70,36 @@ export class OrganizationRegistrationService {
       const name = normalizeOrganizationName(organization.name as string);
       // 2. The organization's OWN address and country (separate from school and parent addresses).
       const address = await this.address.validateOrganizationAddress(
-        { countryId: organization.countryId, governorateId: organization.governorateId, centerId: organization.centerId, villageId: organization.villageId },
+        { countryId: organization.countryId, governorateId: organization.governorateId, centerName: organization.centerName, villageName: organization.villageName },
         t,
       );
       // 3-5. Account, organization, scoped administrator.
       const resolved = await this.applicants.resolve(phone, input.authenticatedUserId, t);
       const created = await this.organizations.createOrganization({ name, ...address }, t);
-      if (!(await this.roles.hasRole(resolved.userId, 'MAIN_ADMIN', t))) {
-        await this.roles.assignRole({ userId: resolved.userId, roleCode: 'MAIN_ADMIN', assignedBy: null }, t);
+      if (!(await this.roles.hasRole(resolved.userId, 'ORGANIZATION_MANAGER', t))) {
+        await this.roles.assignRole({ userId: resolved.userId, roleCode: 'ORGANIZATION_MANAGER', assignedBy: null }, t);
       }
       await this.organizations.assignOrganizationAdmin({ organizationId: created.id, userId: resolved.userId, name: applicantName, assignedBy: null }, t);
       return { organization: created, applicant: resolved };
     });
   }
 
-  /** The organizations the caller administers (MAIN_ADMIN role AND an organization link); nothing else. */
+  /** The organizations the caller manages (ORGANIZATION_MANAGER role AND an organization link); nothing else. */
   async listOrganizationsForActor(actorId: string, page: PageRequest, tx?: TransactionContext): Promise<PageResult<OrganizationDto>> {
-    const ids = (await this.holdsMainAdminRole(actorId, tx)) ? await this.organizations.listAdministeredOrganizationIds(actorId, tx) : [];
+    const ids = (await this.holdsOrganizationManagerRole(actorId, tx)) ? await this.organizations.listAdministeredOrganizationIds(actorId, tx) : [];
     const slice = ids.slice((page.page - 1) * page.pageSize, page.page * page.pageSize);
     const items = await Promise.all(slice.map((id) => this.organizations.requireById(id, tx)));
     return buildPageResult(items, ids.length, page);
   }
 
-  /** One organization, only for its administrators; anyone else (including the Main Admin of another organization) gets ORGANIZATION_NOT_FOUND. */
-  async getOrganizationForActor(organizationId: string, actorId: string, tx?: TransactionContext): Promise<OrganizationDto> {
-    const admin = (await this.holdsMainAdminRole(actorId, tx)) && (await this.organizations.isOrganizationAdmin(actorId, organizationId, tx));
-    if (!admin) throw new AppError('ORGANIZATION_NOT_FOUND', 'NOT_FOUND');
+  /** One organization (ORGANIZATION_NOT_FOUND when it does not exist). Who may read it is decided by the Authorization Engine at the route. */
+  getOrganization(organizationId: string, tx?: TransactionContext): Promise<OrganizationDto> {
     return this.organizations.requireById(organizationId, tx);
   }
 
-  private async holdsMainAdminRole(actorId: string, tx?: TransactionContext): Promise<boolean> {
+  private async holdsOrganizationManagerRole(actorId: string, tx?: TransactionContext): Promise<boolean> {
     const actor = typeof actorId === 'string' ? await this.identity.findById(actorId, tx) : undefined;
-    return !!actor && actor.isActive && (await this.roles.hasRole(actor.id, 'MAIN_ADMIN', tx));
+    return !!actor && actor.isActive && (await this.roles.hasRole(actor.id, 'ORGANIZATION_MANAGER', tx));
   }
 
   private inTransaction<T>(tx: TransactionContext | undefined, work: (tx: TransactionContext) => Promise<T>): Promise<T> {

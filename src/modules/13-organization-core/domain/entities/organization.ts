@@ -20,8 +20,10 @@ export interface OrganizationSnapshot {
   readonly countryId: string | null;
   /** The organization's OWN address (governorate required for every new organization; null only for organizations created before addresses existed). */
   readonly governorateId: string | null;
-  readonly centerId: string | null;
-  readonly villageId: string | null;
+  /** Free text (never a registered node): the center or city name. */
+  readonly centerName: string | null;
+  /** Free text; a village never exists without a center. */
+  readonly villageName: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -46,8 +48,8 @@ export class Organization extends AggregateRoot<string> {
       status: 'ACTIVE',
       countryId: null,
       governorateId: null,
-      centerId: null,
-      villageId: null,
+      centerName: null,
+      villageName: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -75,17 +77,19 @@ export class Organization extends AggregateRoot<string> {
     code: string;
     countryId: unknown;
     governorateId: unknown;
-    centerId?: unknown;
-    villageId?: unknown;
+    /** Free text, already normalized by the caller (Module 15 address rules); null/omitted when missing. */
+    centerName?: unknown;
+    villageName?: unknown;
     clock: Clock;
     id?: string;
   }): Organization {
     if (!isOrganizationCode(input.code)) throw new RangeError('Invalid organization code');
     const name = normalizeOrganizationName(input.name);
     if (!isUuid(input.countryId)) throw organizationError('ORGANIZATION_COUNTRY_INVALID');
-    const centerId = input.centerId ?? null;
-    const villageId = input.villageId ?? null;
-    if (!isUuid(input.governorateId) || (centerId !== null && !isUuid(centerId)) || (villageId !== null && !isUuid(villageId)) || (villageId !== null && centerId === null)) {
+    const centerName = input.centerName ?? null;
+    const villageName = input.villageName ?? null;
+    const isText = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+    if (!isUuid(input.governorateId) || (centerName !== null && !isText(centerName)) || (villageName !== null && !isText(villageName)) || (villageName !== null && centerName === null)) {
       throw organizationError('INVALID_ORGANIZATION_ADDRESS');
     }
     const now = input.clock.now();
@@ -96,8 +100,8 @@ export class Organization extends AggregateRoot<string> {
       status: 'ACTIVE',
       countryId: input.countryId,
       governorateId: input.governorateId,
-      centerId: centerId as string | null,
-      villageId: villageId as string | null,
+      centerName: centerName as string | null,
+      villageName: villageName as string | null,
       createdAt: now,
       updatedAt: now,
     });
@@ -164,11 +168,11 @@ export class Organization extends AggregateRoot<string> {
   get governorateId(): string | null {
     return this.state.governorateId;
   }
-  get centerId(): string | null {
-    return this.state.centerId;
+  get centerName(): string | null {
+    return this.state.centerName;
   }
-  get villageId(): string | null {
-    return this.state.villageId;
+  get villageName(): string | null {
+    return this.state.villageName;
   }
   get createdAt(): Date {
     return this.state.createdAt;

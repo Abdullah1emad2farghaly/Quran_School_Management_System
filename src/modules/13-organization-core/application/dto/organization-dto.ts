@@ -10,8 +10,9 @@ export interface OrganizationDto {
   readonly countryId: string | null;
   /** The organization's own address (null only for an organization created before addresses existed). */
   readonly governorateId: string | null;
-  readonly centerId: string | null;
-  readonly villageId: string | null;
+  /** Free text. */
+  readonly centerName: string | null;
+  readonly villageName: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -23,8 +24,8 @@ export const toOrganizationDto = (o: Organization): OrganizationDto => ({
   status: o.status,
   countryId: o.countryId,
   governorateId: o.governorateId,
-  centerId: o.centerId,
-  villageId: o.villageId,
+  centerName: o.centerName,
+  villageName: o.villageName,
   createdAt: o.createdAt,
   updatedAt: o.updatedAt,
 });

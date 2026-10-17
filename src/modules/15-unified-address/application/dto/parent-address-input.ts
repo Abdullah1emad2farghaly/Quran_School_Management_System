@@ -11,18 +11,27 @@ export interface ParentAddressInput {
   readonly villageName?: unknown;
 }
 
-/** The organization's own address: the country is chosen (required); governorate required; center optional; village only under a center. */
+/**
+ * The organization's own address: the country is chosen (required); the governorate is a registered, ACTIVE governorate of that
+ * country; center/city and village are FREE TEXT (optional; a village only under a center).
+ */
 export interface OrganizationAddressInput {
   readonly countryId: unknown;
   readonly governorateId: unknown;
-  readonly centerId?: unknown;
-  readonly villageId?: unknown;
+  readonly centerName?: unknown;
+  readonly villageName?: unknown;
 }
 
-/** A validated organization address: every node exists, is ACTIVE, belongs to the right parent, and the governorate belongs to `countryId`. */
+/** A validated organization address (normalized free text, registered governorate belonging to `countryId`). */
 export interface OrganizationAddress {
   readonly countryId: string;
   readonly governorateId: string;
-  readonly centerId: string | null;
-  readonly villageId: string | null;
+  readonly centerName: string | null;
+  readonly villageName: string | null;
 }
+
+/**
+ * A school's address. Same contract as the Parent address: the country is NEVER an input (it is the country of the school's
+ * organization), the governorate is registered, center/city and village are free text.
+ */
+export type SchoolAddressInput = ParentAddressInput;

@@ -53,7 +53,7 @@ Setup
 3. Type the phone number, then the password twice (hidden prompts). Passwords are never taken from arguments, the environment, or pipes (non-interactive runs exit with code 2).
 4. The command prints the new user id (never the phone or password). Sign in with `POST /api/v1/auth/login`.
 
-Behavior: one transaction: lock → refuse (`MAIN_ADMIN_ALREADY_EXISTS`, exit 1) if an **active** Main Admin assignment exists → create the user through Module 08 (phone normalization, password policy §23, bcrypt) → assign `MAIN_ADMIN` through Module 09 (`assignedBy = null`, the system). An existing phone is a conflict (`USER_PHONE_ALREADY_EXISTS`); users are never merged. The row lock serializes concurrent runs, so exactly one can succeed. Events `UserCreated` and `RoleAssigned` go through the outbox as usual. Nothing is logged except error names.
+Behavior: one transaction: lock → refuse (`MAIN_ADMIN_ALREADY_EXISTS`, exit 1) if an **active** Main Admin assignment exists → create the user through Module 08 (phone normalization, password policy §23, bcrypt) → assign `MAIN_ADMIN` through Module 09 (`assignedBy = null`, the system). The first platform administrator is independent of any organization: no organization is created or linked. An existing phone is a conflict (`USER_PHONE_ALREADY_EXISTS`); users are never merged. The row lock serializes concurrent runs, so exactly one can succeed. Events `UserCreated` and `RoleAssigned` go through the outbox as usual. Nothing is logged except error names.
 
 Failure recovery: any failure rolls back everything (exit 1, "Nothing was created"); fix the cause (for example run the migration) and run again.
 

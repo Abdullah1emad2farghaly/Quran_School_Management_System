@@ -11,7 +11,7 @@ import { schoolNameKey } from '../../domain/value-objects/school-name';
 /** In-memory adapters for unit tests and local wiring. `snapshot()` / `restore()` let a test simulate a rolled-back transaction. */
 export class InMemorySchoolRepository implements SchoolRepository {
   readonly rows = new Map<string, SchoolSnapshot>();
-  /** Set by tests/wiring so `visibleTo` can include the schools a user actively manages. */
+  /** Set by tests/wiring so `managerUserId` can include the schools a user actively manages. */
   managedSchoolIds: (userId: string) => readonly string[] = () => [];
   readonly statusHistory: SchoolStatusHistoryEntry[] = [];
   readonly gpsHistory: SchoolGpsHistoryEntry[] = [];
@@ -43,12 +43,14 @@ export class InMemorySchoolRepository implements SchoolRepository {
   }
 
   async list(query: SchoolListQuery, _tx?: TransactionContext): Promise<{ items: School[]; total: number }> {
-    const managed = query.visibleTo === undefined ? [] : this.managedSchoolIds(query.visibleTo);
+    const managed = query.managerUserId === undefined ? [] : this.managedSchoolIds(query.managerUserId);
+    const organizationIds = query.organizationIds ?? [];
+    // Deny by default: with no organization and no managed user, nothing is visible.
+    if (query.managerUserId === undefined && organizationIds.length === 0) return { items: [], total: 0 };
     const key = { createdAt: 'createdAt', code: 'code', name: 'name', status: 'status' }[query.sort] as 'createdAt' | 'code' | 'name' | 'status';
     const rows = [...this.rows.values()]
-      .filter((r) => query.visibleTo === undefined || r.createdBy === query.visibleTo || managed.includes(r.id) || (query.organizationIds ?? []).includes(r.organizationId))
+      .filter((r) => managed.includes(r.id) || organizationIds.includes(r.organizationId))
       .filter((r) => !query.statuses || query.statuses.length === 0 || query.statuses.includes(r.status))
-      .filter((r) => !query.type || r.type === query.type)
       .sort((a, b) => {
         const av = key === 'createdAt' ? a.createdAt.getTime() : a[key];
         const bv = key === 'createdAt' ? b.createdAt.getTime() : b[key];

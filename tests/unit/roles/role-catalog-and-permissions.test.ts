@@ -24,9 +24,18 @@ const codeOf = (fn: () => unknown): string => {
 };
 
 describe('V1 role catalog (§18)', () => {
-  it('is exactly the nine approved roles', () => {
+  it('ORGANIZATION_MANAGER is a distinct, assignable role with Arabic and English names', () => {
+    const role = ROLE_CATALOG.find((r) => r.code === 'ORGANIZATION_MANAGER')!;
+    expect(role).toMatchObject({ assignable: true, name: { ar: 'مدير المنظمة', en: 'Organization Manager' } });
+    expect(isRoleCode('ORGANIZATION_MANAGER')).toBe(true);
+    expect(isAssignableRole('ORGANIZATION_MANAGER')).toBe(true);
+    expect(ROLE_CODES.indexOf('MAIN_ADMIN')).toBeLessThan(ROLE_CODES.indexOf('ORGANIZATION_MANAGER'));
+  });
+
+  it('is exactly the ten approved roles (MAIN_ADMIN = platform administrator, ORGANIZATION_MANAGER = one organization)', () => {
     expect([...ROLE_CODES]).toEqual([
       'MAIN_ADMIN',
+      'ORGANIZATION_MANAGER',
       'GOVERNORATE_MANAGER',
       'CENTER_MANAGER',
       'VILLAGE_MANAGER',

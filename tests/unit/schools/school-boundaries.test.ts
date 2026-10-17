@@ -45,13 +45,26 @@ describe('Module 16 boundaries', () => {
     expect([...sequelize, ...http]).toEqual([]);
   });
 
-  it('exposes HTTP routes only from the presentation layer and defines no permission registry entries (permission matrix deferred)', () => {
-    expect(files.filter((f) => /registerPermission|PermissionRegistry|getAuthorizationPolicyRegistry|requirePermission/.test(readFileSync(f, 'utf8')))).toEqual([]);
+  it('exposes HTTP routes only from the presentation layer; only routes call requirePermission; permissions are registered only through the shared engine registry', () => {
+    const where = (file: string) => file.split(path.sep).join('/');
+    const code = (f: string) => readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
+    expect(files.filter((f) => /\brequirePermission\b/.test(code(f)) && !where(f).includes('/presentation/'))).toEqual([]);
+    expect(files.filter((f) => /\bPermissionRegistry\b|getAuthorizationPolicyRegistry/.test(code(f)))).toEqual([]); // no second registry: only the injected engine registry
+    expect(files.filter((f) => /\.register\(\{/.test(code(f))).map((f) => path.basename(f))).toEqual(['school-authorization.ts']);
     expect(files.filter((f) => /\b(router|Router)\b/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')) && !/\/presentation\//.test(f.split(path.sep).join('/')))).toEqual([]);
   });
 
-  it('may use Module 15 only for the organization address (the school address keeps the Geography rules)', () => {
+  it('uses Module 15 for ALL addresses (school and organization): free-text center and village, no registered ids', () => {
     const users = files.filter((f) => /15-unified-address/.test(readFileSync(f, 'utf8')));
-    expect(users.map((f) => path.basename(f))).toEqual(['organization-registration-service.ts']);
+    expect(users.map((f) => path.basename(f)).sort()).toEqual(['organization-registration-service.ts', 'school-service.ts']);
+    expect(files.filter((f) => /\bcenterId\b|\bvillageId\b|center_id|village_id/.test(readFileSync(f, 'utf8')))).toEqual([]);
+  });
+
+  it('has no scattered role checks and no Main/Sub classification left in the module', () => {
+    for (const f of files) {
+      const text = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
+      expect([path.basename(f), /SCHOOL_ACTION_NOT_ALLOWED|requireSchoolAdmin|hasRole\([^)]*'MAIN_ADMIN'/.test(text)]).toEqual([path.basename(f), false]);
+      expect([path.basename(f), /MAIN_SCHOOL|SUB_SCHOOL|schoolType|parentSchoolId|parent_school_id|createMainSchool|requestSubSchool|SubSchool/.test(text)]).toEqual([path.basename(f), false]);
+    }
   });
 });

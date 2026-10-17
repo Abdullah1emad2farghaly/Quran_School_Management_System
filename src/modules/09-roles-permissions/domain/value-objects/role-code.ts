@@ -1,10 +1,14 @@
 /**
- * V1 roles are EXACTLY these nine (Master Specification §18). There is no Supervisor and
+ * V1 roles are EXACTLY these ten (Master Specification §18). There is no Supervisor and
  * no Competition Manager. Adding or changing a role requires an approved specification change
  * (and a new migration, because the database also enforces this list).
+ *
+ * MAIN_ADMIN is the platform-wide administrator. ORGANIZATION_MANAGER is the manager of ONE organization (and its schools);
+ * the organization it manages is recorded by the organization link (Module 13), never by the role alone.
  */
 export const ROLE_CODES = [
   'MAIN_ADMIN',
+  'ORGANIZATION_MANAGER',
   'GOVERNORATE_MANAGER',
   'CENTER_MANAGER',
   'VILLAGE_MANAGER',
@@ -28,6 +32,7 @@ export interface RoleDefinition {
 
 export const ROLE_CATALOG: readonly RoleDefinition[] = Object.freeze([
   { code: 'MAIN_ADMIN', name: { ar: 'المدير الرئيسي', en: 'Main Admin' }, assignable: true },
+  { code: 'ORGANIZATION_MANAGER', name: { ar: 'مدير المنظمة', en: 'Organization Manager' }, assignable: true },
   { code: 'GOVERNORATE_MANAGER', name: { ar: 'مدير المحافظة', en: 'Governorate Manager' }, assignable: true },
   { code: 'CENTER_MANAGER', name: { ar: 'مدير المركز', en: 'Center Manager' }, assignable: true },
   { code: 'VILLAGE_MANAGER', name: { ar: 'مدير القرية', en: 'Village Manager' }, assignable: true },

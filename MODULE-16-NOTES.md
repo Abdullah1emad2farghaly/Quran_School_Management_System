@@ -8,3 +8,6 @@ New: POST /api/v1/organizations (public registration), GET /organizations, GET /
 Changed contracts: Parent Address validation takes organizationId (Module 15); OrganizationLookup has requireById, requireOrganizationCountryId, isOrganizationAdmin, listAdministeredOrganizationIds.
 Permission matrix, D-1/D-2 permission entries remain deferred; organization scope is enforced by the application. Open decisions: docs/SCHOOLS.md.
 Not yet verified on your machine: migrations, typecheck, npm test (unit + API), test:db.
+
+## Update 0.21.0 (supersedes the Main/Sub, MAIN_ADMIN-as-organization-admin and structured-address statements above)
+See `docs/SCHOOLS.md`, `docs/ORGANIZATION.md` and `docs/CHANGELOG-ENTRY-0.21.0.md`. Three new migrations: `20261015100000-organization-manager-role`, `20261015110000-free-text-center-village`, `20261015120000-schools-remove-main-sub`. Run `npm run db:migrate`, then `npm run typecheck`, `npm run build`, `npm test`, `npm run test:db`.

@@ -5,7 +5,6 @@ import type { SchoolGpsHistoryEntry, SchoolListQuery, SchoolRepository, SchoolSt
 import { School } from '../../../../domain/entities/school';
 import { schoolError } from '../../../../domain/errors/school-errors';
 import type { SchoolStatus } from '../../../../domain/value-objects/school-status';
-import type { SchoolType } from '../../../../domain/value-objects/school-type';
 
 type Queryable = Pick<Sequelize, 'query'>;
 
@@ -13,18 +12,17 @@ interface Row {
   id: string;
   code: string;
   name: string;
-  type: SchoolType;
   status: SchoolStatus;
   organizationId: string;
   countryId: string;
-  parentSchoolId: string | null;
   governorateId: string;
-  centerId: string | null;
-  villageId: string | null;
+  centerName: string | null;
+  villageName: string | null;
   latitude: number | string;
   longitude: number | string;
   gpsAccuracyM: number | string;
   createdBy: string;
+  applicantUserId: string | null;
   applicantName: string | null;
   decidedBy: string | null;
   decidedAt: Date | string | null;
@@ -35,9 +33,9 @@ interface Row {
 }
 
 const SELECT = `
-  SELECT id, code, name, type, status, organization_id AS organizationId, country_id AS countryId, parent_school_id AS parentSchoolId,
-         governorate_id AS governorateId, center_id AS centerId, village_id AS villageId,
-         latitude, longitude, gps_accuracy_m AS gpsAccuracyM, created_by AS createdBy, applicant_name AS applicantName,
+  SELECT id, code, name, status, organization_id AS organizationId, country_id AS countryId,
+         governorate_id AS governorateId, center_name AS centerName, village_name AS villageName,
+         latitude, longitude, gps_accuracy_m AS gpsAccuracyM, created_by AS createdBy, applicant_user_id AS applicantUserId, applicant_name AS applicantName,
          decided_by AS decidedBy, decided_at AS decidedAt, rejection_reason AS rejectionReason,
          version, created_at AS createdAt, updated_at AS updatedAt
     FROM schools`;
@@ -52,29 +50,28 @@ export class SequelizeSchoolRepository implements SchoolRepository {
     try {
       await this.db.query(
         `INSERT INTO schools
-           (id, code, name, type, status, organization_id, country_id, parent_school_id, governorate_id, center_id, village_id,
-            latitude, longitude, gps_accuracy_m, created_by, applicant_name, decided_by, decided_at, rejection_reason, holds_name,
+           (id, code, name, status, organization_id, country_id, governorate_id, center_name, village_name,
+            latitude, longitude, gps_accuracy_m, created_by, applicant_user_id, applicant_name, decided_by, decided_at, rejection_reason, holds_name,
             version, created_at, updated_at)
          VALUES
-           (:id, :code, :name, :type, :status, :organizationId, :countryId, :parentSchoolId, :governorateId, :centerId, :villageId,
-            :latitude, :longitude, :accuracy, :createdBy, :applicantName, NULL, NULL, NULL, 1, 1, :createdAt, :createdAt)`,
+           (:id, :code, :name, :status, :organizationId, :countryId, :governorateId, :centerName, :villageName,
+            :latitude, :longitude, :accuracy, :createdBy, :applicantUserId, :applicantName, NULL, NULL, NULL, 1, 1, :createdAt, :createdAt)`,
         {
           replacements: {
             id: s.id,
             code: s.code,
             name: s.name,
-            type: s.type,
             status: s.status,
             organizationId: s.organizationId,
             countryId: s.countryId,
-            parentSchoolId: s.parentSchoolId,
             governorateId: s.governorateId,
-            centerId: s.centerId,
-            villageId: s.villageId,
+            centerName: s.centerName,
+            villageName: s.villageName,
             latitude: s.gps.latitude,
             longitude: s.gps.longitude,
             accuracy: s.gps.accuracyMeters,
             createdBy: s.createdBy,
+            applicantUserId: s.applicantUserId,
             applicantName: s.applicantName,
             createdAt: s.createdAt,
           },
@@ -135,22 +132,21 @@ export class SequelizeSchoolRepository implements SchoolRepository {
   async list(query: SchoolListQuery, tx?: TransactionContext): Promise<{ items: School[]; total: number }> {
     const where: string[] = [];
     const replacements: Record<string, unknown> = {};
-    if (query.visibleTo !== undefined) {
-      const visible = ['created_by = :userId', 'id IN (SELECT school_id FROM school_managers WHERE user_id = :userId AND active = 1)'];
-      replacements.userId = query.visibleTo;
-      if (query.organizationIds && query.organizationIds.length > 0) {
-        visible.push('organization_id IN (:organizationIds)');
-        replacements.organizationIds = [...query.organizationIds];
-      }
-      where.push(`(${visible.join(' OR ')})`);
+    // Deny by default: with no organization and no managed user there is nothing to show (never "everything").
+    const visible: string[] = [];
+    if (query.managerUserId !== undefined) {
+      visible.push('id IN (SELECT school_id FROM school_managers WHERE user_id = :managerUserId AND active = 1)');
+      replacements.managerUserId = query.managerUserId;
     }
+    if (query.organizationIds && query.organizationIds.length > 0) {
+      visible.push('organization_id IN (:organizationIds)');
+      replacements.organizationIds = [...query.organizationIds];
+    }
+    if (visible.length === 0) return { items: [], total: 0 };
+    where.push(`(${visible.join(' OR ')})`);
     if (query.statuses && query.statuses.length > 0) {
       where.push('status IN (:statuses)');
       replacements.statuses = [...query.statuses];
-    }
-    if (query.type) {
-      where.push('type = :type');
-      replacements.type = query.type;
     }
     const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
     // The sort column comes from this whitelist, never from the client.
@@ -260,16 +256,15 @@ export class SequelizeSchoolRepository implements SchoolRepository {
       id: r.id,
       code: r.code,
       name: r.name,
-      type: r.type,
       status: r.status,
       organizationId: r.organizationId,
       countryId: r.countryId,
-      parentSchoolId: r.parentSchoolId,
       governorateId: r.governorateId,
-      centerId: r.centerId,
-      villageId: r.villageId,
+      centerName: r.centerName,
+      villageName: r.villageName,
       gps: { latitude: Number(r.latitude), longitude: Number(r.longitude), accuracyMeters: Number(r.gpsAccuracyM) },
       createdBy: r.createdBy,
+      applicantUserId: r.applicantUserId,
       applicantName: r.applicantName,
       decidedBy: r.decidedBy,
       decidedAt: r.decidedAt === null ? null : asDate(r.decidedAt),

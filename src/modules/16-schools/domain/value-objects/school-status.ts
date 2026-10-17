@@ -3,7 +3,7 @@ export type SchoolStatus = (typeof SCHOOL_STATUSES)[number];
 
 /**
  * The only legal transitions (V1):
- *   Main School creation -> ACTIVE (no approval); Sub-School request -> PENDING
+ *   every new school -> PENDING (never ACTIVE before approval)
  *   PENDING -> ACTIVE (approval) | REJECTED (rejection, terminal)
  *   ACTIVE <-> INACTIVE (explicit status change)
  */

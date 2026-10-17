@@ -28,3 +28,4 @@ export { InMemorySessionRepository } from '../infrastructure/services/in-memory-
 export { SequelizeSessionRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-session-repository';
 export { createRequireAuthentication } from '../presentation/http/authentication.middleware';
 export { createAuthRouter, type AuthRouterDeps } from '../presentation/http/auth.routes';
+export { authApiDoc } from '../presentation/http/auth.openapi';

@@ -172,9 +172,15 @@ describe('organization-based country (many organizations)', () => {
 });
 
 describe('UnifiedAddressService.validateOrganizationAddress (the organization\'s own address)', () => {
-  it('accepts country + governorate, with optional center and village under it', async () => {
+  it('accepts country + governorate, with optional FREE-TEXT center and village (normalized, never looked up)', async () => {
     const s = await setup();
-    expect(await s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id })).toEqual({ countryId: s.egypt.id, governorateId: s.minya.id, centerId: null, villageId: null });
+    expect(await s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id })).toEqual({ countryId: s.egypt.id, governorateId: s.minya.id, centerName: null, villageName: null });
+    expect(await s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id, centerName: '  مركز   غير   مسجل ', villageName: 'قرية لا وجود لها' })).toEqual({
+      countryId: s.egypt.id,
+      governorateId: s.minya.id,
+      centerName: 'مركز غير مسجل',
+      villageName: 'قرية لا وجود لها',
+    });
   });
 
   it('requires country and governorate, and rejects a governorate of another country', async () => {
@@ -186,10 +192,20 @@ describe('UnifiedAddressService.validateOrganizationAddress (the organization\'s
     expect(await codeOf(s.service.validateOrganizationAddress(undefined as never))).toBe('INVALID_PARENT_ADDRESS');
   });
 
-  it('a village needs a center, and an inactive governorate is refused', async () => {
+  it('a village needs a center, text is limited to 200 characters, and an inactive governorate is refused', async () => {
     const s = await setup();
-    expect(await codeOf(s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id, villageId: '11111111-1111-4111-8111-111111111111' }))).toBe('INVALID_GEOGRAPHY_HIERARCHY');
+    expect(await codeOf(s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id, villageName: 'قرية' }))).toBe('INVALID_PARENT_ADDRESS');
+    expect(await codeOf(s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id, centerName: 'x'.repeat(201) }))).toBe('INVALID_PARENT_ADDRESS');
+    expect(await codeOf(s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id, centerName: 7 as never }))).toBe('INVALID_PARENT_ADDRESS');
     s.geoRepo.setStatus(s.minya.id, 'INACTIVE');
     expect(await codeOf(s.service.validateOrganizationAddress({ countryId: s.egypt.id, governorateId: s.minya.id }))).toBe('GEOGRAPHY_NODE_INACTIVE');
+  });
+});
+
+describe('UnifiedAddressService.validateSchoolAddress (identical to the Parent rules; the country comes from the organization)', () => {
+  it('delegates to the Parent Address contract: registered governorate, free-text center and village', async () => {
+    const s = await setup();
+    const input = { organizationId: s.org.id, governorateId: s.minya.id, centerName: 'مركز غير مسجل', villageName: 'قرية غير مسجلة' };
+    expect(await s.service.validateSchoolAddress(input)).toEqual(await s.service.validateParentAddress(input));
   });
 });

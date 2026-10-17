@@ -1,8 +1,10 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import { body, param, type ValidationChain } from 'express-validator';
 import { parseListQuery, sendCreated, sendPaginated, sendSuccess, validate, type ListQuerySpec } from '../../../04-validation-api/public';
+import type { RequirePermission } from '../../../12-authorization-engine/public';
+import { ORGANIZATION_TARGET_TYPE } from '../../../13-organization-core/public';
+import { SCHOOL_TARGET_TYPE, SchoolPermissions } from '../../application/services/school-authorization';
 import { SCHOOL_STATUSES } from '../../domain/value-objects/school-status';
-import { SCHOOL_TYPES } from '../../domain/value-objects/school-type';
 import { createSchoolHandlers, type SchoolHandlerService } from './school-handlers';
 import { sessionAuthRequired } from './session-required';
 
@@ -10,7 +12,9 @@ export interface SchoolRouterDeps {
   readonly getService: () => SchoolHandlerService;
   /** Authenticates the access token (Module 10 `requireAuthentication`). */
   readonly requireAuthentication: RequestHandler;
-  /** Abuse limit applied to the two PUBLIC submission endpoints (see `createPublicSubmissionRateLimiter`). */
+  /** Authorization Engine route guard (Module 12): roles -> permissions -> scope. */
+  readonly requirePermission: RequirePermission;
+  /** Abuse limit applied to the PUBLIC submission endpoint (see `createPublicSubmissionRateLimiter`). */
   readonly publicSubmissionLimit: RequestHandler;
 }
 
@@ -24,20 +28,21 @@ const handle =
 const text = (field: string, max: number): ValidationChain =>
   body(field).isString().withMessage('INVALID_VALUE').bail().trim().notEmpty().withMessage('REQUIRED_FIELD').isLength({ max }).withMessage('INVALID_VALUE');
 const optionalId = (field: string): ValidationChain => body(field).optional({ values: 'null' }).isUUID().withMessage('INVALID_VALUE');
+/** Free text: only the type and a generous size cap are checked here; normalization and the 200-character rule are the address rules (Module 15). */
+const optionalText = (field: string): ValidationChain => body(field).optional({ values: 'null' }).isString().withMessage('INVALID_VALUE').bail().isLength({ max: 1000 }).withMessage('INVALID_VALUE');
+const requiredUuid = (field: string): ValidationChain => body(field).isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE');
 const number = (field: string): ValidationChain =>
   body(field).exists({ values: 'null' }).withMessage('REQUIRED_FIELD').bail().custom((v) => typeof v === 'number' && Number.isFinite(v)).withMessage('INVALID_VALUE');
 const gps = (prefix: string): ValidationChain[] => [number(`${prefix}.latitude`), number(`${prefix}.longitude`), number(`${prefix}.accuracyMeters`)];
 const schoolId = param('id').isUUID().withMessage('INVALID_VALUE');
 
-/** The Sub-School form: `school` (name, governorate, optional center/village, GPS) and `applicant` (name, phone). */
-const submissionChains = (): ValidationChain[] => [
-  text('applicant.name', 200),
-  text('applicant.phone', 40),
+/** The school part of a form: name, registered governorate, free-text center/village, GPS. */
+const schoolChains = (): ValidationChain[] => [
   text('school.name', 200),
-  body('school.governorateId').isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE'),
+  requiredUuid('school.governorateId'),
   optionalId('school.countryId'),
-  optionalId('school.centerId'),
-  optionalId('school.villageId'),
+  optionalText('school.centerName'),
+  optionalText('school.villageName'),
   ...gps('school.gps'),
 ];
 
@@ -46,32 +51,33 @@ export const SCHOOL_LIST_SPEC: ListQuerySpec = {
   defaultSort: [{ key: 'createdAt', direction: 'desc' }],
   filters: {
     status: { type: 'enum', values: SCHOOL_STATUSES, multiple: true },
-    type: { type: 'enum', values: SCHOOL_TYPES },
   },
 };
 
 /**
- * /schools. Endpoints (all under /api/v1):
- *   POST   /schools                    authenticated + administrator of the organization   create a Main School (ACTIVE)
- *   POST   /schools/sub-submissions    PUBLIC (login optional)  Sub-School form + applicant           -> 201 (PENDING)
- *   GET    /schools                    authenticated            schools the caller may see (paginated)
- *   GET    /schools/:id                authenticated            one school the caller may see
- *   POST   /schools/:id/approve        authenticated + administrator of the school's organization   approve a PENDING Sub-School
- *   POST   /schools/:id/reject         authenticated + administrator of the school's organization   { reason }
- *   POST   /schools/:id/deactivate     authenticated + administrator of the school's organization   ACTIVE -> INACTIVE   (provisional rule, see docs)
- *   POST   /schools/:id/reactivate     authenticated + administrator of the school's organization   INACTIVE -> ACTIVE   (provisional rule)
- *   PATCH  /schools/:id/gps            authenticated + administrator of the school's organization   correct GPS while PENDING (provisional rule)
- *   PUT    /schools/:id/manager        authenticated + administrator of the school's organization   { userId } assign the school manager
- *   DELETE /schools/:id/manager        authenticated + administrator of the school's organization   end the active manager link
- * The permission matrix (D-1/D-2) is not finalized: the checks are enforced by the application service (deny by default: the
- * MAIN_ADMIN role AND an administrator link to the school's organization); there is no permission-registry entry. The actor
- * always comes from the verified token.
+ * /schools. Endpoints (all under /api/v1). Authorization is enforced by the Authorization Engine (`requirePermission`):
+ *   POST   /schools                  schools.school.create         ORGANIZATION_MANAGER of `organizationId`   create a school (always PENDING)
+ *   POST   /schools/submissions      PUBLIC (login optional, rate limited)  school form + applicant + organizationId -> 201 (PENDING)
+ *   GET    /schools                  schools.school.list           ORGANIZATION_MANAGER / SCHOOL_MANAGER      the caller's own schools only (paginated)
+ *   GET    /schools/:id              schools.school.read           manager of the school's organization, or the school's manager
+ *   POST   /schools/:id/approve      schools.school.approve        ORGANIZATION_MANAGER of the school's organization   PENDING -> ACTIVE
+ *   POST   /schools/:id/reject       schools.school.reject          same     { reason }   PENDING -> REJECTED
+ *   POST   /schools/:id/deactivate   schools.school.deactivate      same     ACTIVE -> INACTIVE
+ *   POST   /schools/:id/reactivate   schools.school.reactivate      same     INACTIVE -> ACTIVE
+ *   PATCH  /schools/:id/gps          schools.school.correct-gps     same     correct the GPS while PENDING
+ *   PUT    /schools/:id/manager      schools.manager.assign         same     { userId } assign the School Manager of an ACTIVE school
+ *   DELETE /schools/:id/manager      schools.manager.revoke         same     end the active manager link
+ * The address is a registered governorate plus FREE-TEXT `centerName` / `villageName`; the country is the organization's.
+ * The actor always comes from the verified token. For a school operation the scope target is the school (loaded server-side by the
+ * scope resolver); for creation it is the organization, proven against the caller's own organization link.
  */
 export function createSchoolRouter(deps: SchoolRouterDeps): Router {
   const router = Router();
   const h = createSchoolHandlers(deps.getService);
   const auth = deps.requireAuthentication;
-  /** Login is optional on the public submissions; an invalid token is still rejected (401), never silently ignored. */
+  const guard = deps.requirePermission;
+  const onSchool = { target: (req: Request) => ({ type: SCHOOL_TARGET_TYPE, id: req.params.id as string }) };
+  /** Login is optional on the public submission; an invalid token is still rejected (401), never silently ignored. */
   const optionalAuthentication: RequestHandler = (req, res, next) => {
     if (req.header('authorization')) auth(req, res, next);
     else next();
@@ -80,38 +86,30 @@ export function createSchoolRouter(deps: SchoolRouterDeps): Router {
   router.post(
     '/',
     auth,
-    validate(
-      body('organizationId').isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE'),
-      text('school.name', 200),
-      body('school.governorateId').isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE'),
-      optionalId('school.countryId'),
-      optionalId('school.centerId'),
-      optionalId('school.villageId'),
-      ...gps('school.gps'),
-    ),
-    handle(async (req, res) => sendCreated(res, await h.createMainSchool(sessionAuthRequired(req), req.body))),
+    validate(requiredUuid('organizationId'), ...schoolChains()),
+    guard(SchoolPermissions.CREATE, { target: (req) => ({ type: ORGANIZATION_TARGET_TYPE, id: req.body.organizationId as string }) }),
+    handle(async (req, res) => sendCreated(res, await h.createSchool(sessionAuthRequired(req), req.body))),
   );
 
   router.post(
-    '/sub-submissions',
+    '/submissions',
     deps.publicSubmissionLimit,
     optionalAuthentication,
-    validate(...submissionChains(), body('parentSchoolId').isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE')),
-    handle(async (req, res) => sendCreated(res, await h.submitSubSchool(req.body, req.auth?.userId))),
+    validate(text('applicant.name', 200), text('applicant.phone', 40), requiredUuid('organizationId'), ...schoolChains()),
+    handle(async (req, res) => sendCreated(res, await h.submitSchool(req.body, req.auth?.userId))),
   );
 
   router.get(
     '/',
     auth,
+    guard(SchoolPermissions.LIST),
     handle(async (req, res) => {
       const query = parseListQuery(req.query as Record<string, unknown>, SCHOOL_LIST_SPEC);
       const status = query.filters.status;
-      const type = query.filters.type;
       sendPaginated(
         res,
         await h.listSchools(sessionAuthRequired(req), {
           ...(Array.isArray(status) ? { statuses: status as string[] } : {}),
-          ...(typeof type === 'string' ? { type } : {}),
           sort: query.sort[0] ?? { key: 'createdAt', direction: 'desc' },
           page: query.page,
         }),
@@ -119,36 +117,45 @@ export function createSchoolRouter(deps: SchoolRouterDeps): Router {
     }),
   );
 
-  router.get('/:id', auth, validate(schoolId), handle(async (req, res) => sendSuccess(res, await h.getSchool(sessionAuthRequired(req), req.params.id as string))));
+  router.get('/:id', auth, validate(schoolId), guard(SchoolPermissions.READ, onSchool), handle(async (req, res) => sendSuccess(res, await h.getSchool(req.params.id as string))));
 
-  router.post('/:id/approve', auth, validate(schoolId), handle(async (req, res) => sendSuccess(res, await h.approve(sessionAuthRequired(req), req.params.id as string))));
+  router.post('/:id/approve', auth, validate(schoolId), guard(SchoolPermissions.APPROVE, onSchool), handle(async (req, res) => sendSuccess(res, await h.approve(sessionAuthRequired(req), req.params.id as string))));
 
   router.post(
     '/:id/reject',
     auth,
     validate(schoolId, text('reason', 500)),
+    guard(SchoolPermissions.REJECT, onSchool),
     handle(async (req, res) => sendSuccess(res, await h.reject(sessionAuthRequired(req), req.params.id as string, req.body))),
   );
 
-  router.post('/:id/deactivate', auth, validate(schoolId), handle(async (req, res) => sendSuccess(res, await h.deactivate(sessionAuthRequired(req), req.params.id as string))));
+  router.post('/:id/deactivate', auth, validate(schoolId), guard(SchoolPermissions.DEACTIVATE, onSchool), handle(async (req, res) => sendSuccess(res, await h.deactivate(sessionAuthRequired(req), req.params.id as string))));
 
-  router.post('/:id/reactivate', auth, validate(schoolId), handle(async (req, res) => sendSuccess(res, await h.reactivate(sessionAuthRequired(req), req.params.id as string))));
+  router.post('/:id/reactivate', auth, validate(schoolId), guard(SchoolPermissions.REACTIVATE, onSchool), handle(async (req, res) => sendSuccess(res, await h.reactivate(sessionAuthRequired(req), req.params.id as string))));
 
   router.patch(
     '/:id/gps',
     auth,
     validate(schoolId, ...gps('gps')),
+    guard(SchoolPermissions.CORRECT_GPS, onSchool),
     handle(async (req, res) => sendSuccess(res, await h.correctGps(sessionAuthRequired(req), req.params.id as string, req.body))),
   );
 
   router.put(
     '/:id/manager',
     auth,
-    validate(schoolId, body('userId').isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE')),
+    validate(schoolId, requiredUuid('userId')),
+    guard(SchoolPermissions.ASSIGN_MANAGER, onSchool),
     handle(async (req, res) => sendSuccess(res, await h.assignManager(sessionAuthRequired(req), req.params.id as string, req.body))),
   );
 
-  router.delete('/:id/manager', auth, validate(schoolId), handle(async (req, res) => sendSuccess(res, await h.revokeManager(sessionAuthRequired(req), req.params.id as string))));
+  router.delete(
+    '/:id/manager',
+    auth,
+    validate(schoolId),
+    guard(SchoolPermissions.REVOKE_MANAGER, onSchool),
+    handle(async (req, res) => sendSuccess(res, await h.revokeManager(sessionAuthRequired(req), req.params.id as string))),
+  );
 
   return router;
 }

@@ -22,8 +22,8 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
       status: organization.status,
       countryId: organization.countryId,
       governorateId: organization.governorateId,
-      centerId: organization.centerId,
-      villageId: organization.villageId,
+      centerName: organization.centerName,
+      villageName: organization.villageName,
       createdAt: organization.createdAt,
       updatedAt: organization.updatedAt,
     });

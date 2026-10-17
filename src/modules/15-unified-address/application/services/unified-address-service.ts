@@ -5,7 +5,7 @@ import { unifiedAddressError } from '../../domain/errors/unified-address-errors'
 import { parseRawParentAddress } from '../../domain/services/raw-parent-address-parser';
 import { normalizeAddressText } from '../../domain/value-objects/address-text';
 import type { ParentAddress, StoredParentAddress } from '../../domain/value-objects/parent-address';
-import type { OrganizationAddress, OrganizationAddressInput, ParentAddressInput } from '../dto/parent-address-input';
+import type { OrganizationAddress, OrganizationAddressInput, ParentAddressInput, SchoolAddressInput } from '../dto/parent-address-input';
 
 export interface UnifiedAddressServiceDeps {
   readonly geography: Pick<GeographyLookup, 'getGovernorate' | 'listGovernorates' | 'validateHierarchy'>;
@@ -15,7 +15,7 @@ export interface UnifiedAddressServiceDeps {
 /**
  * Module 15 public contract: reusable Parent Address normalization and validation. It owns NO table, writes nothing and
  * emits no event; persistence and history of a Parent's address belong to the Parents module (17).
- * The structured, id-based School Address rules are NOT here: Schools keep calling `GeographyLookup.validateHierarchy`.
+ * Parent, School and Organization addresses share one contract: registered governorate, free-text center/city and village.
  */
 export class UnifiedAddressService {
   private readonly geography: UnifiedAddressServiceDeps['geography'];
@@ -67,28 +67,32 @@ export class UnifiedAddressService {
   }
 
   /**
-   * The ORGANIZATION's own address (separate from the school and parent rules): the country is required, the governorate is
-   * required, the center is optional and the village only under a center. Every node must exist, be ACTIVE and belong to its
-   * parent (Geography `validateHierarchy`), and the governorate must belong to the country the organization chose.
+   * A SCHOOL's address: exactly the Parent Address rules (registered, ACTIVE governorate of the organization's country; center/city and
+   * village free text, never looked up; a village needs a center). The country is derived from `input.organizationId`, never entered.
+   * The error codes are the shared address codes (their names say "parent" for historical reasons; they apply to every address
+   * that inherits its country from an organization).
+   */
+  validateSchoolAddress(input: SchoolAddressInput, tx?: TransactionContext): Promise<ParentAddress> {
+    return this.validateParentAddress(input, tx);
+  }
+
+  /**
+   * The ORGANIZATION's own address (the country is CHOSEN here, so it cannot be derived): the country and the governorate are
+   * required, the governorate must be a registered, ACTIVE governorate of that country (Geography `validateHierarchy`, which also
+   * checks the country is registered and ACTIVE); center/city and village are FREE TEXT with the Parent Address normalization
+   * (NFC, whitespace, at most 200 characters, a village only under a center). No registered center or village is ever required.
    * Geography errors: INVALID_GEOGRAPHY_HIERARCHY, GEOGRAPHY_NODE_NOT_FOUND, GEOGRAPHY_NODE_INACTIVE.
    */
   async validateOrganizationAddress(input: OrganizationAddressInput, tx?: TransactionContext): Promise<OrganizationAddress> {
     if (typeof input !== 'object' || input === null) throw unifiedAddressError('INVALID_PARENT_ADDRESS');
     if (typeof input.countryId !== 'string' || input.countryId.trim() === '') throw unifiedAddressError('INVALID_PARENT_ADDRESS', 'country');
-    const centerId = input.centerId ?? null;
-    const villageId = input.villageId ?? null;
-    const asId = (v: unknown, field: 'governorate' | 'center' | 'village'): string => {
-      if (typeof v !== 'string' || v.trim() === '') throw unifiedAddressError('INVALID_PARENT_ADDRESS', field);
-      return v;
-    };
-    const governorateId = asId(input.governorateId, 'governorate');
-    const validated = await this.geography.validateHierarchy(
-      { governorateId, centerId: centerId === null ? null : asId(centerId, 'center'), villageId: villageId === null ? null : asId(villageId, 'village') },
-      {},
-      tx,
-    );
+    if (typeof input.governorateId !== 'string' || input.governorateId.trim() === '') throw unifiedAddressError('INVALID_PARENT_ADDRESS', 'governorate');
+    const centerName = normalizeAddressText(input.centerName, 'center');
+    const villageName = normalizeAddressText(input.villageName, 'village');
+    if (villageName !== null && centerName === null) throw unifiedAddressError('INVALID_PARENT_ADDRESS', 'village');
+    const validated = await this.geography.validateHierarchy({ governorateId: input.governorateId, centerId: null, villageId: null }, {}, tx);
     if (validated.country.id !== input.countryId) throw unifiedAddressError('ORGANIZATION_ADDRESS_COUNTRY_MISMATCH', 'governorate');
-    return { countryId: validated.country.id, governorateId: validated.governorate.id, centerId: validated.center?.id ?? null, villageId: validated.village?.id ?? null };
+    return { countryId: validated.country.id, governorateId: validated.governorate.id, centerName, villageName };
   }
 
   /**
@@ -115,5 +119,5 @@ export class UnifiedAddressService {
 /** What downstream modules (Parents 17, Students 19, Excel Import 36) should depend on. */
 export type UnifiedAddressLookup = Pick<
   UnifiedAddressService,
-  'validateParentAddress' | 'validateRawParentAddress' | 'describeStoredParentAddress' | 'validateOrganizationAddress'
+  'validateParentAddress' | 'validateSchoolAddress' | 'validateRawParentAddress' | 'describeStoredParentAddress' | 'validateOrganizationAddress'
 >;

@@ -18,8 +18,9 @@ async function build(options: { maxSubmissions?: number } = {}) {
   const app = express();
   app.use(requestContextMiddleware);
   app.use(express.json());
-  app.use('/api/v1/organizations', createOrganizationRouter({ getService: () => t.registration, requireAuthentication, publicSubmissionLimit: limit() }));
-  app.use('/api/v1/schools', createSchoolRouter({ getService: () => t.service, requireAuthentication, publicSubmissionLimit: limit() }));
+  const requirePermission = t.requirePermission;
+  app.use('/api/v1/organizations', createOrganizationRouter({ getService: () => t.registration, requireAuthentication, requirePermission, publicSubmissionLimit: limit() }));
+  app.use('/api/v1/schools', createSchoolRouter({ getService: () => t.service, requireAuthentication, requirePermission, publicSubmissionLimit: limit() }));
   app.use('/api/v1/auth', createAuthRouter({ getService: () => t.h.service, requireAuthentication }));
   app.use(notFoundHandler);
   app.use(errorHandler);
@@ -32,41 +33,44 @@ async function build(options: { maxSubmissions?: number } = {}) {
   const adminAuth = await login(admin);
   const orgForm = (over: { phone?: string; name?: string; countryId?: string; governorateId?: string } = {}) => ({
     applicant: { name: 'أحمد محمد', phone: over.phone ?? '01112345678' },
-    organization: { name: over.name ?? 'دار القرآن', countryId: over.countryId ?? t.country.id, governorateId: over.governorateId ?? t.gov.id, centerId: t.center.id },
+    organization: { name: over.name ?? 'دار القرآن', countryId: over.countryId ?? t.country.id, governorateId: over.governorateId ?? t.gov.id, centerName: 'مركز غير مسجل' },
   });
   const schoolBody = (organizationId: string, over: { name?: string; governorateId?: string; countryId?: string } = {}) => ({
     organizationId,
-    school: { name: over.name ?? 'الرئيسية', governorateId: over.governorateId ?? t.gov.id, ...(over.countryId ? { countryId: over.countryId } : {}), gps },
+    school: { name: over.name ?? 'الرئيسية', governorateId: over.governorateId ?? t.gov.id, ...(over.countryId ? { countryId: over.countryId } : {}), centerName: 'مركز غير مسجل', gps },
   });
-  const subForm = (parentSchoolId: string, over: { phone?: string; schoolName?: string } = {}) => ({
+  const submitForm = (over: { phone?: string; schoolName?: string; organizationId?: string } = {}) => ({
     applicant: { name: 'سارة', phone: over.phone ?? '01122223333' },
-    parentSchoolId,
-    school: { name: over.schoolName ?? 'الفرع', governorateId: t.gov.id, gps },
+    organizationId: over.organizationId ?? t.org.id,
+    school: { name: over.schoolName ?? 'مدرسة مقدمة', governorateId: t.gov.id, centerName: 'مركز حر', villageName: 'قرية حرة', gps },
   });
-  const mainSchool = async (name = 'الرئيسية') => {
+  /** A school created by the organization manager (PENDING), optionally approved (ACTIVE). */
+  const makeSchool = async (name = 'الرئيسية', approve = false) => {
     const res = await request(app).post('/api/v1/schools').set(adminAuth).send(schoolBody(t.org.id, { name }));
-    return res.body.data as { id: string; status: string; countryId: string };
+    const school = res.body.data as { id: string; status: string; countryId: string };
+    if (approve) await request(app).post(`/api/v1/schools/${school.id}/approve`).set(adminAuth);
+    return school;
   };
-  return { app, t, admin, adminAuth, login, orgForm, schoolBody, subForm, mainSchool };
+  return { app, t, admin, adminAuth, login, orgForm, schoolBody, submitForm, makeSchool };
 }
 
 const orgs = '/api/v1/organizations';
 const schools = '/api/v1/schools';
 
 describe('POST /organizations (public registration)', () => {
-  it('creates the applicant account, the organization and the organization-scoped MAIN_ADMIN, with no login (201, standard envelope)', async () => {
+  it('creates the applicant account, the organization and the organization-scoped ORGANIZATION_MANAGER (never MAIN_ADMIN), with no login (201, standard envelope)', async () => {
     const { app, t, orgForm } = await build();
     const res = await request(app).post(orgs).send(orgForm());
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
       success: true,
-      data: { organization: { name: 'دار القرآن', status: 'ACTIVE', countryId: t.country.id, address: { governorateId: t.gov.id, centerId: t.center.id, villageId: null } }, applicant: { accountCreated: true } },
+      data: { organization: { name: 'دار القرآن', status: 'ACTIVE', countryId: t.country.id, address: { governorateId: t.gov.id, centerName: 'مركز غير مسجل', villageName: null } }, applicant: { accountCreated: true } },
     });
     expect(res.headers['x-request-id']).toBeTruthy();
     expect(res.body.requestId).toBe(res.headers['x-request-id']);
     const user = await t.h.identity.findByPhone('+201112345678');
     expect(res.body.data.applicant.userId).toBe(user!.id);
-    expect(await t.h.roles.listActiveRoles(user!.id)).toEqual(['MAIN_ADMIN']);
+    expect(await t.h.roles.listActiveRoles(user!.id)).toEqual(['ORGANIZATION_MANAGER']);
     expect(await t.organizations.isOrganizationAdmin(user!.id, res.body.data.organization.id)).toBe(true);
     expect(await t.organizations.isOrganizationAdmin(user!.id, t.org.id)).toBe(false); // the other organization is out of scope
     expect(JSON.stringify(res.body)).not.toMatch(/password|token/i);
@@ -81,7 +85,7 @@ describe('POST /organizations (public registration)', () => {
     expect(fields).toEqual(expect.arrayContaining(['applicant.name', 'applicant.phone', 'organization.name', 'organization.countryId', 'organization.governorateId']));
     const mismatch = await request(app).post(orgs).send(orgForm({ countryId: t.france.id }));
     expect(mismatch.body.error.code).toBe('ORGANIZATION_ADDRESS_COUNTRY_MISMATCH');
-    const foreignGov = await request(app).post(orgs).send({ ...orgForm({ governorateId: t.paris.id }), organization: { ...orgForm().organization, governorateId: t.paris.id, centerId: null } });
+    const foreignGov = await request(app).post(orgs).send({ ...orgForm({ governorateId: t.paris.id }), organization: { ...orgForm().organization, governorateId: t.paris.id, centerName: null } });
     expect(foreignGov.body.error.code).toBe('ORGANIZATION_ADDRESS_COUNTRY_MISMATCH');
     const badPhone = await request(app).post(orgs).send(orgForm({ phone: '12345' }));
     expect(badPhone.body.error.code).toBe('INVALID_PHONE_NUMBER');
@@ -108,7 +112,7 @@ describe('POST /organizations (public registration)', () => {
     const ok = await request(app).post(orgs).set(auth).send(orgForm({ phone: teacher.phone }));
     expect(ok.status).toBe(201);
     expect(ok.body.data.applicant).toEqual({ userId: teacher.id, accountCreated: false });
-    expect((await t.h.roles.listActiveRoles(teacher.id)).sort()).toEqual(['MAIN_ADMIN', 'TEACHER']);
+    expect((await t.h.roles.listActiveRoles(teacher.id)).sort()).toEqual(['ORGANIZATION_MANAGER', 'TEACHER']);
     const mismatch = await request(app).post(orgs).set(auth).send(orgForm({ phone: '01155550000', name: 'Other' }));
     expect(mismatch.body.error.code).toBe('SCHOOL_APPLICANT_IDENTITY_MISMATCH');
     expect((await request(app).post(orgs).set('Authorization', 'Bearer nope').send(orgForm({ name: 'Third' }))).status).toBe(401);
@@ -123,7 +127,7 @@ describe('POST /organizations (public registration)', () => {
     expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
   });
 
-  it('GET /organizations lists only the caller\'s organizations; GET /organizations/:id hides the others (404); both need a login', async () => {
+  it('GET /organizations lists only the caller\'s organizations; GET /organizations/:id is denied (403) for another organization; both need a login', async () => {
     const { app, t, adminAuth, login } = await build();
     expect((await request(app).get(orgs)).status).toBe(401);
     const mine = await request(app).get(orgs).set(adminAuth);
@@ -132,88 +136,119 @@ describe('POST /organizations (public registration)', () => {
     expect(mine.body.data[0].id).toBe(t.org.id);
     expect((await request(app).get(`${orgs}/${t.org.id}`).set(adminAuth)).status).toBe(200);
     const otherAdmin = await login(await t.newOrgAdmin((await t.organizations.createOrganization({ name: 'Elsewhere', countryId: t.country.id, governorateId: t.gov.id })).id));
-    expect((await request(app).get(`${orgs}/${t.org.id}`).set(otherAdmin)).status).toBe(404);
-    const roleOnly = await login(await t.h.createUser({ role: 'MAIN_ADMIN' })); // MAIN_ADMIN role without an organization link
+    const cross = await request(app).get(`${orgs}/${t.org.id}`).set(otherAdmin);
+    expect([cross.status, cross.body.error.code]).toEqual([403, 'ACCESS_DENIED']);
+    const platformAdmin = await login(await t.h.createUser({ role: 'MAIN_ADMIN' })); // the platform administrator is not an organization manager
+    expect((await request(app).get(orgs).set(platformAdmin)).status).toBe(403);
+    expect((await request(app).get(`${orgs}/${t.org.id}`).set(platformAdmin)).status).toBe(403);
+    const roleOnly = await login(await t.h.createUser({ role: 'ORGANIZATION_MANAGER' })); // role without an organization link
     expect((await request(app).get(orgs).set(roleOnly)).body.meta.total).toBe(0);
+    expect((await request(app).get(`${orgs}/${t.org.id}`).set(roleOnly)).status).toBe(403);
     expect((await request(app).get(`${orgs}/not-a-uuid`).set(adminAuth)).status).toBe(400);
   });
 });
 
-describe('POST /schools (authenticated, administrator of the organization)', () => {
-  it('creates a Main School under an existing organization, deriving the country from it (201)', async () => {
+describe('POST /schools (authenticated, manager of the organization)', () => {
+  it('creates a school under the manager\'s organization: PENDING, country from the organization, free-text center/village (201)', async () => {
     const { app, t, adminAuth, schoolBody } = await build();
     const res = await request(app).post(schools).set(adminAuth).send(schoolBody(t.org.id));
     expect(res.status).toBe(201);
-    expect(res.body.data).toMatchObject({ type: 'MAIN', status: 'ACTIVE', organizationId: t.org.id, countryId: t.country.id });
+    expect(res.body.data).toMatchObject({ status: 'PENDING', organizationId: t.org.id, countryId: t.country.id, centerName: 'مركز غير مسجل', villageName: null, applicantUserId: null });
+    for (const removed of ['type', 'parentSchoolId', 'centerId', 'villageId']) expect(res.body.data).not.toHaveProperty(removed);
   });
 
-  it('needs a login (401); another organization\'s administrator and a user with only the role or only the link get 403', async () => {
+  it('needs a login (401); another organization\'s manager, a platform administrator, and a user with only the role or only the link get 403 ACCESS_DENIED', async () => {
     const { app, t, schoolBody, login } = await build();
     expect((await request(app).post(schools).send(schoolBody(t.org.id))).status).toBe(401);
     const otherOrg = await t.organizations.createOrganization({ name: 'Elsewhere', countryId: t.country.id, governorateId: t.gov.id });
     const otherAdmin = await login(await t.newOrgAdmin(otherOrg.id));
     const cross = await request(app).post(schools).set(otherAdmin).send(schoolBody(t.org.id));
-    expect([cross.status, cross.body.error.code]).toEqual([403, 'SCHOOL_ACTION_NOT_ALLOWED']);
-    const roleOnly = await login(await t.h.createUser({ role: 'MAIN_ADMIN' }));
-    expect((await request(app).post(schools).set(roleOnly).send(schoolBody(t.org.id))).status).toBe(403);
+    expect([cross.status, cross.body.error.code]).toEqual([403, 'ACCESS_DENIED']);
+    for (const role of ['MAIN_ADMIN', 'ORGANIZATION_MANAGER', 'SCHOOL_MANAGER'] as const) {
+      const who = await login(await t.h.createUser({ role }));
+      expect([role, (await request(app).post(schools).set(who).send(schoolBody(t.org.id))).status]).toEqual([role, 403]);
+    }
+    expect(t.schools.rows.size).toBe(0);
   });
 
-  it('enforces the country invariant: another country\'s governorate or a conflicting client country is refused', async () => {
+  it('enforces the address rules: another country\'s governorate is refused, a village needs a center, a conflicting client country is refused', async () => {
     const { app, t, adminAuth, schoolBody } = await build();
     const foreign = await request(app).post(schools).set(adminAuth).send(schoolBody(t.org.id, { governorateId: t.paris.id }));
-    expect([foreign.status, foreign.body.error.code]).toEqual([400, 'SCHOOL_COUNTRY_MISMATCH']);
+    expect([foreign.status, foreign.body.error.code]).toEqual([400, 'PARENT_ADDRESS_COUNTRY_MISMATCH']);
     const conflicting = await request(app).post(schools).set(adminAuth).send(schoolBody(t.org.id, { countryId: t.france.id, name: 'x' }));
     expect(conflicting.body.error.code).toBe('SCHOOL_COUNTRY_MISMATCH');
+    const village = await request(app).post(schools).set(adminAuth).send({ ...schoolBody(t.org.id, { name: 'v' }), school: { ...schoolBody(t.org.id).school, centerName: null, villageName: 'قرية' } });
+    expect(village.body.error.code).toBe('INVALID_PARENT_ADDRESS');
     const sameCountry = await request(app).post(schools).set(adminAuth).send(schoolBody(t.org.id, { countryId: t.country.id, name: 'y' }));
     expect(sameCountry.status).toBe(201);
   });
 
-  it('validates the body (400)', async () => {
-    const { app, adminAuth } = await build();
+  it('validates the body (400); the obsolete registered ids are not accepted as the address', async () => {
+    const { app, adminAuth, t } = await build();
     const res = await request(app).post(schools).set(adminAuth).send({});
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    const wrongType = await request(app).post(schools).set(adminAuth).send({ organizationId: t.org.id, school: { name: 'n', governorateId: t.gov.id, centerName: 12, gps } });
+    expect(wrongType.status).toBe(400);
   });
 });
 
-describe('POST /schools/sub-submissions (public) and the approval flow', () => {
-  it('creates a PENDING request with a new account and no role, then the organization administrator approves it', async () => {
-    const { app, t, subForm, adminAuth, mainSchool } = await build();
-    const parent = await mainSchool();
-    const submitted = await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id));
+describe('POST /schools/submissions (public) and the approval flow', () => {
+  it('creates a PENDING school with a new account and no role, then ONLY the owning organization manager approves it', async () => {
+    const { app, t, submitForm, adminAuth, login } = await build();
+    const submitted = await request(app).post(`${schools}/submissions`).send(submitForm());
     expect(submitted.status).toBe(201);
-    expect(submitted.body.data.school).toMatchObject({ type: 'SUB', status: 'PENDING', parentSchoolId: parent.id, organizationId: t.org.id, countryId: t.country.id });
+    expect(submitted.body.data.school).toMatchObject({ status: 'PENDING', organizationId: t.org.id, countryId: t.country.id, centerName: 'مركز حر', villageName: 'قرية حرة' });
     const applicantId = submitted.body.data.applicant.userId as string;
+    expect(submitted.body.data.school.applicantUserId).toBe(applicantId);
     expect(await t.h.roles.listActiveRoles(applicantId)).toEqual([]);
+    const id = submitted.body.data.school.id as string;
 
-    const approved = await request(app).post(`${schools}/${submitted.body.data.school.id}/approve`).set(adminAuth);
+    // the manager of ANOTHER organization cannot approve or reject it
+    const otherOrg = await t.organizations.createOrganization({ name: 'Elsewhere', countryId: t.country.id, governorateId: t.gov.id });
+    const otherAdmin = await login(await t.newOrgAdmin(otherOrg.id));
+    for (const [url, body] of [[`${schools}/${id}/approve`, {}], [`${schools}/${id}/reject`, { reason: 'x' }]] as const) {
+      const denied = await request(app).post(url).set(otherAdmin).send(body);
+      expect([url, denied.status, denied.body.error.code]).toEqual([url, 403, 'ACCESS_DENIED']);
+    }
+    expect((await t.service.getById(id)).status).toBe('PENDING');
+
+    const approved = await request(app).post(`${schools}/${id}/approve`).set(adminAuth);
     expect(approved.status).toBe(200);
-    expect(approved.body.data.manager).toMatchObject({ userId: applicantId, isActive: true });
+    expect(approved.body.data.school.status).toBe('ACTIVE');
+    expect(approved.body.data.manager).toMatchObject({ userId: applicantId, isActive: true, source: 'APPROVAL' });
     expect(await t.h.roles.listActiveRoles(applicantId)).toEqual(['SCHOOL_MANAGER']);
-    const again = await request(app).post(`${schools}/${submitted.body.data.school.id}/approve`).set(adminAuth);
+    const again = await request(app).post(`${schools}/${id}/approve`).set(adminAuth);
     expect([again.status, again.body.error.code]).toEqual([422, 'SCHOOL_INVALID_STATUS_TRANSITION']);
   });
 
-  it('refuses an unknown parent (422) and a malformed parent id (400)', async () => {
-    const { app, subForm } = await build();
-    const unknown = await request(app).post(`${schools}/sub-submissions`).send(subForm('11111111-1111-4111-8111-111111111111'));
-    expect([unknown.status, unknown.body.error.code]).toEqual([422, 'SCHOOL_PARENT_INVALID']);
-    expect((await request(app).post(`${schools}/sub-submissions`).send(subForm('nope'))).status).toBe(400);
+  it('approving a school created by the manager has no applicant: it becomes ACTIVE with manager null', async () => {
+    const { app, adminAuth, makeSchool } = await build();
+    const school = await makeSchool();
+    expect(school.status).toBe('PENDING'); // never ACTIVE before approval
+    const approved = await request(app).post(`${schools}/${school.id}/approve`).set(adminAuth);
+    expect([approved.status, approved.body.data.school.status, approved.body.data.manager]).toEqual([200, 'ACTIVE', null]);
+  });
+
+  it('refuses an unknown organization (404-class) and a malformed organization id (400); the old Sub-School path does not exist', async () => {
+    const { app, submitForm } = await build();
+    const unknown = await request(app).post(`${schools}/submissions`).send(submitForm({ organizationId: '11111111-1111-4111-8111-111111111111' }));
+    expect(unknown.body.error.code).toBe('ORGANIZATION_NOT_FOUND');
+    expect((await request(app).post(`${schools}/submissions`).send(submitForm({ organizationId: 'nope' }))).status).toBe(400);
+    expect((await request(app).post(`${schools}/sub-submissions`).send(submitForm())).status).toBe(404);
   });
 
   it('an existing phone is the IAM conflict (409) and creates nothing', async () => {
-    const { app, t, subForm, mainSchool } = await build();
-    const parent = await mainSchool();
+    const { app, t, submitForm } = await build();
     const owner = await t.h.createUser({ role: 'TEACHER' });
-    const res = await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id, { phone: owner.phone }));
+    const res = await request(app).post(`${schools}/submissions`).send(submitForm({ phone: owner.phone }));
     expect([res.status, res.body.error.code]).toEqual([409, 'USER_PHONE_ALREADY_EXISTS']);
     expect(await t.h.roles.listActiveRoles(owner.id)).toEqual(['TEACHER']);
   });
 
   it('rejection needs a reason (400), then records it and assigns nothing; the account survives', async () => {
-    const { app, t, subForm, adminAuth, mainSchool } = await build();
-    const parent = await mainSchool();
-    const submitted = await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id));
+    const { app, t, submitForm, adminAuth } = await build();
+    const submitted = await request(app).post(`${schools}/submissions`).send(submitForm());
     const id = submitted.body.data.school.id as string;
     expect((await request(app).post(`${schools}/${id}/reject`).set(adminAuth).send({})).status).toBe(400);
     const rejected = await request(app).post(`${schools}/${id}/reject`).set(adminAuth).send({ reason: 'الموقع غير مناسب' });
@@ -224,51 +259,54 @@ describe('POST /schools/sub-submissions (public) and the approval flow', () => {
   });
 
   it('limits public submissions per client (429)', async () => {
-    const { app, subForm, mainSchool } = await build({ maxSubmissions: 1 });
-    const parent = await mainSchool();
-    expect((await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id, { phone: '01133330001' }))).status).toBe(201);
-    const limited = await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id, { phone: '01133330002', schoolName: 'x' }));
+    const { app, submitForm } = await build({ maxSubmissions: 1 });
+    expect((await request(app).post(`${schools}/submissions`).send(submitForm({ phone: '01133330001' }))).status).toBe(201);
+    const limited = await request(app).post(`${schools}/submissions`).send(submitForm({ phone: '01133330002', schoolName: 'x' }));
     expect([limited.status, limited.body.error.code]).toEqual([429, 'RATE_LIMITED']);
   });
 });
 
-describe('organization scope on the school endpoints', () => {
-  it('require authentication (401), and another organization\'s administrator is refused (403) or told "not found" (404)', async () => {
-    const { app, t, subForm, login, mainSchool } = await build();
-    const parent = await mainSchool();
-    const sub = (await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id))).body.data.school.id as string;
+describe('organization scope on the school endpoints (enforced by the Authorization Engine)', () => {
+  it('require authentication (401); another organization\'s manager, a teacher and the platform administrator are refused (403 ACCESS_DENIED) and nothing changes', async () => {
+    const { app, t, submitForm, login, makeSchool } = await build();
+    const active = await makeSchool('active one', true);
+    const sub = (await request(app).post(`${schools}/submissions`).send(submitForm())).body.data.school.id as string;
     const otherOrg = await t.organizations.createOrganization({ name: 'Elsewhere', countryId: t.country.id, governorateId: t.gov.id });
     const otherAdmin = await login(await t.newOrgAdmin(otherOrg.id));
     const teacher = await login(await t.h.createUser({ role: 'TEACHER' }));
+    const platformAdmin = await login(await t.h.createUser({ role: 'MAIN_ADMIN' }));
     const calls: [string, string, object?][] = [
       ['post', `${schools}/${sub}/approve`],
       ['post', `${schools}/${sub}/reject`, { reason: 'x' }],
-      ['post', `${schools}/${parent.id}/deactivate`],
-      ['post', `${schools}/${parent.id}/reactivate`],
+      ['post', `${schools}/${active.id}/deactivate`],
+      ['post', `${schools}/${active.id}/reactivate`],
       ['patch', `${schools}/${sub}/gps`, { gps }],
-      ['put', `${schools}/${parent.id}/manager`, { userId: '11111111-1111-4111-8111-111111111111' }],
-      ['delete', `${schools}/${parent.id}/manager`],
+      ['put', `${schools}/${active.id}/manager`, { userId: '11111111-1111-4111-8111-111111111111' }],
+      ['delete', `${schools}/${active.id}/manager`],
       ['get', schools],
       ['get', `${schools}/${sub}`],
     ];
     const call = (method: string, url: string) => (request(app) as unknown as Record<string, (u: string) => request.Test>)[method]!(url);
     for (const [method, url, body] of calls) expect([method, url, (await call(method, url).send(body ?? {})).status]).toEqual([method, url, 401]);
     for (const [method, url, body] of calls.slice(0, 7)) {
-      for (const who of [otherAdmin, teacher]) {
+      for (const who of [otherAdmin, teacher, platformAdmin]) {
         const res = await call(method, url).set(who).send(body ?? {});
-        expect([method, url, res.status, res.body.error?.code]).toEqual([method, url, 403, 'SCHOOL_ACTION_NOT_ALLOWED']);
+        expect([method, url, res.status, res.body.error?.code]).toEqual([method, url, 403, 'ACCESS_DENIED']);
       }
     }
-    expect((await request(app).get(`${schools}/${sub}`).set(otherAdmin)).status).toBe(404);
-    expect((await request(app).get(schools).set(otherAdmin)).body.meta.total).toBe(0);
+    expect((await request(app).get(`${schools}/${sub}`).set(otherAdmin)).status).toBe(403); // not even readable
+    expect((await request(app).get(schools).set(otherAdmin)).body.meta.total).toBe(0); // own organization has no schools
+    expect((await request(app).get(schools).set(teacher)).status).toBe(403);
+    expect((await request(app).get(schools).set(platformAdmin)).status).toBe(403);
     expect((await t.service.getById(sub)).status).toBe('PENDING');
+    expect((await t.service.getById(active.id)).status).toBe('ACTIVE');
   });
 
-  it('GET /schools lists what the caller may see (paginated, filtered); the organization administrator can correct GPS, change status and assign/revoke a manager', async () => {
-    const { app, t, subForm, adminAuth, mainSchool } = await build();
-    const parent = await mainSchool();
-    const a = (await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id, { phone: '01122226661', schoolName: 'فرع أ' }))).body.data;
-    await request(app).post(`${schools}/sub-submissions`).send(subForm(parent.id, { phone: '01122226662', schoolName: 'فرع ب' }));
+  it('GET /schools lists what the caller may see (paginated, filtered); the organization manager can correct GPS, change status and assign/revoke a manager', async () => {
+    const { app, t, submitForm, adminAuth, makeSchool } = await build();
+    const school = await makeSchool('الرئيسية', true);
+    const a = (await request(app).post(`${schools}/submissions`).send(submitForm({ phone: '01122226661', schoolName: 'مدرسة أ' }))).body.data;
+    await request(app).post(`${schools}/submissions`).send(submitForm({ phone: '01122226662', schoolName: 'مدرسة ب' }));
     const all = await request(app).get(schools).set(adminAuth).query({ pageSize: 2, sort: 'code' });
     expect(all.status).toBe(200);
     expect(all.body.meta).toMatchObject({ page: 1, pageSize: 2, total: 3, totalPages: 2 });
@@ -280,12 +318,30 @@ describe('organization scope on the school endpoints', () => {
     expect((await request(app).patch(`${schools}/${a.school.id}/gps`).set(adminAuth).send({ gps: fix })).body.data.gps).toEqual(fix);
     await request(app).post(`${schools}/${a.school.id}/approve`).set(adminAuth);
     expect((await request(app).patch(`${schools}/${a.school.id}/gps`).set(adminAuth).send({ gps })).body.error.code).toBe('SCHOOL_GPS_LOCKED');
-    expect((await request(app).post(`${schools}/${parent.id}/deactivate`).set(adminAuth)).body.data.status).toBe('INACTIVE');
-    expect((await request(app).post(`${schools}/${parent.id}/reactivate`).set(adminAuth)).body.data.status).toBe('ACTIVE');
+    expect((await request(app).post(`${schools}/${school.id}/deactivate`).set(adminAuth)).body.data.status).toBe('INACTIVE');
+    expect((await request(app).post(`${schools}/${school.id}/reactivate`).set(adminAuth)).body.data.status).toBe('ACTIVE');
     const manager = await t.h.createUser();
-    const assigned = await request(app).put(`${schools}/${parent.id}/manager`).set(adminAuth).send({ userId: manager.id });
-    expect(assigned.body.data).toMatchObject({ userId: manager.id, isActive: true, source: 'MAIN_ADMIN_ASSIGNMENT' });
-    expect((await request(app).delete(`${schools}/${parent.id}/manager`).set(adminAuth)).body.data.isActive).toBe(false);
+    const assigned = await request(app).put(`${schools}/${school.id}/manager`).set(adminAuth).send({ userId: manager.id });
+    expect(assigned.body.data).toMatchObject({ userId: manager.id, isActive: true, source: 'ASSIGNMENT' });
+    expect((await request(app).delete(`${schools}/${school.id}/manager`).set(adminAuth)).body.data.isActive).toBe(false);
+  });
+
+  it('a School Manager reads and lists ONLY their own school and cannot perform any management operation', async () => {
+    const { app, t, adminAuth, login, makeSchool } = await build();
+    const mine = await makeSchool('mine', true);
+    const other = await makeSchool('other', true);
+    const manager = await t.h.createUser({ role: 'TEACHER' });
+    await request(app).put(`${schools}/${mine.id}/manager`).set(adminAuth).send({ userId: manager.id });
+    const auth = await login(manager);
+    expect((await request(app).get(`${schools}/${mine.id}`).set(auth)).status).toBe(200);
+    expect((await request(app).get(`${schools}/${other.id}`).set(auth)).status).toBe(403);
+    const list = await request(app).get(schools).set(auth);
+    expect(list.body.data.map((s: { id: string }) => s.id)).toEqual([mine.id]);
+    for (const [method, url] of [['post', `${schools}/${mine.id}/deactivate`], ['post', `${schools}/${mine.id}/approve`], ['put', `${schools}/${mine.id}/manager`], ['delete', `${schools}/${mine.id}/manager`]] as const) {
+      const res = await (request(app) as unknown as Record<string, (u: string) => request.Test>)[method]!(url).set(auth).send({ userId: manager.id });
+      expect([method, url, res.status]).toEqual([method, url, 403]);
+    }
+    expect((await request(app).post(schools).set(auth).send({ organizationId: t.org.id, school: { name: 'n', governorateId: t.gov.id, gps } })).status).toBe(403);
   });
 });
 

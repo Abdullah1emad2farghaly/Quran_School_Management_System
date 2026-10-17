@@ -8,8 +8,10 @@ Owned by Module 09 (`src/modules/09-roles-permissions`). It stores **who has whi
 - A permission is only the **first** authorization step (roles → permissions). Scope, organization, school, ownership, business rules and smart guards still apply (Module 12). Reporting scope never grants management permissions.
 
 ## Roles (§18)
-Exactly nine: `MAIN_ADMIN`, `GOVERNORATE_MANAGER`, `CENTER_MANAGER`, `VILLAGE_MANAGER`, `SCHOOL_MANAGER`, `TEACHER`, `STUDENT`, `PARENT`, `SUBSCRIPTION_COLLECTOR` (Arabic and English names in `ROLE_CATALOG`). No Supervisor, no Competition Manager. The list is fixed in code **and** by a database CHECK; changing it needs an approved specification change and a migration.
+Exactly ten: `MAIN_ADMIN`, `ORGANIZATION_MANAGER`, `GOVERNORATE_MANAGER`, `CENTER_MANAGER`, `VILLAGE_MANAGER`, `SCHOOL_MANAGER`, `TEACHER`, `STUDENT`, `PARENT`, `SUBSCRIPTION_COLLECTOR` (Arabic and English names in `ROLE_CATALOG`). No Supervisor, no Competition Manager. The list is fixed in code **and** by a database CHECK; changing it needs an approved specification change and a migration.
 `STUDENT` is in the catalog but **cannot be assigned** to a User (Student has no login, password or session in V1).
+
+**MAIN_ADMIN** is the platform-wide administrator (system-level, not scoped to an organization; holds only explicitly registered platform permissions, none yet for schools or organizations). **ORGANIZATION_MANAGER** manages ONE organization and its schools: the role alone grants nothing; the organization manager link (`organization_admins`, Module 13) ties the user to exactly one organization and is checked by the Authorization Engine's `ORGANIZATION` and `SCHOOL` scope resolvers. Organization registration assigns ORGANIZATION_MANAGER (never MAIN_ADMIN). The first Main Admin (`bootstrap:main-admin`) is platform-level and linked to no organization. Migration `20261015100000-organization-manager-role` extended the database CHECK and migrated assignments without promoting anyone (see `docs/ORGANIZATION.md`).
 
 ## Role assignments (§19)
 Table `user_roles`, one row per assignment, **never deleted**: `assigned_at`, `assigned_by`, `revoked_at`, `revoked_by` (`NULL` actor = the system, e.g. a setup script creating the first Main Admin).

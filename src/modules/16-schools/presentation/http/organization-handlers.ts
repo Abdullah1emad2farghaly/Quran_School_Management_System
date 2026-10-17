@@ -2,7 +2,7 @@ import type { PageResult } from '../../../00-shared-kernel/public';
 import type { OrganizationRegistrationService } from '../../application/services/organization-registration-service';
 import { serializeOrganization, serializeOrganizationRegistration } from './school-serializer';
 
-export type OrganizationHandlerService = Pick<OrganizationRegistrationService, 'registerOrganization' | 'listOrganizationsForActor' | 'getOrganizationForActor'>;
+export type OrganizationHandlerService = Pick<OrganizationRegistrationService, 'registerOrganization' | 'listOrganizationsForActor' | 'getOrganization'>;
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const obj = (value: unknown): Json => (typeof value === 'object' && value !== null ? (value as Json) : {});
@@ -19,8 +19,8 @@ export function createOrganizationHandlers(getService: () => OrganizationHandler
             name: organization.name,
             countryId: organization.countryId,
             governorateId: organization.governorateId,
-            centerId: organization.centerId ?? null,
-            villageId: organization.villageId ?? null,
+            centerName: organization.centerName ?? null,
+            villageName: organization.villageName ?? null,
           },
           ...(authenticatedUserId ? { authenticatedUserId } : {}),
         }),
@@ -32,6 +32,6 @@ export function createOrganizationHandlers(getService: () => OrganizationHandler
       return { ...result, items: result.items.map(serializeOrganization) };
     },
 
-    get: async (actorId: string, organizationId: string) => serializeOrganization(await getService().getOrganizationForActor(organizationId, actorId)),
+    get: async (organizationId: string) => serializeOrganization(await getService().getOrganization(organizationId)),
   };
 }

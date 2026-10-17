@@ -29,12 +29,7 @@ Lifetimes are constants in code (`token-policy.ts`), **not** environment setting
 - **Password reset** (Module 11) calls `SessionService.revokeAllForUser(userId, 'PASSWORD_RESET')`.
 
 ## HTTP API (`/api/v1/auth`)
-| Endpoint | Auth | Body | Success |
-|---|---|---|---|
-| `POST /login` | none | `{ phone, password }` | 200 `{ tokenType, accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt, user:{id,phone}, roles }` |
-| `POST /refresh` | none | `{ refreshToken }` | 200, same shape (new tokens) |
-| `POST /logout` | Bearer access token | – | 204 |
-| `POST /logout-all` | Bearer access token | – | 204 |
+The endpoints (`POST /login`, `/refresh`, `/logout`, `/logout-all`) are documented in the OpenAPI document served at `/api-docs` (`docs/API-DOCUMENTATION.md`; contract in `src/modules/10-sessions-jwt/presentation/http/auth.openapi.ts`).
 
 Token responses carry `Cache-Control: no-store`. The access token is accepted **only** from `Authorization: Bearer <token>` (never from the URL or body). `roles` in the response is informational for the UI; the backend never trusts it.
 Errors (Arabic + English): `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS`, `ACCESS_TOKEN_INVALID`, `ACCESS_TOKEN_EXPIRED` (the client should refresh), `SESSION_REVOKED`, `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REUSED` (all 401), `ACCOUNT_INACTIVE` (403), `SESSION_CONCURRENT_MODIFICATION` (409).

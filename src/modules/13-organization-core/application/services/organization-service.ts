@@ -22,8 +22,9 @@ export interface CreateOrganizationInput {
   readonly name: unknown;
   readonly countryId: unknown;
   readonly governorateId: unknown;
-  readonly centerId?: unknown;
-  readonly villageId?: unknown;
+  /** Free text (normalized by the caller with the Module 15 rules). */
+  readonly centerName?: unknown;
+  readonly villageName?: unknown;
 }
 
 export interface AssignOrganizationCountryResult {
@@ -90,8 +91,8 @@ export class OrganizationService {
         code,
         countryId: input.countryId,
         governorateId: input.governorateId,
-        centerId: input.centerId,
-        villageId: input.villageId,
+        centerName: input.centerName,
+        villageName: input.villageName,
         clock: this.clock,
       });
       await this.repository.insert(organization, t);

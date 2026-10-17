@@ -1,17 +1,17 @@
-// Public contract of Module 16 (Schools): Main Schools and Sub-School requests (§29-31), the school-scoped manager link
-// with history, GPS rules (20 m accuracy, 50 m geofence) and the gap-free school code (SC-000001).
-// No HTTP endpoints and no permissions yet (decisions D-1/D-2 are open). Other modules depend on `SchoolLookup` (read-only)
-// and never touch this module's tables or internals. The School Address uses the Geography lookup (structured rules).
+// Public contract of Module 16 (Schools): schools that belong directly to an organization (§29-31; no Main/Sub distinction; every school
+// starts PENDING and is approved by its organization's manager), the school-scoped manager link with history, GPS rules (20 m accuracy,
+// 50 m geofence) and the gap-free school code (SC-000001). HTTP endpoints are protected by the Authorization Engine (`registerSchoolAuthorization`).
+// Other modules depend on `SchoolLookup` (read-only) and never touch this module's tables or internals. The School Address uses the shared
+// address contract (Module 15: registered governorate, free-text center/city and village).
 export {
   SchoolService,
   type SchoolLookup,
   type SchoolServiceDeps,
   type SchoolAddressInput,
-  type CreateMainSchoolInput,
-  type RequestSubSchoolInput,
-  type ApproveSubSchoolResult,
+  type CreateSchoolInput,
+  type ApproveSchoolResult,
   type ApplicantInput,
-  type SubmitSubSchoolInput,
+  type SubmitSchoolInput,
   type SchoolSubmissionResult,
   type ListSchoolsInput,
 } from '../application/services/school-service';
@@ -21,6 +21,7 @@ export {
   type OrganizationRegistrationResult,
   type RegisterOrganizationInput,
 } from '../application/services/organization-registration-service';
+export { registerSchoolAuthorization, SchoolPermissions, SCHOOL_TARGET_TYPE, type SchoolAuthorizationDeps } from '../application/services/school-authorization';
 export { ApplicantAccountResolver } from '../application/services/applicant-account-resolver';
 export { createOrganizationRouter, type OrganizationRouterDeps } from '../presentation/http/organization-routes';
 export { createOrganizationHandlers, type OrganizationHandlerService } from '../presentation/http/organization-handlers';
@@ -29,7 +30,6 @@ export type { SchoolRepository, SchoolListQuery, SchoolSortKey, SchoolStatusHist
 export type { SchoolManagerRepository } from '../application/ports/school-manager-repository';
 export type { SchoolCodeSequence } from '../application/ports/school-code-sequence';
 export { SCHOOL_STATUSES, canTransitionSchoolStatus, isSchoolStatus, type SchoolStatus } from '../domain/value-objects/school-status';
-export { SCHOOL_TYPES, type SchoolType } from '../domain/value-objects/school-type';
 export { SCHOOL_CODE_PATTERN, formatSchoolCode, isSchoolCode } from '../domain/value-objects/school-code';
 export { APPLICANT_NAME_MAX_LENGTH, normalizeApplicantName } from '../domain/value-objects/applicant-name';
 export { SCHOOL_NAME_MAX_LENGTH, normalizeSchoolName } from '../domain/value-objects/school-name';

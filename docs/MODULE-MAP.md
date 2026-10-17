@@ -15,6 +15,6 @@
 | 9 Import / Reporting / File Access | 36 Excel Import · 37 Reports Core · 38 Report Modules · 39 File / Excel Access Control |
 | 10 Final Integration | 40 Integration & E2E |
 
-**Permanent rule:** every module is complete only with its own REST API endpoints (routes, controllers/handlers, validation, tests and API documentation) as well as its schema, domain, application and infrastructure code. Module 16 (Schools) is the first module with business endpoints (schools and organization registration, which lives in Module 16 because it needs IAM, roles, Geography and Unified Address); see `docs/SCHOOLS.md`.
+**Permanent rule:** every module is complete only with its own REST API endpoints (routes, controllers/handlers, validation, tests and API documentation) as well as its schema, domain, application and infrastructure code. Module 16 (Schools) is the first module with business endpoints (schools and organization registration, which lives in Module 16 because it needs IAM, roles, Geography and Unified Address); see `docs/SCHOOLS.md`. **API documentation gate:** every endpoint must be documented in OpenAPI (Swagger UI at `/api-docs`) with its contract registered in `src/app/openapi/api-documents.ts` and verified by `npm run api:verify`; a module with undocumented or outdated endpoints cannot be COMPLETED (`docs/API-DOCUMENTATION.md`).
 
 Each module lives in `src/modules/NN-name/` with `domain/`, `application/`, `infrastructure/`, `presentation/`, `public/`. Modules may depend on each other only through `public/` contracts, DTOs, and events.

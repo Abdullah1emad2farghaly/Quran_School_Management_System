@@ -38,6 +38,13 @@ export interface AppConfig {
     /** How OTPs are delivered. `disabled` = no delivery; `dev-file` = development only. Real providers come later. */
     readonly sender: OtpSenderKind;
   };
+  readonly apiDocs: {
+    /**
+     * Serves Swagger UI (`/api-docs`) and the raw OpenAPI document (`/api-docs.json`). Defaults to true outside production and
+     * to false in production, unless `API_DOCS_ENABLED=true` is set explicitly.
+     */
+    readonly enabled: boolean;
+  };
   readonly redis: {
     readonly host: string;
     readonly port: number;

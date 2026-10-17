@@ -2,11 +2,7 @@
 
 Owned by Module 11 (`src/modules/11-otp-password-recovery`). Forgot-password with an OTP (Master Specification §26). It depends on Modules 08 (change the password), 10 (revoke sessions), 03 (messages) and 06 (events).
 
-```
-POST /auth/password-recovery/request  { phone }                    -> 200 { expiresInSeconds }
-POST /auth/password-recovery/verify   { phone, otp }               -> 200 { resetToken, resetTokenExpiresAt }
-POST /auth/password-recovery/reset    { resetToken, newPassword }  -> 204
-```
+The three endpoints (`POST /auth/password-recovery/request`, `/verify`, `/reset`) are documented in the OpenAPI document served at `/api-docs` (`docs/API-DOCUMENTATION.md`; contract in `src/modules/11-otp-password-recovery/presentation/http/recovery.openapi.ts`).
 All three are public (the caller is not logged in) and answer with `Cache-Control: no-store`.
 
 ## Rules

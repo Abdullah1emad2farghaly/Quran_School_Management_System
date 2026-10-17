@@ -38,12 +38,11 @@ async function inRollback(work: (tx: TransactionContext, q: Q) => Promise<void>)
       const q: Q = <T extends object>(sql: string, replacements: Record<string, string> = {}) =>
         sequelize.query<T>(sql, { replacements, type: QueryTypes.SELECT, transaction });
       // Module 16: schools reference organizations and geography (RESTRICT); clear them inside this rolled-back transaction first.
-      for (const table of ['school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction });
-      await sequelize.query('DELETE FROM schools WHERE parent_school_id IS NOT NULL', { transaction: transaction });
+      for (const table of ['school_classification_archive', 'school_manager_source_archive', 'school_gps_history', 'school_status_history', 'school_managers']) await sequelize.query(`DELETE FROM ${table}`, { transaction: transaction });
       await sequelize.query('DELETE FROM schools', { transaction: transaction });
       await sequelize.query('DELETE FROM organization_admins', { transaction: transaction });
-      // organizations reference countries and the governorate/center/village (RESTRICT): detach them inside this always-rolled-back transaction only.
-      await sequelize.query('UPDATE organizations SET village_id = NULL, center_id = NULL, governorate_id = NULL, country_id = NULL', { transaction });
+      // organizations reference countries and the governorate (RESTRICT): detach them inside this always-rolled-back transaction only.
+      await sequelize.query('UPDATE organizations SET village_name = NULL, center_name = NULL, governorate_id = NULL, country_id = NULL', { transaction });
       for (const table of ['villages', 'centers', 'governorates', 'countries']) await sequelize.query(`DELETE FROM ${table}`, { transaction });
       for (const table of ['countries', 'governorates', 'centers', 'villages']) {
         const left = await q<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`);

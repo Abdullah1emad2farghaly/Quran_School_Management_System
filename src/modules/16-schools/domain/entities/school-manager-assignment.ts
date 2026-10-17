@@ -2,7 +2,7 @@ import { AggregateRoot, newUuid, type Clock } from '../../../00-shared-kernel/pu
 import { createDomainEvent } from '../../../06-domain-events-outbox/public';
 import { SCHOOL_MANAGER_AGGREGATE_TYPE, SchoolEventTypes, type SchoolManagerEventPayload } from '../events/school-events';
 
-export const SCHOOL_MANAGER_SOURCES = ['SUB_SCHOOL_APPROVAL', 'MAIN_ADMIN_ASSIGNMENT'] as const;
+export const SCHOOL_MANAGER_SOURCES = ['APPROVAL', 'ASSIGNMENT'] as const;
 export type SchoolManagerSource = (typeof SCHOOL_MANAGER_SOURCES)[number];
 
 export interface SchoolManagerAssignmentSnapshot {
@@ -11,7 +11,7 @@ export interface SchoolManagerAssignmentSnapshot {
   readonly userId: string;
   readonly source: SchoolManagerSource;
   readonly assignedAt: Date;
-  /** The Main Admin who approved the Sub-School or made the assignment. */
+  /** The organization manager who approved the school (APPROVAL) or made the assignment (ASSIGNMENT). */
   readonly assignedBy: string;
   readonly revokedAt: Date | null;
   readonly revokedBy: string | null;

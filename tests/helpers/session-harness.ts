@@ -32,15 +32,17 @@ export function createSessionHarness() {
   const outbox = new OutboxService(store, clock);
   const unitOfWork: UnitOfWork = { run: (work) => work(tx) };
 
+  const users = new InMemoryUserRepository();
+  const roleRepo = new InMemoryRoleAssignmentRepository();
   const identity = new IdentityService({
-    repository: new InMemoryUserRepository(),
+    repository: users,
     hasher: new BcryptPasswordHasher(4),
     unitOfWork,
     outbox,
     clock,
   });
   const roles = new RoleService({
-    repository: new InMemoryRoleAssignmentRepository(),
+    repository: roleRepo,
     identity,
     permissions: new PermissionRegistry(),
     unitOfWork,
@@ -78,5 +80,5 @@ export function createSessionHarness() {
       .filter((m) => m.aggregateType === 'AuthSession')
       .map((m) => ({ type: m.eventType, payload: JSON.parse(m.payload) as Record<string, unknown> }));
 
-  return { service, identity, roles, repository, store, outbox, unitOfWork, clock, advance, createUser, sessionEvents, refreshTokenHasher, accessTokens };
+  return { service, identity, roles, users, roleRepo, repository, store, outbox, unitOfWork, clock, advance, createUser, sessionEvents, refreshTokenHasher, accessTokens };
 }

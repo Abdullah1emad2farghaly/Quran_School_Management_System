@@ -15,13 +15,13 @@ interface OrganizationRow {
   status: OrganizationStatus;
   countryId: string | null;
   governorateId: string | null;
-  centerId: string | null;
-  villageId: string | null;
+  centerName: string | null;
+  villageName: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
 
-const SELECT = `SELECT id, code, name, status, country_id AS countryId, governorate_id AS governorateId, center_id AS centerId, village_id AS villageId, created_at AS createdAt, updated_at AS updatedAt FROM organizations`;
+const SELECT = `SELECT id, code, name, status, country_id AS countryId, governorate_id AS governorateId, center_name AS centerName, village_name AS villageName, created_at AS createdAt, updated_at AS updatedAt FROM organizations`;
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
 export class SequelizeOrganizationRepository implements OrganizationRepository {
@@ -30,8 +30,8 @@ export class SequelizeOrganizationRepository implements OrganizationRepository {
   async insert(organization: Organization, tx: TransactionContext): Promise<void> {
     try {
       await this.db.query(
-        `INSERT INTO organizations (id, code, name, status, country_id, governorate_id, center_id, village_id, created_at, updated_at)
-         VALUES (:id, :code, :name, :status, :countryId, :governorateId, :centerId, :villageId, :createdAt, :updatedAt)`,
+        `INSERT INTO organizations (id, code, name, status, country_id, governorate_id, center_name, village_name, created_at, updated_at)
+         VALUES (:id, :code, :name, :status, :countryId, :governorateId, :centerName, :villageName, :createdAt, :updatedAt)`,
         {
           replacements: {
             id: organization.id,
@@ -40,8 +40,8 @@ export class SequelizeOrganizationRepository implements OrganizationRepository {
             status: organization.status,
             countryId: organization.countryId,
             governorateId: organization.governorateId,
-            centerId: organization.centerId,
-            villageId: organization.villageId,
+            centerName: organization.centerName,
+            villageName: organization.villageName,
             createdAt: organization.createdAt,
             updatedAt: organization.updatedAt,
           },
@@ -121,8 +121,8 @@ export class SequelizeOrganizationRepository implements OrganizationRepository {
       status: row.status,
       countryId: row.countryId ?? null,
       governorateId: row.governorateId ?? null,
-      centerId: row.centerId ?? null,
-      villageId: row.villageId ?? null,
+      centerName: row.centerName ?? null,
+      villageName: row.villageName ?? null,
       createdAt: asDate(row.createdAt),
       updatedAt: asDate(row.updatedAt),
     });
