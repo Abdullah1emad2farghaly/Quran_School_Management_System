@@ -27,7 +27,7 @@ const requiredId = (field: string): ValidationChain => body(field).isString().wi
 const optionalText = (field: string): ValidationChain =>
   body(field).optional({ values: 'null' }).isString().withMessage('INVALID_VALUE').bail().isLength({ max: 1000 }).withMessage('INVALID_VALUE');
 
-const LIST_SPEC: ListQuerySpec = { sortable: { name: 'name' }, defaultSort: [{ key: 'name', direction: 'asc' }], filters: {} };
+export const ORGANIZATION_LIST_SPEC: ListQuerySpec = { sortable: { name: 'name' }, defaultSort: [{ key: 'name', direction: 'asc' }], filters: {} };
 
 /**
  * /organizations. Endpoints (all under /api/v1):
@@ -68,7 +68,7 @@ export function createOrganizationRouter(deps: OrganizationRouterDeps): Router {
     auth,
     deps.requirePermission(OrganizationPermissions.LIST),
     handle(async (req, res) => {
-      const query = parseListQuery(req.query as Record<string, unknown>, LIST_SPEC);
+      const query = parseListQuery(req.query as Record<string, unknown>, ORGANIZATION_LIST_SPEC);
       sendPaginated(res, await h.list(sessionAuthRequired(req), query.page));
     }),
   );

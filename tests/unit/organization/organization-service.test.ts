@@ -24,7 +24,7 @@ describe('OrganizationService.ensureMainOrganization', () => {
     const { organization, created } = await service.ensureMainOrganization('  مؤسسة   النور ');
     expect(created).toBe(true);
     expect(organization).toMatchObject({ code: 'ORG-000001', name: 'مؤسسة النور', status: 'ACTIVE' });
-    expect(Object.keys(organization).sort()).toEqual(['centerId', 'code', 'countryId', 'createdAt', 'governorateId', 'id', 'name', 'status', 'updatedAt', 'villageId']); // approved fields only
+    expect(Object.keys(organization).sort()).toEqual(['centerName', 'code', 'countryId', 'createdAt', 'governorateId', 'id', 'name', 'status', 'updatedAt', 'villageName']); // approved fields only
     expect(organization.countryId).toBeNull(); // the country is assigned separately, once
     expect(store.messages.map((m) => m.eventType)).toEqual([OrganizationEventTypes.ORGANIZATION_CREATED]);
     expect(JSON.parse(store.messages[0]!.payload)).toEqual({ organizationId: organization.id, code: 'ORG-000001' });

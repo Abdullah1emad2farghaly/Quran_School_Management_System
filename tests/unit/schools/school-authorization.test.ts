@@ -136,7 +136,7 @@ describe('Authorization Engine: everyone else is denied (deny by default)', () =
     const school = await t.create();
     const parent = await t.newUser('PARENT');
     const teacher = await t.newUser('TEACHER');
-    const applicant = (await t.service.submitSchool(t.form())).applicant;
+    const applicant = (await t.service.submitSchool(t.form({ schoolName: 'مدرسة مقدمة' }))).applicant;
     for (const userId of [parent.id, teacher.id, applicant.userId, 'no-such-user']) {
       expect(await can(t, userId, SchoolPermissions.LIST)).toBe(false);
       expect(await can(t, userId, SchoolPermissions.READ, onSchool(school.id))).toBe(false);

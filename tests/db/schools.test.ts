@@ -739,11 +739,14 @@ describe('role-separation data migration (the exact SQL of migration organizatio
   const migration = createRequire(__filename)('../../database/migrations/20261015100000-organization-manager-role.js') as { ASSIGN_ORGANIZATION_MANAGER_SQL: string; REVOKE_REGISTRATION_MAIN_ADMIN_SQL: string };
 
   async function seed(f: Fixture) {
-    const addLink = (userId: string, name: string | null) =>
+    const addLink = (userId: string, name: string | null, org: string = f.ids.org) =>
       f.run(
         'INSERT INTO organization_admins (id, organization_id, user_id, name, assigned_at, active, version, created_at, updated_at) VALUES (:id, :org, :user, :name, UTC_TIMESTAMP(3), 1, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))',
-        { id: randomUUID(), org: f.ids.org, user: userId, name },
+        { id: randomUUID(), org, user: userId, name },
       );
+    // a second organization: one active link per user AND organization (uq_organization_admins_active), so a user with both kinds of link needs two
+    const otherOrg = randomUUID();
+    await f.run("INSERT INTO organizations (id, code, name, status, v1_single_guard, created_at, updated_at) VALUES (:id, 'ORG-990002', 'Second organization for the role migration fixture', 'ACTIVE', 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { id: otherOrg });
     // V1 administrator (backfill link: name NULL) with MAIN_ADMIN: keeps it AND gains ORGANIZATION_MANAGER
     const v1Admin = await f.newUser('MAIN_ADMIN');
     await addLink(v1Admin, null);
@@ -755,7 +758,7 @@ describe('role-separation data migration (the exact SQL of migration organizatio
     // a user who is both a registration creator AND a V1 administrator: treated as V1 administrator (keeps MAIN_ADMIN)
     const both = await f.newUser('MAIN_ADMIN');
     await addLink(both, null);
-    await addLink(both, 'مسجل');
+    await addLink(both, 'مسجل', otherOrg);
     // a teacher with an organization link and no MAIN_ADMIN: gains ORGANIZATION_MANAGER, keeps TEACHER
     const teacher = await f.newUser('TEACHER');
     await addLink(teacher, 'معلم');

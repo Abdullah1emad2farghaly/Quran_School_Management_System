@@ -22,8 +22,8 @@ async function build(maxSubmissions = 1000) {
   const app = express();
   app.use(requestContextMiddleware);
   app.use(express.json());
-  app.use('/api/v1/organizations', createOrganizationRouter({ getService: () => t.registration, requireAuthentication, publicSubmissionLimit: limit() }));
-  app.use('/api/v1/schools', createSchoolRouter({ getService: () => t.service, requireAuthentication, publicSubmissionLimit: limit() }));
+  app.use('/api/v1/organizations', createOrganizationRouter({ getService: () => t.registration, requireAuthentication, requirePermission: t.requirePermission, publicSubmissionLimit: limit() }));
+  app.use('/api/v1/schools', createSchoolRouter({ getService: () => t.service, requireAuthentication, requirePermission: t.requirePermission, publicSubmissionLimit: limit() }));
   app.use('/api/v1/auth', createAuthRouter({ getService: () => t.h.service, requireAuthentication }));
   app.use(notFoundHandler);
   app.use(errorHandler);
@@ -46,7 +46,7 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
     const { app, t, auth } = await build();
     const form = (name: string, phone: string) => ({
       applicant: { name: 'أحمد محمد', phone },
-      organization: { name, countryId: t.country.id, governorateId: t.gov.id, centerId: t.center.id },
+      organization: { name, countryId: t.country.id, governorateId: t.gov.id, centerName: 'مركز حر' },
     });
     const registered = api.conforms(await request(app).post(orgs).send(form('دار القرآن', '01112345678')));
     expect(registered.status).toBe(201);
@@ -58,15 +58,15 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
     expect(api.conforms(await request(app).get(`${orgs}?page=1&pageSize=5&sort=name`).set(auth)).status).toBe(200);
     api.conforms(await request(app).get(orgs)); // 401
     expect(api.conforms(await request(app).get(`${orgs}/${t.org.id}`).set(auth)).status).toBe(200);
-    expect(api.conforms(await request(app).get(`${orgs}/${registered.body.data.organization.id}`).set(auth)).status).toBe(404); // not its administrator
+    expect(api.conforms(await request(app).get(`${orgs}/${registered.body.data.organization.id}`).set(auth)).status).toBe(403); // not its manager
   });
 
   it('schools: the whole workflow with its error responses', async () => {
     const { app, t, auth, login } = await build();
-    const body = (name: string) => ({ organizationId: t.org.id, school: { name, governorateId: t.gov.id, gps } });
-    const sub = (parentSchoolId: string, name: string, phone: string) => ({ applicant: { name: 'سارة', phone }, parentSchoolId, school: { name, governorateId: t.gov.id, gps } });
+    const body = (name: string) => ({ organizationId: t.org.id, school: { name, governorateId: t.gov.id, centerName: 'مركز حر', gps } });
+    const sub = (name: string, phone: string) => ({ applicant: { name: 'سارة', phone }, organizationId: t.org.id, school: { name, governorateId: t.gov.id, gps } });
 
-    // create (201) and its errors
+    // create (201, PENDING) and its errors
     const main = api.conforms(await request(app).post(schools).set(auth).send(body('الرئيسية')));
     expect(main.status).toBe(201);
     api.conforms(await request(app).post(schools).set(auth).send({}));
@@ -76,21 +76,22 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
     api.conforms(await request(app).post(schools).set(auth).send({ ...body('بعيد'), school: { name: 'بعيد', governorateId: t.paris.id, gps } })); // hierarchy/country
     api.conforms(await request(app).post(schools).send(body('بدون تسجيل'))); // 401
 
-    // public Sub-School submissions (201) and their errors
-    const first = api.conforms(await request(app).post(`${schools}/sub-submissions`).send(sub(main.body.data.id, 'الفرع 1', '01122223333')));
+    // public submissions (201) and their errors
+    const first = api.conforms(await request(app).post(`${schools}/submissions`).send(sub('الفرع 1', '01122223333')));
     expect(first.status).toBe(201);
-    api.conforms(await request(app).post(`${schools}/sub-submissions`).send({}));
-    api.conforms(await request(app).post(`${schools}/sub-submissions`).send(sub(UNKNOWN, 'الفرع 2', '01133334444'))); // unknown parent
-    api.conforms(await request(app).post(`${schools}/sub-submissions`).send(sub(main.body.data.id, 'الفرع 1', '01144445555'))); // name taken
-    const second = api.conforms(await request(app).post(`${schools}/sub-submissions`).send(sub(main.body.data.id, 'الفرع 3', '01155556666')));
-    const third = api.conforms(await request(app).post(`${schools}/sub-submissions`).send(sub(main.body.data.id, 'الفرع 4', '01166667777')));
-    api.conforms(await request(app).post(`${schools}/sub-submissions`).set({ Authorization: 'Bearer not-a-token' }).send(sub(main.body.data.id, 'الفرع 5', '01177778888'))); // invalid token
+    api.conforms(await request(app).post(`${schools}/submissions`).send({}));
+    api.conforms(await request(app).post(`${schools}/submissions`).send({ ...sub('الفرع 2', '01133334444'), organizationId: UNKNOWN })); // unknown organization
+    api.conforms(await request(app).post(`${schools}/submissions`).send(sub('الفرع 1', '01144445555'))); // name taken
+    const second = api.conforms(await request(app).post(`${schools}/submissions`).send(sub('الفرع 3', '01155556666')));
+    const third = api.conforms(await request(app).post(`${schools}/submissions`).send(sub('الفرع 4', '01166667777')));
+    api.conforms(await request(app).post(`${schools}/submissions`).set({ Authorization: 'Bearer not-a-token' }).send(sub('الفرع 5', '01177778888'))); // invalid token
 
     // read
-    expect(api.conforms(await request(app).get(`${schools}?page=1&pageSize=10&sort=-createdAt&filter[status]=PENDING,ACTIVE&filter[type]=SUB`).set(auth)).status).toBe(200);
+    expect(api.conforms(await request(app).get(`${schools}?page=1&pageSize=10&sort=-createdAt&filter[status]=PENDING,ACTIVE`).set(auth)).status).toBe(200);
     api.conforms(await request(app).get(schools)); // 401
+    api.conforms(await request(app).get(schools).set(outsider)); // 403
     expect(api.conforms(await request(app).get(`${schools}/${first.body.data.school.id}`).set(auth)).status).toBe(200);
-    expect(api.conforms(await request(app).get(`${schools}/${UNKNOWN}`).set(auth)).status).toBe(404);
+    expect(api.conforms(await request(app).get(`${schools}/${UNKNOWN}`).set(auth)).status).toBe(403); // the scope target does not exist: denied
 
     // PENDING: GPS correction, rejection, approval
     expect(api.conforms(await request(app).patch(`${schools}/${third.body.data.school.id}/gps`).set(auth).send({ gps })).status).toBe(200);
@@ -107,9 +108,10 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
     expect(api.conforms(await request(app).post(`${schools}/${first.body.data.school.id}/deactivate`).set(auth)).status).toBe(200);
     api.conforms(await request(app).post(`${schools}/${first.body.data.school.id}/deactivate`).set(auth)); // already INACTIVE: 422
     expect(api.conforms(await request(app).post(`${schools}/${first.body.data.school.id}/reactivate`).set(auth)).status).toBe(200);
-    api.conforms(await request(app).post(`${schools}/${UNKNOWN}/reactivate`).set(auth)); // 404
+    api.conforms(await request(app).post(`${schools}/${UNKNOWN}/reactivate`).set(auth)); // unknown school: denied
 
-    // manager of the Main School
+    // manager of an ACTIVE school created by the organization manager
+    expect(api.conforms(await request(app).post(`${schools}/${main.body.data.id}/approve`).set(auth)).status).toBe(200);
     const candidate = await t.h.createUser();
     expect(api.conforms(await request(app).put(`${schools}/${main.body.data.id}/manager`).set(auth).send({ userId: candidate.id })).status).toBe(200);
     api.conforms(await request(app).put(`${schools}/${main.body.data.id}/manager`).set(auth).send({ userId: candidate.id })); // already has a manager: 409

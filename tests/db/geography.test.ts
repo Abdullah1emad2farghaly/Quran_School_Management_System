@@ -94,7 +94,7 @@ describe('geography schema (migration)', () => {
     );
     expect(unique.map((u) => u.INDEX_NAME).sort()).toEqual([
       'uq_centers_code', 'uq_centers_name', 'uq_countries_code', 'uq_countries_name',
-      'uq_governorates_code', 'uq_governorates_name', 'uq_villages_code', 'uq_villages_name',
+      'uq_governorates_code', 'uq_governorates_id_country', 'uq_governorates_name', 'uq_villages_code', 'uq_villages_name',
     ]);
     const names = await sequelize.query<{ CHARACTER_SET_NAME: string }>(
       `SELECT CHARACTER_SET_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'name'

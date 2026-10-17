@@ -40,8 +40,8 @@ function buildApp() {
   const getService = (() => stubService) as never;
   app.use('/auth/password-recovery', createRecoveryRouter({ getService } as never));
   app.use('/auth', createAuthRouter({ getService, requireAuthentication: stubAuth } as never));
-  app.use('/organizations', createOrganizationRouter({ getService, requireAuthentication: stubAuth, publicSubmissionLimit: pass } as never));
-  app.use('/schools', createSchoolRouter({ getService, requireAuthentication: stubAuth, publicSubmissionLimit: pass } as never));
+  app.use('/organizations', createOrganizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
+  app.use('/schools', createSchoolRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

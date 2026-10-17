@@ -2,7 +2,7 @@
 
 Owned by Module 16 (`src/modules/16-schools`). Schools belong **directly to an organization** (Master Specification §29–31, amended): there is **no Main School / Sub-School distinction**. Every school starts `PENDING` and becomes `ACTIVE` only when the **Organization Manager of the owning organization** approves it. The module also owns the **school-scoped manager link** with history, the official GPS rules, the gap-free school code and organization registration. It exposes its own REST API (below). Authorization is enforced by the **shared Authorization Engine (Module 12)**: this module registers its permissions and its `SCHOOL` scope resolver (`registerSchoolAuthorization`) and its routes call `requirePermission`. Other modules depend on the read-only `SchoolLookup`.
 
-Endpoint inventories will move to Swagger/OpenAPI (separate workstream, not merged in this snapshot: see "Pending"). The table below stays until then.
+Every endpoint is documented in OpenAPI (`/api-docs`, contracts in `school.openapi.ts` and `organization.openapi.ts`) and verified by `npm run api:verify`; the table below is a summary.
 
 ## Rules (approved)
 **Codes and names.** Code `SC-000001` (globally unique, locked gap-free sequence); id is a UUID. Names: Unicode NFC, whitespace collapsed, 1–200 characters, **unique per organization among non-rejected schools** (a REJECTED request releases its name; `utf8mb4_unicode_ci`, case- and accent-insensitive). A school belongs to an EXISTING organization (`ORGANIZATION_NOT_FOUND` otherwise) that must be ACTIVE (`SCHOOL_ORGANIZATION_INACTIVE`).
@@ -100,7 +100,7 @@ Bodies: school `{ "name", "governorateId", "centerName"?, "villageName"?, "count
 7. **Spec §19** role-less applicants, abuse-limit figure (10/hour): unchanged.
 
 ## Pending
-Swagger/OpenAPI integration (separate workstream, to be merged and then verified for route coverage); notification delivery (31/32); Module 17 (not started).
+Notification delivery (31/32); Module 17 (not started).
 
 ## Tests
 Unit `tests/unit/schools` (domain, service with simulated rollback, public submissions, **engine authorization**, HTTP handlers and route/permission inventory, organization registration, boundaries), `tests/unit/organization`, `tests/unit/unified-address`, `tests/unit/roles`. HTTP/API `tests/integration/schools.test.ts` (supertest; cross-organization 403s, approval flow, free-text address). MariaDB `tests/db/schools.test.ts` (schema, no Main/Sub or center/village ids, archive tables, role migration SQL on fixture rows, atomic approval and failure injection, listing SQL; every test is rolled back) and `tests/db/organizations.test.ts`.

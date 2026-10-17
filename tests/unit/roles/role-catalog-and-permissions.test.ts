@@ -64,7 +64,7 @@ describe('V1 role catalog (§18)', () => {
   it('does not allow a user to hold Student (no login in V1)', () => {
     expect(isAssignableRole('STUDENT')).toBe(false);
     expect(ASSIGNABLE_ROLE_CODES).not.toContain('STUDENT');
-    expect(ASSIGNABLE_ROLE_CODES).toHaveLength(8);
+    expect(ASSIGNABLE_ROLE_CODES).toHaveLength(9); // every catalog role except STUDENT (includes ORGANIZATION_MANAGER)
   });
 
   it('rejects non-role values', () => {

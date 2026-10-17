@@ -1,5 +1,5 @@
 import { listQueryParameters, ref, schema as s, type AuthorizationDoc, type ErrorDoc, type ModuleApiDoc } from '../../../04-validation-api/public';
-import { ORGANIZATION_STATUSES } from '../../../13-organization-core/public';
+import { ORGANIZATION_STATUSES, OrganizationPermissions } from '../../../13-organization-core/public';
 import { ORGANIZATION_LIST_SPEC } from './organization-routes';
 
 const ORG_ID = '7c1d5e93-2b8a-4f60-a1d4-9e3b6c0f8a21';
@@ -8,15 +8,15 @@ const GOVERNORATE_ID = '1e9d4c7b-0a62-4b8f-9c35-d7f1a2b6e840';
 const USER_ID = '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10';
 
 /** Who may do what with organizations: copied from docs/AUTHORIZATION-MATRIX.md ("Organization scope"), never invented. */
-const administratorOnly = (scope: string): AuthorizationDoc => ({
+const organizationManager = (permissionId: string, scope: string): AuthorizationDoc => ({
   authentication: 'required',
-  roles: ['MAIN_ADMIN'],
+  roles: ['ORGANIZATION_MANAGER'],
   scope,
   enforcement:
-    'Enforced by the application service (deny by default): the caller must hold the MAIN_ADMIN role AND have an active administrator link to the organization; the role alone is not enough. There is no permission-registry entry yet.',
-  permissionId: null,
+    'Enforced by the Authorization Engine (deny by default): the caller must hold the ORGANIZATION_MANAGER role AND have an active manager link to exactly that organization. MAIN_ADMIN has no organization permission.',
+  permissionId,
   decision: 'APPROVED',
-  reference: 'docs/AUTHORIZATION-MATRIX.md, "Organization scope"; docs/SCHOOLS.md',
+  reference: 'docs/AUTHORIZATION-MATRIX.md, "Organization scope"; docs/ORGANIZATION.md',
 });
 
 /** Address and name validation answers shared by the registration endpoint. */
@@ -56,11 +56,11 @@ export const organizationApiDoc: ModuleApiDoc = {
       operationId: 'registerOrganization',
       summary: 'Register an organization (public)',
       description:
-        'Creates an ACTIVE organization with its country and address, and makes the applicant its MAIN_ADMIN (of THIS organization only). Login is optional: without a token a new account is created for the applicant (its password is generated and never returned: the applicant uses password recovery); with a token the applicant is the logged-in user. The organization name is unique system-wide. A per-IP abuse limit applies.',
+        'Creates an ACTIVE organization with its country and address, and makes the applicant its ORGANIZATION_MANAGER (of THIS organization only). Login is optional: without a token a new account is created for the applicant (its password is generated and never returned: the applicant uses password recovery); with a token the applicant is the logged-in user. The organization name is unique system-wide. A per-IP abuse limit applies.',
       authorization: {
         authentication: 'optional',
         roles: [],
-        scope: 'None for the caller; the applicant becomes MAIN_ADMIN of the new organization only.',
+        scope: 'None for the caller; the applicant becomes ORGANIZATION_MANAGER of the new organization only.',
         enforcement: 'Public endpoint with an optional Bearer token and a per-client-IP abuse limit (10 requests per hour). A token that is sent must be valid.',
         permissionId: null,
         decision: 'APPROVED',
@@ -79,8 +79,8 @@ export const organizationApiDoc: ModuleApiDoc = {
                 name: s.string({ maxLength: 200, example: 'Al-Noor Quran Foundation' }),
                 countryId: s.uuid({ example: COUNTRY_ID }),
                 governorateId: s.uuid({ example: GOVERNORATE_ID }),
-                centerId: s.uuid({ nullable: true, description: 'Optional; requires the governorate.' }),
-                villageId: s.uuid({ nullable: true, description: 'Optional; requires the center.' }),
+                centerName: s.string({ nullable: true, maxLength: 200, description: 'Optional free text (center or city).' }),
+                villageName: s.string({ nullable: true, maxLength: 200, description: 'Optional free text.' }),
               },
               ['name', 'countryId', 'governorateId'],
             ),
@@ -108,7 +108,7 @@ export const organizationApiDoc: ModuleApiDoc = {
             name: 'Al-Noor Quran Foundation',
             status: 'ACTIVE',
             countryId: COUNTRY_ID,
-            address: { governorateId: GOVERNORATE_ID, centerId: null, villageId: null },
+            address: { governorateId: GOVERNORATE_ID, centerName: null, villageName: null },
             createdAt: '2026-10-15T09:30:00.000Z',
             updatedAt: '2026-10-15T09:30:00.000Z',
           },
@@ -125,8 +125,9 @@ export const organizationApiDoc: ModuleApiDoc = {
       summary: 'List the organizations the caller administers',
       description:
         'A paginated list of the organizations the caller administers. `sort` is validated against the whitelist but the endpoint currently applies no client-chosen ordering; the order is the service default. No filters or search are supported.',
-      authorization: administratorOnly('The organizations the caller is linked to as an administrator.'),
+      authorization: organizationManager(OrganizationPermissions.LIST, 'The organizations the caller manages (derived from the caller\'s own links).'),
       query: listQueryParameters(ORGANIZATION_LIST_SPEC),
+      errors: [{ status: 403, codes: ['ACCESS_DENIED'], description: 'The caller is not an ORGANIZATION_MANAGER.' }],
       success: {
         status: 200,
         description: 'A page of organizations.',
@@ -138,7 +139,7 @@ export const organizationApiDoc: ModuleApiDoc = {
           name: 'Al-Noor Quran Foundation',
           status: 'ACTIVE',
           countryId: COUNTRY_ID,
-          address: { governorateId: GOVERNORATE_ID, centerId: null, villageId: null },
+          address: { governorateId: GOVERNORATE_ID, centerName: null, villageName: null },
           createdAt: '2026-10-15T09:30:00.000Z',
           updatedAt: '2026-10-15T09:30:00.000Z',
         },
@@ -149,8 +150,8 @@ export const organizationApiDoc: ModuleApiDoc = {
       path: '/:id',
       operationId: 'getOrganization',
       summary: 'Get one organization',
-      description: 'Returns the organization only to its administrators; for anyone else (including administrators of other organizations) the answer is 404 so its existence is not revealed.',
-      authorization: administratorOnly('The organizations the caller is linked to as an administrator.'),
+      description: 'Returns the organization only to its own manager; anyone else (including managers of other organizations) gets 403.',
+      authorization: organizationManager(OrganizationPermissions.READ, 'The organization named in the path, only for its own manager.'),
       pathParams: { id: { description: 'The organization id.', example: ORG_ID, schema: s.uuid() } },
       success: {
         status: 200,
@@ -162,12 +163,15 @@ export const organizationApiDoc: ModuleApiDoc = {
           name: 'Al-Noor Quran Foundation',
           status: 'ACTIVE',
           countryId: COUNTRY_ID,
-          address: { governorateId: GOVERNORATE_ID, centerId: null, villageId: null },
+          address: { governorateId: GOVERNORATE_ID, centerName: null, villageName: null },
           createdAt: '2026-10-15T09:30:00.000Z',
           updatedAt: '2026-10-15T09:30:00.000Z',
         },
       },
-      errors: [{ status: 404, codes: ['ORGANIZATION_NOT_FOUND'], description: 'The organization does not exist or the caller does not administer it.' }],
+      errors: [
+        { status: 403, codes: ['ACCESS_DENIED'], description: 'The caller does not manage this organization (no reason is given).' },
+        { status: 404, codes: ['ORGANIZATION_NOT_FOUND'], description: 'The organization does not exist.' },
+      ],
     },
   ],
   schemas: {
@@ -178,7 +182,7 @@ export const organizationApiDoc: ModuleApiDoc = {
         name: s.string(),
         status: s.string({ enum: ORGANIZATION_STATUSES }),
         countryId: s.uuid(),
-        address: s.object({ governorateId: s.uuid(), centerId: s.uuid({ nullable: true }), villageId: s.uuid({ nullable: true }) }, ['governorateId', 'centerId', 'villageId']),
+        address: s.object({ governorateId: s.uuid(), centerName: s.string({ nullable: true }), villageName: s.string({ nullable: true }) }, ['governorateId', 'centerName', 'villageName']),
         createdAt: s.dateTime(),
         updatedAt: s.dateTime(),
       },

@@ -23,7 +23,7 @@ export {
 } from '../application/services/organization-registration-service';
 export { registerSchoolAuthorization, SchoolPermissions, SCHOOL_TARGET_TYPE, type SchoolAuthorizationDeps } from '../application/services/school-authorization';
 export { ApplicantAccountResolver } from '../application/services/applicant-account-resolver';
-export { createOrganizationRouter, type OrganizationRouterDeps } from '../presentation/http/organization-routes';
+export { createOrganizationRouter, ORGANIZATION_LIST_SPEC, type OrganizationRouterDeps } from '../presentation/http/organization-routes';
 export { createOrganizationHandlers, type OrganizationHandlerService } from '../presentation/http/organization-handlers';
 export type { SchoolDto, SchoolManagerAssignmentDto } from '../application/dto/school-dto';
 export type { SchoolRepository, SchoolListQuery, SchoolSortKey, SchoolStatusHistoryEntry, SchoolGpsHistoryEntry } from '../application/ports/school-repository';
@@ -61,3 +61,5 @@ export { generateApplicantPassword } from '../infrastructure/services/crypto-pas
 export { SequelizeSchoolRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-school-repository';
 export { SequelizeSchoolManagerRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-school-manager-repository';
 export { SequelizeSchoolCodeSequence } from '../infrastructure/persistence/sequelize/repositories/sequelize-school-code-sequence';
+export { organizationApiDoc } from '../presentation/http/organization.openapi';
+export { schoolApiDoc } from '../presentation/http/school.openapi';

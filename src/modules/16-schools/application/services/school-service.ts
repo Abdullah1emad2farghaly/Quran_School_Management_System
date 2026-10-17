@@ -248,6 +248,9 @@ export class SchoolService {
   approveSchool(schoolId: string, actorId: string, tx?: TransactionContext): Promise<ApproveSchoolResult> {
     return this.inTransaction(tx, async (t) => {
       const school = await this.requireForUpdate(schoolId, t);
+      // The status comes first: a school that is not an approvable PENDING request (REJECTED is terminal, ACTIVE, INACTIVE) always answers
+      // SCHOOL_INVALID_STATUS_TRANSITION, whatever the state of its organization or of the requester's account.
+      if (school.snapshot.status !== 'PENDING') throw schoolError('SCHOOL_INVALID_STATUS_TRANSITION');
       await this.requireActiveOrganization(school.organizationId, t);
       const applicantId = school.applicantUserId;
       if (applicantId !== null) await this.requireEligibleManager(applicantId, t);

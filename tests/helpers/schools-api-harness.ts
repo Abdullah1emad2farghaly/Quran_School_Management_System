@@ -1,4 +1,4 @@
-import type { TransactionContext } from '../../src/modules/00-shared-kernel/public';
+import type { TransactionContext, UnitOfWork } from '../../src/modules/00-shared-kernel/public';
 import type { Logger } from '../../src/modules/05-logging-request-context/public';
 import { PermissionRegistry } from '../../src/modules/09-roles-permissions/public';
 import {
@@ -30,10 +30,40 @@ const tx = {} as TransactionContext;
 /** In-memory wiring of Modules 08-10 (real sessions and tokens), 12 (the real Authorization Engine with the Module 13 and 16 registrations) plus 13, 14, 15 and 16, for HTTP tests. */
 export async function createSchoolsApiHarness() {
   const h = createSessionHarness();
+  const orgRepo = new InMemoryOrganizationRepository();
+  const adminRepo = new InMemoryOrganizationAdminRepository();
+  const schools = new InMemorySchoolRepository();
+  const managers = new InMemorySchoolManagerRepository();
+  const codes = new InMemorySchoolCodeSequence();
+  /** Like a database transaction: a failed unit of work restores accounts, roles, organizations, schools and outbox messages. */
+  const unitOfWork: UnitOfWork = {
+    run: async (work) => {
+      const saved = {
+        u: [...h.users.rows], r: [...h.roleRepo.rows], g: [...orgRepo.rows], a: [...adminRepo.rows], s: schools.snapshot(), m: managers.snapshot(), c: codes.last, o: [...h.store.messages],
+      };
+      try {
+        return await work(tx);
+      } catch (error) {
+        h.users.rows.clear();
+        saved.u.forEach(([k, v]) => h.users.rows.set(k, v));
+        h.roleRepo.rows.clear();
+        saved.r.forEach(([k, v]) => h.roleRepo.rows.set(k, v));
+        orgRepo.rows.clear();
+        saved.g.forEach(([k, v]) => orgRepo.rows.set(k, v));
+        adminRepo.rows.clear();
+        saved.a.forEach(([k, v]) => adminRepo.rows.set(k, v));
+        schools.restore(saved.s);
+        managers.restore(saved.m);
+        codes.last = saved.c;
+        h.store.messages.splice(0, h.store.messages.length, ...saved.o);
+        throw error;
+      }
+    },
+  };
   const organizations = new OrganizationService({
-    repository: new InMemoryOrganizationRepository(),
-    admins: new InMemoryOrganizationAdminRepository(),
-    unitOfWork: h.unitOfWork,
+    repository: orgRepo,
+    admins: adminRepo,
+    unitOfWork,
     outbox: h.outbox,
     clock: h.clock,
   });
@@ -54,16 +84,14 @@ export async function createSchoolsApiHarness() {
   const paris = await add('GOVERNORATE', 'Paris', france.id);
   const center = await add('CENTER', 'سمالوط', gov.id);
 
-  const schools = new InMemorySchoolRepository();
-  const managers = new InMemorySchoolManagerRepository();
   schools.managedSchoolIds = (userId) => [...managers.rows.values()].filter((r) => r.userId === userId && r.revokedAt === null).map((r) => r.schoolId);
   let passwords = 0;
   const generateApplicantPassword = () => `Gen${String(++passwords).padStart(4, '0')}Pass9`;
   const service = new SchoolService({
     repository: schools,
     managers,
-    codes: new InMemorySchoolCodeSequence(),
-    unitOfWork: h.unitOfWork,
+    codes,
+    unitOfWork,
     outbox: h.outbox,
     organizations,
     address,
@@ -77,7 +105,7 @@ export async function createSchoolsApiHarness() {
     address,
     identity: h.identity,
     roles: h.roles,
-    unitOfWork: h.unitOfWork,
+    unitOfWork,
     generateApplicantPassword,
     clock: h.clock,
   });
