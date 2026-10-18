@@ -32,7 +32,7 @@ async function build(options: { maxSubmissions?: number } = {}) {
   const admin = await t.newOrgAdmin(t.org.id);
   const adminAuth = await login(admin);
   const orgForm = (over: { phone?: string; name?: string; countryId?: string; governorateId?: string } = {}) => ({
-    applicant: { name: 'أحمد محمد', phone: over.phone ?? '01112345678' },
+    applicant: { name: 'أحمد محمد', phone: over.phone ?? '01112345678', password: 'Pass1234' },
     organization: { name: over.name ?? 'دار القرآن', countryId: over.countryId ?? t.country.id, governorateId: over.governorateId ?? t.gov.id, centerName: 'مركز غير مسجل' },
   });
   const schoolBody = (organizationId: string, over: { name?: string; governorateId?: string; countryId?: string } = {}) => ({
@@ -40,7 +40,7 @@ async function build(options: { maxSubmissions?: number } = {}) {
     school: { name: over.name ?? 'الرئيسية', governorateId: over.governorateId ?? t.gov.id, ...(over.countryId ? { countryId: over.countryId } : {}), centerName: 'مركز غير مسجل', gps },
   });
   const submitForm = (over: { phone?: string; schoolName?: string; organizationId?: string } = {}) => ({
-    applicant: { name: 'سارة', phone: over.phone ?? '01122223333' },
+    applicant: { name: 'سارة', phone: over.phone ?? '01122223333', password: 'Pass1234' },
     organizationId: over.organizationId ?? t.org.id,
     school: { name: over.schoolName ?? 'مدرسة مقدمة', governorateId: t.gov.id, centerName: 'مركز حر', villageName: 'قرية حرة', gps },
   });
@@ -89,6 +89,22 @@ describe('POST /organizations (public registration)', () => {
     expect(foreignGov.body.error.code).toBe('ORGANIZATION_ADDRESS_COUNTRY_MISMATCH');
     const badPhone = await request(app).post(orgs).send(orgForm({ phone: '12345' }));
     expect(badPhone.body.error.code).toBe('INVALID_PHONE_NUMBER');
+  });
+
+  it('the applicant chooses the password: it is required for a new account (400 INVALID_PASSWORD), and the new manager can log in with it right away', async () => {
+    const { app, t, orgForm, login } = await build();
+    for (const password of [undefined, '', 'abc', 'x'.repeat(13)]) {
+      const body = orgForm({ phone: '01123450000' });
+      const res = await request(app).post(orgs).send({ ...body, applicant: { ...body.applicant, password } });
+      expect(res.status).toBe(400);
+      expect(['INVALID_PASSWORD', 'VALIDATION_FAILED']).toContain(res.body.error.code);
+    }
+    const ok = await request(app).post(orgs).send(orgForm({ phone: '01123450000', name: 'منظمة بكلمة مرور' }));
+    expect(ok.status).toBe(201);
+    expect(JSON.stringify(ok.body)).not.toContain('Pass1234');
+    const session = await login({ phone: '01123450000', password: 'Pass1234' });
+    expect(session.Authorization).toMatch(/^Bearer /);
+    expect(t.org).toBeDefined();
   });
 
   it('answers a duplicate organization name with 409 (system-wide, case-insensitive) and an existing phone with the IAM conflict', async () => {
@@ -256,6 +272,20 @@ describe('POST /schools/submissions (public) and the approval flow', () => {
     const applicantId = submitted.body.data.applicant.userId as string;
     expect(await t.h.roles.listActiveRoles(applicantId)).toEqual([]);
     expect(await t.h.identity.findById(applicantId)).toBeDefined();
+  });
+
+  it('the applicant chooses the password of the school request: required for a new account (400), then they can log in with it', async () => {
+    const { app, login, submitForm } = await build();
+    for (const password of [undefined, '', 'abc', 'x'.repeat(13)]) {
+      const body = submitForm({ phone: '01166660000' });
+      const res = await request(app).post(`${schools}/submissions`).send({ ...body, applicant: { ...body.applicant, password } });
+      expect(res.status).toBe(400);
+      expect(['INVALID_PASSWORD', 'VALIDATION_FAILED']).toContain(res.body.error.code);
+    }
+    const ok = await request(app).post(`${schools}/submissions`).send(submitForm({ phone: '01166660000', schoolName: 'مدرسة بكلمة مرور' }));
+    expect(ok.status).toBe(201);
+    expect(JSON.stringify(ok.body)).not.toContain('Pass1234');
+    expect((await login({ phone: '01166660000', password: 'Pass1234' })).Authorization).toMatch(/^Bearer /);
   });
 
   it('limits public submissions per client (429)', async () => {

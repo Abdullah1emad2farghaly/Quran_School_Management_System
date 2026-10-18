@@ -8,6 +8,7 @@ import { ApplicantAccountResolver } from './applicant-account-resolver';
 import type { ApplicantInput } from './school-service';
 
 export interface RegisterOrganizationInput {
+  /** `password` is the password the new account is created with (required when the applicant is not logged in; never stored in clear, logged or returned). */
   readonly applicant: ApplicantInput;
   readonly organization: OrganizationAddressInput & { readonly name: unknown };
   /** Set only by the HTTP layer from a verified access token (see ApplicantAccountResolver). */
@@ -32,14 +33,14 @@ export interface OrganizationRegistrationDeps {
 /**
  * Organization registration: its own workflow, independent of any school (no main school is needed or created).
  * ONE transaction: validate the form (applicant, name, country and the organization's own address: registered governorate, free-text
- * center and village) -> resolve or create the applicant's account through IAM -> create the organization (ACTIVE; name unique
+ * center and village) -> create the applicant's account through IAM with the password the applicant chose (or use the logged-in account) -> create the organization (ACTIVE; name unique
  * system-wide; country immutable) -> assign the applicant the ORGANIZATION_MANAGER role through Module 09 (history kept) -> link them
  * as manager of THAT organization only. MAIN_ADMIN (the platform administrator) is NEVER assigned here. Any failure rolls everything
  * back, including the new account.
  *
- * The new account's password is random and unknown: nobody can log in as the applicant until the phone's owner sets a password
- * through the OTP recovery flow (the existing verification), so the privileged role cannot be used by an unverified identity.
- * The role grants nothing outside the linked organization: the Authorization Engine checks the organization link, not the role.
+ * The applicant types the new account's password in the registration form (IAM password policy, INVALID_PASSWORD otherwise), so
+ * they can log in immediately. The phone is NOT verified at this point; the role grants nothing outside the linked organization
+ * (the Authorization Engine checks the organization link, not the role). A phone that already has an account is never reused.
  */
 export class OrganizationRegistrationService {
   private readonly organizations: OrganizationRegistrationDeps['organizations'];
@@ -74,7 +75,7 @@ export class OrganizationRegistrationService {
         t,
       );
       // 3-5. Account, organization, scoped administrator.
-      const resolved = await this.applicants.resolve(phone, input.authenticatedUserId, t);
+      const resolved = await this.applicants.resolve(phone, input.authenticatedUserId, t, applicant.password, true);
       const created = await this.organizations.createOrganization({ name, ...address }, t);
       if (!(await this.roles.hasRole(resolved.userId, 'ORGANIZATION_MANAGER', t))) {
         await this.roles.assignRole({ userId: resolved.userId, roleCode: 'ORGANIZATION_MANAGER', assignedBy: null }, t);

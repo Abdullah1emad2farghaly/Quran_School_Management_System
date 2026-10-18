@@ -29,12 +29,25 @@ describe('public school submission: the applicant account', () => {
     expect(await codeOf(t.service.submitSchool({ ...t.form({ phone: '01055555555', schoolName: 'x' }), villageName: 'قرية' }))).toBe('INVALID_PARENT_ADDRESS');
   });
 
-  it('the new account has an unguessable password: the phone-derived initial password and the phone itself do not log in', async () => {
+  it('the new account is created with the password the applicant typed: they can log in with it, the phone-derived password does not work, and it is never returned', async () => {
     const t = await createSchoolsHarness();
     const { applicant } = await submit(t, { phone: '01012345678' });
+    expect(await t.identity.verifyPassword(applicant.userId, 'Pass1234')).toBe(true);
     for (const guess of ['5678', '01012345678', '+201012345678', 'secret1', '12345678']) expect(await t.identity.verifyPassword(applicant.userId, guess)).toBe(false);
-    expect(await t.identity.verifyPassword(applicant.userId, t.generated[0]!)).toBe(true); // only the generated value (never returned)
-    expect(JSON.stringify(applicant)).not.toContain(t.generated[0]!);
+    expect(JSON.stringify(applicant)).not.toContain('Pass1234');
+    expect(t.generated).toHaveLength(0); // no password was generated
+  });
+
+  it('requires a valid password (4-12 characters) for a new account; nothing is created when it is missing or invalid', async () => {
+    const t = await createSchoolsHarness();
+    const schoolsBefore = t.schools.rows.size;
+    const usersBefore = t.users.rows.size;
+    for (const password of [undefined, '', 'abc', 'x'.repeat(13), 12345678, null]) {
+      const body = t.form();
+      expect(await codeOf(t.service.submitSchool({ ...body, applicant: { ...body.applicant, password } } as never))).toBe('INVALID_PASSWORD');
+    }
+    expect(t.schools.rows.size).toBe(schoolsBefore);
+    expect(t.users.rows.size).toBe(usersBefore);
   });
 
   it('rejects an invalid form before writing anything (no user, no school, no code consumed)', async () => {

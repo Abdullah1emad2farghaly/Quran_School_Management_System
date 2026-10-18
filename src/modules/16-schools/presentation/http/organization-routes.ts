@@ -27,6 +27,10 @@ const requiredId = (field: string): ValidationChain => body(field).isString().wi
 const optionalText = (field: string): ValidationChain =>
   body(field).optional({ values: 'null' }).isString().withMessage('INVALID_VALUE').bail().isLength({ max: 1000 }).withMessage('INVALID_VALUE');
 
+/** Optional at the HTTP edge (a logged-in applicant sends none); the IAM password policy (4-12 characters) is enforced by the service for a new account. */
+const optionalPassword = (field: string, max: number): ValidationChain =>
+  body(field).optional({ values: 'null' }).isString().withMessage('INVALID_VALUE').bail().custom((v: string) => Array.from(v).length <= max).withMessage('INVALID_VALUE');
+
 export const ORGANIZATION_LIST_SPEC: ListQuerySpec = { sortable: { name: 'name' }, defaultSort: [{ key: 'name', direction: 'asc' }], filters: {} };
 
 /**
@@ -54,6 +58,7 @@ export function createOrganizationRouter(deps: OrganizationRouterDeps): Router {
     validate(
       text('applicant.name', 200),
       text('applicant.phone', 40),
+      optionalPassword('applicant.password', 12),
       text('organization.name', 200),
       requiredId('organization.countryId'),
       requiredId('organization.governorateId'),

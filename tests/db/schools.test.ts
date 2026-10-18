@@ -398,7 +398,7 @@ const create = (f: Fixture, name = 'المدرسة', over: Record<string, unknow
   f.service.createSchool({ organizationId: f.ids.org, name, governorateId: f.ids.gov, gps, actorId: f.admin, ...over });
 const submit = (f: Fixture, over: { phone?: string; schoolName?: string; applicantName?: string; governorateId?: string } = {}) =>
   f.service.submitSchool({
-    applicant: { name: over.applicantName ?? 'سارة', phone: over.phone ?? phoneNumber() },
+    applicant: { name: over.applicantName ?? 'سارة', phone: over.phone ?? phoneNumber(), password: 'Pass1234' },
     organizationId: f.ids.org,
     name: over.schoolName ?? 'مدرسة مقدمة',
     governorateId: over.governorateId ?? f.ids.gov,
@@ -571,12 +571,13 @@ describe('public submissions and listing on MariaDB (migration add-schools-appli
       expect(result.school).toMatchObject({ status: 'PENDING', createdBy: result.applicant.userId, organizationId: f.ids.org, countryId: f.ids.country });
       expect(await f.q('SELECT 1 FROM user_roles WHERE user_id = :u', { u: result.applicant.userId })).toHaveLength(0);
       expect(await f.q('SELECT 1 FROM school_managers')).toHaveLength(0);
-      // The applicant has an unguessable password: not the phone-derived initial password, not the phone, only the generated value.
+      // The account has the password the applicant typed (stored hashed): not the phone-derived initial password, not the phone.
       const [{ password_hash }] = await f.q<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = :id', { id: result.applicant.userId });
       const hasher = new BcryptPasswordHasher(4);
       expect(await hasher.verify(p.slice(-4), password_hash)).toBe(false);
       expect(await hasher.verify(p, password_hash)).toBe(false);
-      expect(await hasher.verify('Qx7mK2pL9vTn', password_hash)).toBe(true);
+      expect(await hasher.verify('Pass1234', password_hash)).toBe(true);
+      expect(password_hash).not.toContain('Pass1234');
     });
   });
 
@@ -622,7 +623,7 @@ describe('public submissions and listing on MariaDB (migration add-schools-appli
 
       // another organization's manager sees none of these schools
       const other = await f.registration.registerOrganization({
-        applicant: { name: 'مدير', phone: phoneNumber() },
+        applicant: { name: 'مدير', phone: phoneNumber(), password: 'Pass1234' },
         organization: { name: `Other organization ${Date.now()}`, countryId: f.ids.country, governorateId: f.ids.gov },
       });
       expect((await f.service.listSchools({ actorId: other.applicant.userId, page: { page: 1, pageSize: 20 } }, f.tx)).total).toBe(0);
@@ -632,7 +633,7 @@ describe('public submissions and listing on MariaDB (migration add-schools-appli
 
 describe('organizations on MariaDB: registration, scope and the country invariant', () => {
   const registerBody = (f: Fixture, over: { name?: string; phone?: string; countryId?: string; governorateId?: string } = {}) => ({
-    applicant: { name: 'أحمد محمد', phone: over.phone ?? phoneNumber() },
+    applicant: { name: 'أحمد محمد', phone: over.phone ?? phoneNumber(), password: 'Pass1234' },
     organization: { name: over.name ?? `Org ${randomUUID()}`, countryId: over.countryId ?? f.ids.country, governorateId: over.governorateId ?? f.ids.gov, centerName: 'مركز غير مسجل', villageName: 'قرية غير مسجلة' },
   });
 

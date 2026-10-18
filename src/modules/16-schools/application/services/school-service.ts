@@ -45,6 +45,8 @@ export interface CreateSchoolInput extends SchoolAddressInput {
 export interface ApplicantInput {
   readonly name: unknown;
   readonly phone: unknown;
+  /** The password of the NEW account the applicant chooses (required when not logged in; ignored for a logged-in applicant). */
+  readonly password?: unknown;
 }
 
 export interface SubmitSchoolInput extends SchoolAddressInput {
@@ -205,7 +207,7 @@ export class SchoolService {
   submitSchool(input: SubmitSchoolInput, tx?: TransactionContext): Promise<SchoolSubmissionResult> {
     return this.inTransaction(tx, async (t) => {
       const form = this.validateSubmission(input);
-      const applicant = await this.applicants.resolve(form.phone, input.authenticatedUserId, t);
+      const applicant = await this.applicants.resolve(form.phone, input.authenticatedUserId, t, form.password, true);
       const school = await this.buildSchool(input, applicant.userId, applicant.userId, input.organizationId, t, form.applicantName);
       await this.persistNew(school, applicant.userId, t);
       return { school: toSchoolDto(school), applicant };
@@ -451,13 +453,13 @@ export class SchoolService {
   }
 
   /** Pure form validation (before anything is written): applicant name, phone (IAM normalization, E.164), school name and GPS. */
-  private validateSubmission(input: SubmitSchoolInput): { applicantName: string; phone: string } {
+  private validateSubmission(input: SubmitSchoolInput): { applicantName: string; phone: string; password: unknown } {
     const applicant = (typeof input.applicant === 'object' && input.applicant !== null ? input.applicant : {}) as Partial<ApplicantInput>;
     const applicantName = normalizeApplicantName(applicant.name);
     const phone = normalizePhone(applicant.phone as string); // IAM rules; throws the IAM validation error for a bad phone
     normalizeSchoolName(input.name);
     parseGpsFix(input.gps);
-    return { applicantName, phone };
+    return { applicantName, phone, password: applicant.password };
   }
 
   private inTransaction<T>(tx: TransactionContext | undefined, work: (tx: TransactionContext) => Promise<T>): Promise<T> {

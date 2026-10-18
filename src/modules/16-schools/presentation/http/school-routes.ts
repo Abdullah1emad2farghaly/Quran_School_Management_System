@@ -30,6 +30,9 @@ const text = (field: string, max: number): ValidationChain =>
 const optionalId = (field: string): ValidationChain => body(field).optional({ values: 'null' }).isUUID().withMessage('INVALID_VALUE');
 /** Free text: only the type and a generous size cap are checked here; normalization and the 200-character rule are the address rules (Module 15). */
 const optionalText = (field: string): ValidationChain => body(field).optional({ values: 'null' }).isString().withMessage('INVALID_VALUE').bail().isLength({ max: 1000 }).withMessage('INVALID_VALUE');
+/** Optional at the HTTP edge (a logged-in applicant sends none); the IAM password policy (4-12 characters) is enforced by the service for a new account. */
+const optionalPassword = (field: string, max: number): ValidationChain =>
+  body(field).optional({ values: 'null' }).isString().withMessage('INVALID_VALUE').bail().custom((v: string) => Array.from(v).length <= max).withMessage('INVALID_VALUE');
 const requiredUuid = (field: string): ValidationChain => body(field).isString().withMessage('INVALID_VALUE').bail().isUUID().withMessage('INVALID_VALUE');
 const number = (field: string): ValidationChain =>
   body(field).exists({ values: 'null' }).withMessage('REQUIRED_FIELD').bail().custom((v) => typeof v === 'number' && Number.isFinite(v)).withMessage('INVALID_VALUE');
@@ -95,7 +98,7 @@ export function createSchoolRouter(deps: SchoolRouterDeps): Router {
     '/submissions',
     deps.publicSubmissionLimit,
     optionalAuthentication,
-    validate(text('applicant.name', 200), text('applicant.phone', 40), requiredUuid('organizationId'), ...schoolChains()),
+    validate(text('applicant.name', 200), text('applicant.phone', 40), optionalPassword('applicant.password', 12), requiredUuid('organizationId'), ...schoolChains()),
     handle(async (req, res) => sendCreated(res, await h.submitSchool(req.body, req.auth?.userId))),
   );
 

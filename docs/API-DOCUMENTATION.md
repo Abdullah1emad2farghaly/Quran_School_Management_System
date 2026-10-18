@@ -58,6 +58,38 @@ details? } }`; `error.details` is `{ fields:[{field, code, message}] }` for vali
 `meta.{page,pageSize,total,totalPages}`), sorting (`sort=name,-createdAt`, whitelist), filtering (`filter[x]=a,b`), `Accept-Language`
 (`ar` default, `en`), `X-Request-Id`, `Content-Language`, `Cache-Control: no-store` on token endpoints. Rules: `docs/API-STANDARDS.md`.
 
+## Current live endpoint inventory (verified against the mounted routers)
+
+The current API exposes the following **23 operations** under `/api/v1`. This list is intentionally limited to endpoints mounted by `src/app/routes/index.ts`; planned modules with placeholder route folders are not presented as implemented endpoints. The route-inventory test compares this live router with the generated OpenAPI document in both directions.
+
+| Tag | Method | Endpoint | Purpose | Authentication |
+|---|---|---|---|---|
+| Health | GET | `/health` | Liveness probe | Public |
+| Health | GET | `/health/ready` | Database readiness probe | Public |
+| Authentication | POST | `/auth/login` | Log in with phone and password | Public |
+| Authentication | POST | `/auth/refresh` | Rotate access and refresh tokens | Refresh token |
+| Authentication | POST | `/auth/logout` | Revoke current session | Bearer access token |
+| Authentication | POST | `/auth/logout-all` | Revoke all sessions for current user | Bearer access token |
+| Password recovery | POST | `/auth/password-recovery/request` | Request recovery OTP | Public; rate-limited by service |
+| Password recovery | POST | `/auth/password-recovery/verify` | Verify OTP and obtain reset token | Public; OTP credential |
+| Password recovery | POST | `/auth/password-recovery/reset` | Set password using reset token | Public; reset-token credential |
+| Organizations | POST | `/organizations` | Register an organization and its manager | Public; rate-limited; optional login |
+| Organizations | GET | `/organizations` | List organizations managed by caller | Bearer access token + permission/scope |
+| Organizations | GET | `/organizations/{id}` | Read organization details | Bearer access token + permission/scope |
+| Schools | POST | `/schools` | Create a school in an organization | Bearer access token + permission/scope |
+| Schools | POST | `/schools/submissions` | Submit a public school application | Public; rate-limited; optional login |
+| Schools | GET | `/schools` | List caller's accessible schools | Bearer access token + permission/scope |
+| Schools | GET | `/schools/{id}` | Read school details | Bearer access token + permission/scope |
+| Schools | POST | `/schools/{id}/approve` | Approve a pending school | Bearer access token + permission/scope |
+| Schools | POST | `/schools/{id}/reject` | Reject a pending school | Bearer access token + permission/scope |
+| Schools | POST | `/schools/{id}/deactivate` | Deactivate an active school | Bearer access token + permission/scope |
+| Schools | POST | `/schools/{id}/reactivate` | Reactivate an inactive school | Bearer access token + permission/scope |
+| Schools | PATCH | `/schools/{id}/gps` | Correct GPS while permitted | Bearer access token + permission/scope |
+| Schools | PUT | `/schools/{id}/manager` | Assign school manager | Bearer access token + permission/scope |
+| Schools | DELETE | `/schools/{id}/manager` | Revoke school manager assignment | Bearer access token + permission/scope |
+
+Swagger UI documents these operations from the typed contracts registered in `src/app/openapi/api-documents.ts`. Do not add future or planned endpoints to the public contract until they are actually mounted and implemented.
+
 ## Adding or changing an endpoint (module completion criteria)
 1. Write or update the module's `*.openapi.ts` (operation, schemas, examples) and register new contracts in `api-documents.ts`.
 2. Add real calls for the new operation to the module's conformance test in `tests/api-docs/conformance/` and keep its

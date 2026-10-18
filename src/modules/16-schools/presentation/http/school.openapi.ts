@@ -179,7 +179,7 @@ export const schoolApiDoc: ModuleApiDoc = {
       operationId: 'submitSchool',
       summary: 'Submit a school request (public)',
       description:
-        "Public form for a new school of an ACTIVE organization. The school is created PENDING and grants nothing until the organization's manager approves it. Login is optional: without a token a new account is created for the applicant (password generated and never returned); with a token the applicant is the logged-in user. A per-IP abuse limit applies. A token that is sent must be valid.",
+        "Public form for a new school of an ACTIVE organization. The school is created PENDING and grants nothing until the organization's manager approves it. Login is optional: without a token a new account is created for the applicant with the password the applicant typed in the form (`applicant.password`, required in that case; the phone is not verified at this point); with a token the applicant is the logged-in user. A per-IP abuse limit applies. A token that is sent must be valid.",
       authorization: {
         authentication: 'optional',
         roles: [],
@@ -193,7 +193,20 @@ export const schoolApiDoc: ModuleApiDoc = {
         description: 'The applicant, the organization and the school with its address and GPS.',
         schema: s.object(
           {
-            applicant: s.object({ name: s.string({ maxLength: 200, example: 'Mona Hassan' }), phone: s.string({ maxLength: 40, example: '+201002345678' }) }, ['name', 'phone']),
+            applicant: s.object(
+              {
+                name: s.string({ maxLength: 200, example: 'Mona Hassan' }),
+                phone: s.string({ maxLength: 40, example: '+201002345678' }),
+                password: s.string({
+                  minLength: 4,
+                  maxLength: 12,
+                  description:
+                    'The password of the NEW account (4-12 characters, Master Specification §23). Required when the caller is not logged in; ignored when a valid access token is sent (the account already exists). Never returned or logged.',
+                  example: 'Pass1234',
+                }),
+              },
+              ['name', 'phone'],
+            ),
             organizationId: s.uuid({ example: ORG_ID }),
             school: schoolForm({}),
           },
@@ -203,7 +216,7 @@ export const schoolApiDoc: ModuleApiDoc = {
           submission: {
             summary: 'A school request',
             value: {
-              applicant: { name: 'Mona Hassan', phone: '+201002345678' },
+              applicant: { name: 'Mona Hassan', phone: '+201002345678', password: 'Pass1234' },
               organizationId: ORG_ID,
               school: { name: 'Al-Huda Branch', governorateId: GOVERNORATE_ID, gps: gpsExample },
             },
@@ -222,7 +235,7 @@ export const schoolApiDoc: ModuleApiDoc = {
       errors: [
         {
           status: 400,
-          codes: ['INVALID_APPLICANT_NAME', 'INVALID_PHONE_NUMBER', 'INVALID_SCHOOL_NAME', 'INVALID_GPS_COORDINATES', 'GPS_ACCURACY_EXCEEDS_LIMIT', 'SCHOOL_COUNTRY_MISMATCH', 'PARENT_ADDRESS_COUNTRY_MISMATCH', 'INVALID_GEOGRAPHY_HIERARCHY', 'GEOGRAPHY_NODE_INACTIVE'],
+          codes: ['INVALID_APPLICANT_NAME', 'INVALID_PHONE_NUMBER', 'INVALID_PASSWORD', 'INVALID_SCHOOL_NAME', 'INVALID_GPS_COORDINATES', 'GPS_ACCURACY_EXCEEDS_LIMIT', 'SCHOOL_COUNTRY_MISMATCH', 'PARENT_ADDRESS_COUNTRY_MISMATCH', 'INVALID_GEOGRAPHY_HIERARCHY', 'GEOGRAPHY_NODE_INACTIVE'],
           description: 'A business validation failed.',
         },
         { status: 404, codes: ['GEOGRAPHY_NODE_NOT_FOUND', 'ORGANIZATION_NOT_FOUND'], description: 'The governorate or the organization does not exist.' },

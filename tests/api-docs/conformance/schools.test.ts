@@ -45,7 +45,7 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
   it('organizations: register, list and get, with their error responses', async () => {
     const { app, t, auth } = await build();
     const form = (name: string, phone: string) => ({
-      applicant: { name: 'أحمد محمد', phone },
+      applicant: { name: 'أحمد محمد', phone, password: 'Pass1234' },
       organization: { name, countryId: t.country.id, governorateId: t.gov.id, centerName: 'مركز حر' },
     });
     const registered = api.conforms(await request(app).post(orgs).send(form('دار القرآن', '01112345678')));
@@ -64,7 +64,7 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
   it('schools: the whole workflow with its error responses', async () => {
     const { app, t, auth, login } = await build();
     const body = (name: string) => ({ organizationId: t.org.id, school: { name, governorateId: t.gov.id, centerName: 'مركز حر', gps } });
-    const sub = (name: string, phone: string) => ({ applicant: { name: 'سارة', phone }, organizationId: t.org.id, school: { name, governorateId: t.gov.id, gps } });
+    const sub = (name: string, phone: string) => ({ applicant: { name: 'سارة', phone, password: 'Pass1234' }, organizationId: t.org.id, school: { name, governorateId: t.gov.id, gps } });
 
     // create (201, PENDING) and its errors
     const main = api.conforms(await request(app).post(schools).set(auth).send(body('الرئيسية')));
@@ -123,7 +123,7 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
   it('answers 429 RATE_LIMITED with Retry-After on the public submissions, as documented', async () => {
     const { app, t } = await build(1);
     const form = (n: number) => ({
-      applicant: { name: 'أحمد', phone: `0111000000${n}` },
+      applicant: { name: 'أحمد', phone: `0111000000${n}`, password: 'Pass1234' },
       organization: { name: `منظمة ${n}`, countryId: t.country.id, governorateId: t.gov.id },
     });
     api.conforms(await request(app).post(orgs).send(form(1)));

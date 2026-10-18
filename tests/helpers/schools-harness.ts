@@ -138,7 +138,7 @@ export async function createSchoolsHarness(options: { failRoleAssignment?: boole
   const addressInput = { governorateId: gov.id };
   /** A public submission form (applicant + school) for `organizationId`. */
   const form = (over: { phone?: string; name?: string; schoolName?: string; organizationId?: string } = {}) => ({
-    applicant: { name: over.name ?? 'أحمد محمد', phone: over.phone ?? '01012345678' },
+    applicant: { name: over.name ?? 'أحمد محمد', phone: over.phone ?? '01012345678', password: 'Pass1234' },
     organizationId: over.organizationId ?? org.id,
     name: over.schoolName ?? 'مدرسة النور',
     ...addressInput,

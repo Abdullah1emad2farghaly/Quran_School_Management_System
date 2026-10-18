@@ -1,0 +1,4 @@
+Delete these files from your project (they were removed):
+DELETE-THESE-FILES.txt
+docs/CHANGELOG-ENTRY-0.21.0.md
+src/modules/16-schools/domain/value-objects/school-type.ts

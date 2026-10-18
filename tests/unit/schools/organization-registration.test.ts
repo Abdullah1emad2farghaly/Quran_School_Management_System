@@ -3,7 +3,7 @@ import { codeOf, createSchoolsHarness, gps } from '../../helpers/schools-harness
 
 type Harness = Awaited<ReturnType<typeof createSchoolsHarness>>;
 const form = (t: Harness, over: { phone?: string; name?: string; applicantName?: string; organization?: object } = {}) => ({
-  applicant: { name: over.applicantName ?? 'أحمد محمد', phone: over.phone ?? '01012345678' },
+  applicant: { name: over.applicantName ?? 'أحمد محمد', phone: over.phone ?? '01012345678', password: 'Pass1234' },
   organization: { name: over.name ?? 'دار القرآن', countryId: t.country.id, governorateId: t.gov.id, ...over.organization },
 });
 
@@ -28,11 +28,23 @@ describe('organization registration (own workflow, independent of schools)', () 
     expect(link).toMatchObject({ organizationId: result.organization.id, name: 'أحمد محمد', assignedBy: null, revokedAt: null });
   });
 
-  it('the new account cannot log in with the phone or the phone-derived password; only OTP recovery can set one', async () => {
+  it('the new account is created with the password the applicant typed: they can log in with it, and it is never returned', async () => {
     const t = await createSchoolsHarness();
     const { applicant } = await t.registration.registerOrganization(form(t));
-    for (const guess of ['5678', '01012345678', '+201012345678']) expect(await t.identity.verifyPassword(applicant.userId, guess)).toBe(false);
-    expect(JSON.stringify(applicant)).not.toContain(t.generated[0]!);
+    expect(await t.identity.verifyPassword(applicant.userId, 'Pass1234')).toBe(true);
+    expect(await t.identity.verifyPassword(applicant.userId, '5678')).toBe(false); // not the phone-derived password
+    expect(JSON.stringify(applicant)).not.toContain('Pass1234');
+    expect(t.generated).toHaveLength(0); // no password was generated
+  });
+
+  it('requires a valid password (4-12 characters) for a new account; nothing is created when it is missing or invalid', async () => {
+    const t = await createSchoolsHarness();
+    const usersBefore = t.users.rows.size;
+    for (const password of [undefined, '', 'abc', 'x'.repeat(13), 12345678, null]) {
+      const body = form(t);
+      await expect(codeOf(t.registration.registerOrganization({ ...body, applicant: { ...body.applicant, password } as never }))).resolves.toBe('INVALID_PASSWORD');
+    }
+    expect(t.users.rows.size).toBe(usersBefore);
   });
 
   it('requires applicant, name, country and governorate; nothing is created when the form is wrong', async () => {
@@ -165,7 +177,7 @@ describe('school country invariant and the school keeps its own address', () => 
   it('a French organization can have French schools but not Egyptian ones; each organization chooses its own country', async () => {
     const t = await createSchoolsHarness();
     const fr = await t.registration.registerOrganization({
-      applicant: { name: 'Jean', phone: '01088888881' },
+      applicant: { name: 'Jean', phone: '01088888881', password: 'Pass1234' },
       organization: { name: 'Org FR', countryId: t.france.id, governorateId: t.paris.id },
     });
     const managerFr = fr.applicant.userId;

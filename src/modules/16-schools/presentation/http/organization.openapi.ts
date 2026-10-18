@@ -26,6 +26,7 @@ const registrationErrors: ErrorDoc[] = [
     codes: [
       'INVALID_APPLICANT_NAME',
       'INVALID_PHONE_NUMBER',
+      'INVALID_PASSWORD',
       'INVALID_ORGANIZATION_NAME',
       'ORGANIZATION_COUNTRY_INVALID',
       'INVALID_PARENT_ADDRESS',
@@ -33,7 +34,7 @@ const registrationErrors: ErrorDoc[] = [
       'INVALID_GEOGRAPHY_HIERARCHY',
       'GEOGRAPHY_NODE_INACTIVE',
     ],
-    description: 'A business validation failed (name, phone, country or address hierarchy).',
+    description: 'A business validation failed (name, phone, password policy, country or address hierarchy).',
   },
   { status: 404, codes: ['GEOGRAPHY_NODE_NOT_FOUND'], description: 'The governorate, center or village does not exist.' },
   {
@@ -56,7 +57,7 @@ export const organizationApiDoc: ModuleApiDoc = {
       operationId: 'registerOrganization',
       summary: 'Register an organization (public)',
       description:
-        'Creates an ACTIVE organization with its country and address, and makes the applicant its ORGANIZATION_MANAGER (of THIS organization only). Login is optional: without a token a new account is created for the applicant (its password is generated and never returned: the applicant uses password recovery); with a token the applicant is the logged-in user. The organization name is unique system-wide. A per-IP abuse limit applies.',
+        'Creates an ACTIVE organization with its country and address, and makes the applicant its ORGANIZATION_MANAGER (of THIS organization only). Login is optional: without a token a new account is created for the applicant with the password the applicant typed in the form (`applicant.password`, required in that case; the phone is not verified at this point); with a token the applicant is the logged-in user. The organization name is unique system-wide. A per-IP abuse limit applies.',
       authorization: {
         authentication: 'optional',
         roles: [],
@@ -71,7 +72,17 @@ export const organizationApiDoc: ModuleApiDoc = {
         schema: s.object(
           {
             applicant: s.object(
-              { name: s.string({ maxLength: 200, example: 'Abdullah Emad Farghaly' }), phone: s.string({ maxLength: 40, example: '+201001234567' }) },
+              {
+                name: s.string({ maxLength: 200, example: 'Abdullah Emad Farghaly' }),
+                phone: s.string({ maxLength: 40, example: '+201001234567' }),
+                password: s.string({
+                  minLength: 4,
+                  maxLength: 12,
+                  description:
+                    'The password of the NEW account (4-12 characters, Master Specification §23). Required when the caller is not logged in; ignored when a valid access token is sent (the account already exists). Never returned or logged.',
+                  example: 'Pass1234',
+                }),
+              },
               ['name', 'phone'],
             ),
             organization: s.object(
@@ -91,7 +102,7 @@ export const organizationApiDoc: ModuleApiDoc = {
           register: {
             summary: 'Register an organization',
             value: {
-              applicant: { name: 'Abdullah Emad Farghaly', phone: '+201001234567' },
+              applicant: { name: 'Abdullah Emad Farghaly', phone: '+201001234567', password: 'Pass1234' },
               organization: { name: 'Al-Noor Quran Foundation', countryId: COUNTRY_ID, governorateId: GOVERNORATE_ID },
             },
           },
