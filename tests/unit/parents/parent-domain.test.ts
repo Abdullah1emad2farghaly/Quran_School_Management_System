@@ -11,16 +11,17 @@ const code = (fn: () => unknown): string => {
   }
 };
 
-describe('Parent name (§32 three-part name, §37 normalization)', () => {
+describe('Parent name (exactly three parts, the shared Identity rule)', () => {
   it('trims, collapses spaces and applies Unicode NFC', () => {
     expect(normalizeParentName('  أحمد   محمد \t علي ')).toBe('أحمد محمد علي');
     expect(normalizeParentName('Jose\u0301 Maria Lopez')).toBe('Jos\u00e9 Maria Lopez');
   });
 
-  it('needs at least three parts (a four-part name is fine)', () => {
+  it('needs EXACTLY three parts: two and four parts are invalid', () => {
     expect(code(() => normalizeParentName('أحمد محمد'))).toBe('INVALID_PARENT_NAME');
     expect(code(() => normalizeParentName('أحمد'))).toBe('INVALID_PARENT_NAME');
-    expect(normalizeParentName('أحمد محمد علي حسن')).toBe('أحمد محمد علي حسن');
+    expect(code(() => normalizeParentName('أحمد محمد علي حسن'))).toBe('INVALID_PARENT_NAME');
+    expect(normalizeParentName('أحمد محمد علي')).toBe('أحمد محمد علي');
   });
 
   it('rejects non-text, empty, control characters and names over 200 characters', () => {
@@ -36,26 +37,24 @@ describe('Parent name (§32 three-part name, §37 normalization)', () => {
     expect(isSameParentName('فاطمة محمد علي', 'فاطمه محمد علي')).toBe(false); // ة vs ه
     expect(isSameParentName('أحمد محمد علي', 'أحمد محمد حسن')).toBe(false);
     expect(isSameParentName('x y', 'x y z')).toBe(false); // invalid input never matches
+    expect(isSameParentName(null, 'أحمد محمد علي')).toBe(false); // a missing name never matches
   });
 });
 
 describe('Parent entity and Parent-to-School link', () => {
-  it('registers with a normalized name and records only identifiers in the event', () => {
-    const parent = Parent.register({ userId: 'u1', organizationId: 'o1', fullName: ' أحمد  محمد علي ', createdBy: 'a1', clock });
-    expect(parent.fullName).toBe('أحمد محمد علي');
+  it('registers without storing a name (the name is the account\'s) and records only identifiers in the event', () => {
+    const parent = Parent.register({ userId: 'u1', organizationId: 'o1', createdBy: 'a1', clock });
+    expect(parent.snapshot).not.toHaveProperty('fullName');
     const events = parent.pullDomainEvents();
     expect(events.map((e) => e.eventType)).toEqual([ParentEventTypes.PARENT_REGISTERED]);
     expect(Object.keys(events[0]!.payload as object).sort()).toEqual(['actorId', 'organizationId', 'parentId', 'userId']);
   });
 
-  it('rename records an event only when the normalized name really changes', () => {
-    const parent = Parent.register({ userId: 'u1', organizationId: 'o1', fullName: 'أحمد محمد علي', createdBy: 'a1', clock });
+  it('records ParentAddressChanged when a new current address was stored', () => {
+    const parent = Parent.register({ userId: 'u1', organizationId: 'o1', createdBy: 'a1', clock });
     parent.pullDomainEvents();
-    expect(parent.rename('  أحمد  محمد علي ', 'a1', clock)).toBe(false);
-    expect(parent.pullDomainEvents()).toHaveLength(0);
-    expect(parent.rename('أحمد محمد حسن', 'a1', clock)).toBe(true);
-    expect(parent.pullDomainEvents().map((e) => e.eventType)).toEqual([ParentEventTypes.PARENT_UPDATED]);
-    expect(code(() => parent.rename('أحمد', 'a1', clock))).toBe('INVALID_PARENT_NAME');
+    parent.addressChanged('a1', clock);
+    expect(parent.pullDomainEvents().map((e) => e.eventType)).toEqual([ParentEventTypes.PARENT_ADDRESS_CHANGED]);
   });
 
   it('a school link is active when created, keeps its history when removed and cannot be removed twice', () => {
@@ -69,4 +68,3 @@ describe('Parent entity and Parent-to-School link', () => {
     expect(() => link.unlink('a2', clock)).toThrow();
   });
 });
-

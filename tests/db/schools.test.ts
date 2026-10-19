@@ -398,7 +398,7 @@ const create = (f: Fixture, name = 'المدرسة', over: Record<string, unknow
   f.service.createSchool({ organizationId: f.ids.org, name, governorateId: f.ids.gov, gps, actorId: f.admin, ...over });
 const submit = (f: Fixture, over: { phone?: string; schoolName?: string; applicantName?: string; governorateId?: string } = {}) =>
   f.service.submitSchool({
-    applicant: { name: over.applicantName ?? 'سارة', phone: over.phone ?? phoneNumber(), password: 'Pass1234' },
+    applicant: { name: over.applicantName ?? 'سارة أحمد علي', phone: over.phone ?? phoneNumber(), password: 'Pass1234' },
     organizationId: f.ids.org,
     name: over.schoolName ?? 'مدرسة مقدمة',
     governorateId: over.governorateId ?? f.ids.gov,
@@ -467,7 +467,7 @@ describe('SchoolService on MariaDB', () => {
       async (f) => {
         const applicant = await f.newUser('TEACHER'); // an earlier legitimate role must survive untouched
         const phone = (await f.q<{ phone: string }>('SELECT phone FROM users WHERE id = :id', { id: applicant }))[0]!.phone;
-        const { school } = await f.service.submitSchool({ applicant: { name: 'x', phone }, organizationId: f.ids.org, name: 'الفرع', governorateId: f.ids.gov, gps, authenticatedUserId: applicant });
+        const { school } = await f.service.submitSchool({ applicant: { name: 'أ ب ج', phone }, organizationId: f.ids.org, name: 'الفرع', governorateId: f.ids.gov, gps, authenticatedUserId: applicant });
         const eventsBefore = (await f.q('SELECT 1 FROM outbox_messages')).length;
         const historyBefore = (await f.service.listStatusHistory(school.id, f.tx)).length;
 
@@ -534,7 +534,7 @@ describe('SchoolService on MariaDB', () => {
       expect(await f.q('SELECT 1 FROM user_roles WHERE user_id = :u', { u: m2 })).toHaveLength(0); // the failed attempt left no role
 
       const phone = (await f.q<{ phone: string }>('SELECT phone FROM users WHERE id = :id', { id: m1 }))[0]!.phone;
-      const request = (await f.service.submitSchool({ applicant: { name: 'x', phone }, organizationId: f.ids.org, name: 'الفرع', governorateId: f.ids.gov, gps, authenticatedUserId: m1 })).school;
+      const request = (await f.service.submitSchool({ applicant: { name: 'أ ب ج', phone }, organizationId: f.ids.org, name: 'الفرع', governorateId: f.ids.gov, gps, authenticatedUserId: m1 })).school;
       await f.service.approveSchool(request.id, f.admin);
       expect(await f.q('SELECT 1 FROM user_roles WHERE user_id = :u AND role_code = :r', { u: m1, r: 'SCHOOL_MANAGER' })).toHaveLength(1);
       expect((await f.service.listManagedSchoolIds(m1, f.tx)).sort()).toEqual([school.id, request.id].sort());
@@ -553,11 +553,13 @@ describe('public submissions and listing on MariaDB (migration add-schools-appli
         "SELECT COLUMN_TYPE, IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'schools' AND COLUMN_NAME = 'applicant_name'",
       );
       expect(column).toEqual([{ COLUMN_TYPE: 'varchar(200)', IS_NULLABLE: 'YES' }]);
-      const submitted = await submit(f, { applicantName: '  أحمد   محمد ' });
+      const submitted = await submit(f, { applicantName: '  أحمد   محمد   علي ' });
       expect(await f.q<{ applicant_name: string; applicant_user_id: string }>('SELECT applicant_name, applicant_user_id FROM schools WHERE id = :id', { id: submitted.school.id })).toEqual([
-        { applicant_name: 'أحمد محمد', applicant_user_id: submitted.applicant.userId },
+        { applicant_name: 'أحمد محمد علي', applicant_user_id: submitted.applicant.userId },
       ]);
       await f.fails("UPDATE schools SET applicant_name = '   ' WHERE id = :id", { id: submitted.school.id }); // blank names are refused by the CHECK
+      // the canonical personal name is stored on the ACCOUNT (users.full_name), not only on the request
+      expect(await f.q<{ full_name: string }>('SELECT full_name FROM users WHERE id = :id', { id: submitted.applicant.userId })).toEqual([{ full_name: 'أحمد محمد علي' }]);
     });
   });
 
@@ -623,7 +625,7 @@ describe('public submissions and listing on MariaDB (migration add-schools-appli
 
       // another organization's manager sees none of these schools
       const other = await f.registration.registerOrganization({
-        applicant: { name: 'مدير', phone: phoneNumber(), password: 'Pass1234' },
+        applicant: { name: 'مدير النظام الأول', phone: phoneNumber(), password: 'Pass1234' },
         organization: { name: `Other organization ${Date.now()}`, countryId: f.ids.country, governorateId: f.ids.gov },
       });
       expect((await f.service.listSchools({ actorId: other.applicant.userId, page: { page: 1, pageSize: 20 } }, f.tx)).total).toBe(0);
@@ -633,7 +635,7 @@ describe('public submissions and listing on MariaDB (migration add-schools-appli
 
 describe('organizations on MariaDB: registration, scope and the country invariant', () => {
   const registerBody = (f: Fixture, over: { name?: string; phone?: string; countryId?: string; governorateId?: string } = {}) => ({
-    applicant: { name: 'أحمد محمد', phone: over.phone ?? phoneNumber(), password: 'Pass1234' },
+    applicant: { name: 'أحمد محمد علي', phone: over.phone ?? phoneNumber(), password: 'Pass1234' },
     organization: { name: over.name ?? `Org ${randomUUID()}`, countryId: over.countryId ?? f.ids.country, governorateId: over.governorateId ?? f.ids.gov, centerName: 'مركز غير مسجل', villageName: 'قرية غير مسجلة' },
   });
 
@@ -648,8 +650,9 @@ describe('organizations on MariaDB: registration, scope and the country invarian
       expect(org).toEqual([{ country_id: f.ids.country, governorate_id: f.ids.gov, center_name: 'مركز غير مسجل', village_name: 'قرية غير مسجلة', status: 'ACTIVE' }]);
       expect(await f.q<{ role_code: string }>('SELECT role_code FROM user_roles WHERE user_id = :u AND active = 1', { u: result.applicant.userId })).toEqual([{ role_code: 'ORGANIZATION_MANAGER' }]);
       expect(await f.q<{ organization_id: string; name: string; assigned_by: string | null }>('SELECT organization_id, name, assigned_by FROM organization_admins WHERE user_id = :u AND active = 1', { u: result.applicant.userId })).toEqual([
-        { organization_id: result.organization.id, name: 'أحمد محمد', assigned_by: null },
+        { organization_id: result.organization.id, name: 'أحمد محمد علي', assigned_by: null },
       ]);
+      expect(await f.q<{ full_name: string }>('SELECT full_name FROM users WHERE id = :u', { u: result.applicant.userId })).toEqual([{ full_name: 'أحمد محمد علي' }]); // canonical name on the account
       expect(await f.q('SELECT 1 FROM schools WHERE organization_id = :o', { o: result.organization.id })).toHaveLength(0);
       expect(await f.q("SELECT 1 FROM outbox_messages WHERE aggregate_id = :id AND event_type = 'OrganizationCreated'", { id: result.organization.id })).toHaveLength(1);
       expect(result.organization.code).toMatch(/^ORG-\d{6}$/);

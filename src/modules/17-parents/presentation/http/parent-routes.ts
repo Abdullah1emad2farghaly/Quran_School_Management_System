@@ -38,7 +38,7 @@ const addressChains = (): ValidationChain[] => [
 ];
 
 export const PARENT_LIST_SPEC: ListQuerySpec = {
-  sortable: { createdAt: 'createdAt', name: 'name' },
+  sortable: { createdAt: 'createdAt' },
   defaultSort: [{ key: 'createdAt', direction: 'desc' }],
   filters: {},
 };
@@ -49,7 +49,7 @@ export const PARENT_LIST_SPEC: ListQuerySpec = {
  *   GET    /parents/me                       parents.parent.read-own       PARENT                              the caller's own profile (no id accepted)
  *   GET    /parents/schools/:schoolId        parents.parent.list           SCHOOL_MANAGER of the school        the Parents linked to the school (paginated)
  *   GET    /parents/:id                      parents.parent.read           SCHOOL_MANAGER of a linked school   one Parent
- *   PATCH  /parents/:id                      parents.parent.update         same                                correct the name and/or the address (history kept)
+ *   PATCH  /parents/:id                      parents.parent.update         same                                correct the address (history kept)
  *   DELETE /parents/:id/schools/:schoolId    parents.school-link.remove    SCHOOL_MANAGER of that school       end the Parent-to-School link (account and other links untouched)
  * There is deliberately no deactivate/delete of a Parent (decision D-3 is open). ORGANIZATION_MANAGER and MAIN_ADMIN have no Parent permission.
  * The actor always comes from the verified token. The scope target is the school (creation, listing, link removal) or the Parent (read, update);
@@ -103,7 +103,7 @@ export function createParentRouter(deps: ParentRouterDeps): Router {
   router.patch(
     '/:id',
     auth,
-    validate(parentId, optionalText('name', 200), ...addressChains()),
+    validate(parentId, ...addressChains()),
     guard(ParentPermissions.UPDATE, onParent),
     handle(async (req, res) => sendSuccess(res, await h.updateParent(req.params.id as string, sessionAuthRequired(req), req.body))),
   );

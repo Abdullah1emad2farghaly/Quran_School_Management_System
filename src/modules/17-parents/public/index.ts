@@ -7,12 +7,12 @@ export { PARENT_ERROR_MESSAGES } from '../application/services/parent-error-mess
 export type { ParentDto, ParentAddressDto, ParentSchoolLinkDto } from '../application/dto/parent-dto';
 export type { ParentRepository, ParentAddressEntry, ParentListQuery, ParentSortKey } from '../application/ports/parent-repository';
 export type { ParentSchoolLinkRepository } from '../application/ports/parent-school-link-repository';
-export { NO_VERIFIED_ACCOUNT_NAMES, type VerifiedAccountNames } from '../application/ports/verified-account-names';
+export { STUDENTS_MODULE_NOT_IMPLEMENTED_YET, type ParentStudentDependencies } from '../application/ports/parent-student-dependencies';
 export { Parent, type ParentSnapshot } from '../domain/entities/parent';
 export { ParentSchoolLink, type ParentSchoolLinkSnapshot } from '../domain/entities/parent-school-link';
 export { ParentErrorCodes, parentError, type ParentErrorCode } from '../domain/errors/parent-errors';
 export { ParentEventTypes, PARENT_AGGREGATE_TYPE, PARENT_SCHOOL_LINK_AGGREGATE_TYPE, type ParentEventType, type ParentEventPayload, type ParentSchoolLinkEventPayload } from '../domain/events/parent-events';
-export { normalizeParentName, isSameParentName, PARENT_NAME_MAX_LENGTH, PARENT_NAME_MIN_PARTS } from '../domain/value-objects/parent-name';
+export { normalizeParentName, isSameParentName, PARENT_NAME_MAX_LENGTH, PARENT_NAME_PARTS } from '../domain/value-objects/parent-name';
 export { InMemoryParentRepository, InMemoryParentSchoolLinkRepository } from '../infrastructure/services/in-memory-parent-repositories';
 export { SequelizeParentRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-parent-repository';
 export { SequelizeParentSchoolLinkRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-parent-school-link-repository';

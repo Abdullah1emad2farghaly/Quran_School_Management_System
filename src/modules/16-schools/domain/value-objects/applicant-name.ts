@@ -1,14 +1,15 @@
+import { checkPersonName } from '../../../08-identity-core/public';
 import { schoolError } from '../errors/school-errors';
 
 export const APPLICANT_NAME_MAX_LENGTH = 200;
 
 /**
- * The applicant's name from the school submission form: Unicode NFC, whitespace collapsed, trimmed, 1..200 characters,
- * no control characters (the same convention as every other name in the project). No other rule is invented.
+ * The PERSONAL name of the person who creates an organization or submits a school request (and becomes its manager). It is NOT the
+ * organization's or the school's name. Exactly three parts (the shared Identity rule, Module 08): Unicode NFC, whitespace collapsed,
+ * trimmed, no control characters, at most 200 characters. Raises the already documented INVALID_APPLICANT_NAME.
  */
 export function normalizeApplicantName(input: unknown): string {
-  if (typeof input !== 'string') throw schoolError('INVALID_APPLICANT_NAME');
-  const name = input.normalize('NFC').replace(/\s+/gu, ' ').trim();
-  if (name === '' || /\p{Cc}/u.test(name) || [...name].length > APPLICANT_NAME_MAX_LENGTH) throw schoolError('INVALID_APPLICANT_NAME');
-  return name;
+  const checked = checkPersonName(input);
+  if (!checked.ok) throw schoolError('INVALID_APPLICANT_NAME');
+  return checked.name;
 }

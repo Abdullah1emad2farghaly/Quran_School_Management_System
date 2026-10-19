@@ -27,7 +27,7 @@ Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integrati
 | 14 | Geography | IMPLEMENTED (global reference data: countries, governorates, centers/cities, villages with real FKs ON DELETE RESTRICT; read-only `GeographyLookup` with `validateHierarchy`; idempotent seed of Egypt + 27 governorates only; unit tests pass; `npm run db:migrate` and `npm run test:db` pending on the user machine; no endpoints, permissions or events by design) |
 | 15 | Unified Address | IMPLEMENTED, extended: Parent Address uses the country of the parent's organization (`organizationId`); `validateOrganizationAddress` validates an organization's own address; no tables, endpoints or permissions by design; unit tests pass |
 | 16 | Schools | IMPLEMENTED and corrected (database tests pass, 0.22.2): no Main/Sub distinction (archive migration), every school starts PENDING and is approved/rejected by the owning organization's ORGANIZATION_MANAGER, authorization moved to the Authorization Engine (permissions + `SCHOOL` scope resolver, MAIN_ADMIN has none), free-text center/village, organization registration grants ORGANIZATION_MANAGER. Typecheck, build, unit, integration and API-documentation (`api:verify`) runs pass (0.22.1); the MariaDB runs (`db:migrate`, `test:db`) pass (0.22.2); see `docs/SCHOOLS.md` (open decisions) |
-| 17 | Parents | IMPLEMENTED (0.23.0; unit, HTTP, API-conformance and real-database tests pass in the authoring environment): Parent entity (`User -> PARENT -> Parent`), Parent Address with history, Parent-to-School links with history, School Manager registration with same-organization account reuse and identity-conflict rules, own profile, account-level mandatory first-login password change (Modules 08/10, `POST /auth/change-password`); no global deactivation/deletion (D-3). See `docs/PARENTS.md` |
+| 17 | Parents | IMPLEMENTED (0.23.1; unit, HTTP, API-conformance and real-database tests pass in the authoring environment): Parent entity (`User -> PARENT -> Parent`), Parent Address with history, Parent-to-School links with history, School Manager registration with same-organization account reuse and identity-conflict rules, own profile, account-level mandatory first-login password change (Modules 08/10, `POST /auth/change-password`); canonical three-part personal name on the account (`users.full_name`) for organization creators, school applicants and Parents; existing-account reuse matched by that stored name; unlink guard for students (temporary guard until Module 19); no global deactivation/deletion (D-3). See `docs/PARENTS.md` |
 | 18 | Teachers | NOT_STARTED |
 | 19 | Students | NOT_STARTED |
 | 20 | Groups | NOT_STARTED |
@@ -43,6 +43,7 @@ Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integrati
 | 30 | Exams | NOT_STARTED |
 | 31 | Notifications Core | NOT_STARTED |
 | 32 | Notification Rules | NOT_STARTED |
+
 | 33 | Subscriptions | NOT_STARTED |
 | 34 | Payments & Collection | NOT_STARTED |
 | 35 | History & Audit | NOT_STARTED |

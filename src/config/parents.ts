@@ -2,6 +2,7 @@ import { SystemClock } from '../modules/00-shared-kernel/public';
 import {
   ParentService,
   SequelizeParentRepository,
+  STUDENTS_MODULE_NOT_IMPLEMENTED_YET,
   SequelizeParentSchoolLinkRepository,
   registerParentAuthorization,
 } from '../modules/17-parents/public';
@@ -17,9 +18,8 @@ let service: ParentService | undefined;
 
 /**
  * Inject into other modules' use cases (read-only: type it as `ParentLookup`). Writes are protected at the routes by the Authorization Engine.
- * `accountNames` is left at its default (no module vouches for a person's name yet), so an existing account WITHOUT a Parent record is never
- * reused: the registration answers PARENT_IDENTITY_CONFLICT. When Module 18 (Teachers) or another module exposes verified names through its
- * public contract, pass them here.
+ * An existing account is matched by the canonical three-part name stored on the account itself (`users.full_name`, Module 08): there is no
+ * separate name source to wire.
  */
 export function getParentService(): ParentService {
   if (!service) {
@@ -31,6 +31,9 @@ export function getParentService(): ParentService {
       address: getUnifiedAddressService(),
       identity: getIdentityService(),
       roles: getRoleService(),
+      // TEMPORARY: Module 19 (Students) does not exist, so no student can depend on a Parent-to-School link. Replace this with the Students
+      // module's implementation when Module 19 is implemented (a boundary test fails as soon as Module 19 has source files).
+      studentDependencies: STUDENTS_MODULE_NOT_IMPLEMENTED_YET,
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
       clock: new SystemClock(),

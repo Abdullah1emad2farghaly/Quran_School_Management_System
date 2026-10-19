@@ -23,7 +23,7 @@ export interface OrganizationRegistrationResult {
 export interface OrganizationRegistrationDeps {
   readonly organizations: Pick<OrganizationService, 'createOrganization' | 'assignOrganizationAdmin' | 'requireById' | 'isOrganizationAdmin' | 'listAdministeredOrganizationIds'>;
   readonly address: Pick<UnifiedAddressLookup, 'validateOrganizationAddress'>;
-  readonly identity: Pick<IdentityService, 'findById' | 'createUser'>;
+  readonly identity: Pick<IdentityService, 'findById' | 'createUser' | 'ensureFullName'>;
   readonly roles: Pick<RoleService, 'hasRole' | 'assignRole'>;
   readonly unitOfWork: UnitOfWork;
   readonly generateApplicantPassword?: () => string;
@@ -75,7 +75,7 @@ export class OrganizationRegistrationService {
         t,
       );
       // 3-5. Account, organization, scoped administrator.
-      const resolved = await this.applicants.resolve(phone, input.authenticatedUserId, t, applicant.password, true);
+      const resolved = await this.applicants.resolve(phone, input.authenticatedUserId, t, applicant.password, true, applicantName);
       const created = await this.organizations.createOrganization({ name, ...address }, t);
       if (!(await this.roles.hasRole(resolved.userId, 'ORGANIZATION_MANAGER', t))) {
         await this.roles.assignRole({ userId: resolved.userId, roleCode: 'ORGANIZATION_MANAGER', assignedBy: null }, t);

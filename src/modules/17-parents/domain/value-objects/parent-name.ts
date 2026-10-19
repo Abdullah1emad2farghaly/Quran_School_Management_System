@@ -1,34 +1,18 @@
+import { checkPersonName, isSamePersonName, PERSON_NAME_MAX_LENGTH, PERSON_NAME_PARTS } from '../../../08-identity-core/public';
 import { parentError } from '../errors/parent-errors';
 
-export const PARENT_NAME_MAX_LENGTH = 200;
-export const PARENT_NAME_MIN_PARTS = 3;
+export const PARENT_NAME_MAX_LENGTH = PERSON_NAME_MAX_LENGTH;
+export const PARENT_NAME_PARTS = PERSON_NAME_PARTS;
 
 /**
- * The Parent's full name (Master Specification §32: three-part name; the Student rules §37 use the same convention: at least 3 parts,
- * trimmed, extra spaces collapsed). Unicode NFC, whitespace collapsed, no control characters, at most 200 characters. No other rule
- * is invented (no digit or script restriction, no Arabic letter folding).
+ * The Parent's personal name: EXACTLY three parts, by the shared Identity rule (Module 08, one rule for the organization creator, the school
+ * applicant and the Parent). The name is stored once, on the account (`users.full_name`), never on the Parent record.
  */
 export function normalizeParentName(input: unknown): string {
-  if (typeof input !== 'string') throw parentError('INVALID_PARENT_NAME');
-  const name = input.normalize('NFC').replace(/\s+/gu, ' ').trim();
-  if (name === '' || /\p{Cc}/u.test(name) || [...name].length > PARENT_NAME_MAX_LENGTH) throw parentError('INVALID_PARENT_NAME');
-  if (name.split(' ').length < PARENT_NAME_MIN_PARTS) throw parentError('INVALID_PARENT_NAME');
-  return name;
+  const checked = checkPersonName(input);
+  if (!checked.ok) throw parentError('INVALID_PARENT_NAME');
+  return checked.name;
 }
 
-/**
- * The identity comparison key of an ALREADY normalized name: exact text after NFC/whitespace normalization, compared without regard to
- * Latin letter case. There is deliberately NO Arabic letter normalization/folding (the same approved rule as the governorate match).
- */
-export function parentNameKey(normalizedName: string): string {
-  return normalizedName.toLowerCase();
-}
-
-/** True when two names (normalized or not) are the same full name for identity purposes. Invalid input never matches. */
-export function isSameParentName(a: unknown, b: unknown): boolean {
-  try {
-    return parentNameKey(normalizeParentName(a)) === parentNameKey(normalizeParentName(b));
-  } catch {
-    return false;
-  }
-}
+/** The identity match used when a phone already belongs to an account: the same normalized three-part name (Arabic letters never folded). */
+export const isSameParentName = isSamePersonName;

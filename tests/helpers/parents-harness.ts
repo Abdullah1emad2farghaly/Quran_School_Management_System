@@ -11,7 +11,7 @@ const gps = { latitude: 30.0444, longitude: 31.2357, accuracyMeters: 12 };
 /**
  * In-memory wiring of Modules 08-10, 12, 13-16 (the schools API harness, with the REAL Authorization Engine and real sessions) plus
  * Module 17. Its unit of work rolls the Parent stores back together with everything else when the work throws.
- * `verifiedNames` is the identity evidence for reusing an existing account that has no Parent record (empty by default, like production).
+ * Existing accounts are matched by the canonical name stored on the account (`users.full_name`), exactly as in production.
  */
 export async function createParentsHarness() {
   const parentRepo = new InMemoryParentRepository();
@@ -19,7 +19,8 @@ export async function createParentsHarness() {
   parentRepo.activeParentIdsOfSchool = (schoolId) => links.activeParentIdsOfSchool(schoolId);
   const t = await createSchoolsApiHarness({ extraStores: [parentRepo, links] });
 
-  const verifiedNames = new Map<string, string[]>();
+  /** Students depending on a Parent-to-School link, by `${parentId}:${schoolId}` (what Module 19 will report). */
+  const studentCounts = new Map<string, number>();
   const parents = new ParentService({
     parents: parentRepo,
     links,
@@ -27,7 +28,7 @@ export async function createParentsHarness() {
     address: t.address,
     identity: t.h.identity,
     roles: t.h.roles,
-    accountNames: { verifiedNamesOf: async (userId) => verifiedNames.get(userId) ?? [] },
+    studentDependencies: { countStudentsOfParentInSchool: async (parentId, schoolId) => studentCounts.get(`${parentId}:${schoolId}`) ?? 0 },
     unitOfWork: t.unitOfWork,
     outbox: t.h.outbox,
     clock: t.h.clock,
@@ -52,5 +53,9 @@ export async function createParentsHarness() {
   /** A second organization (same country) with its own manager, for cross-organization tests. */
   const otherOrg = async (name = 'مؤسسة أخرى') => t.organizations.createOrganization({ name, countryId: t.country.id, governorateId: t.gov.id });
 
-  return { ...t, parentRepo, links, parents, verifiedNames, orgAdmin, newSchool, newSchoolManager, otherOrg };
+  /** An account with a canonical personal name and the given role (the name lives on the account, Module 08). */
+  const newNamedUser = async (role: string, fullName: string, password?: string) =>
+    t.h.createUser({ role: role as never, fullName, ...(password ? { password } : {}) });
+
+  return { ...t, parentRepo, links, parents, studentCounts, newNamedUser, orgAdmin, newSchool, newSchoolManager, otherOrg };
 }

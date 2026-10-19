@@ -1,7 +1,6 @@
 import { AggregateRoot, newUuid, type Clock } from '../../../00-shared-kernel/public';
 import { createDomainEvent } from '../../../06-domain-events-outbox/public';
 import { ParentEventTypes, PARENT_AGGREGATE_TYPE, type ParentEventPayload } from '../events/parent-events';
-import { normalizeParentName } from '../value-objects/parent-name';
 
 export interface ParentSnapshot {
   readonly id: string;
@@ -9,8 +8,6 @@ export interface ParentSnapshot {
   readonly userId: string;
   /** The organization the Parent belongs to (through the school that registered them); fixed for the life of the record. */
   readonly organizationId: string;
-  /** Normalized three-part name (§32). */
-  readonly fullName: string;
   readonly createdBy: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -28,13 +25,12 @@ export class Parent extends AggregateRoot<string> {
     super(state.id);
   }
 
-  static register(input: { userId: string; organizationId: string; fullName: unknown; createdBy: string; clock: Clock; id?: string }): Parent {
+  static register(input: { userId: string; organizationId: string; createdBy: string; clock: Clock; id?: string }): Parent {
     const now = input.clock.now();
     const parent = new Parent({
       id: input.id ?? newUuid(),
       userId: input.userId,
       organizationId: input.organizationId,
-      fullName: normalizeParentName(input.fullName),
       createdBy: input.createdBy,
       createdAt: now,
       updatedAt: now,
@@ -57,20 +53,8 @@ export class Parent extends AggregateRoot<string> {
   get organizationId(): string {
     return this.state.organizationId;
   }
-  get fullName(): string {
-    return this.state.fullName;
-  }
   get version(): number {
     return this.state.version;
-  }
-
-  /** Corrects the name. Returns false (and records nothing) when the normalized name is unchanged. */
-  rename(fullName: unknown, actorId: string, clock: Clock): boolean {
-    const next = normalizeParentName(fullName);
-    if (next === this.state.fullName) return false;
-    this.state = { ...this.state, fullName: next, updatedAt: clock.now() };
-    this.record(ParentEventTypes.PARENT_UPDATED, actorId, clock);
-    return true;
   }
 
   /** Called by the service when a NEW current address was stored (the history row itself is written by the repository). */

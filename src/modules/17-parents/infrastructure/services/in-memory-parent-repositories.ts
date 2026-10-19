@@ -37,7 +37,7 @@ export class InMemoryParentRepository implements ParentRepository {
   }
   async listBySchool(query: ParentListQuery, _tx?: TransactionContext): Promise<{ items: Parent[]; total: number }> {
     const ids = new Set(this.activeParentIdsOfSchool(query.schoolId));
-    const key = query.sort === 'name' ? (r: ParentSnapshot) => r.fullName : (r: ParentSnapshot) => r.createdAt.getTime();
+    const key = (r: ParentSnapshot) => r.createdAt.getTime();
     const sign = query.direction === 'asc' ? 1 : -1;
     const all = [...this.rows.values()]
       .filter((r) => ids.has(r.id))

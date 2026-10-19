@@ -49,6 +49,7 @@ interface Fixture {
   manager: string;
   governorateName: string;
   newManagerOfSchool: (schoolId: string) => Promise<string>;
+  studentCounts: Map<string, number>;
 }
 
 let counter = 0;
@@ -127,6 +128,7 @@ async function withFixture(work: (f: Fixture) => Promise<void>, options: { failL
       };
       const manager = await newManagerOfSchool(school.id);
 
+      const studentCounts = new Map<string, number>();
       const parentRepo = new SequelizeParentRepository(sequelize);
       const links = new SequelizeParentSchoolLinkRepository(sequelize);
       const parents = new ParentService({
@@ -142,10 +144,11 @@ async function withFixture(work: (f: Fixture) => Promise<void>, options: { failL
         address,
         identity,
         roles: roleService,
+        studentDependencies: { countStudentsOfParentInSchool: async (parentId, schoolId) => studentCounts.get(`${parentId}:${schoolId}`) ?? 0 },
         unitOfWork: savepointUnitOfWork,
         outbox,
       });
-      await work({ tx, q, run, fails, parents, parentRepo, links, school, school2, manager, governorateName, newManagerOfSchool });
+      await work({ tx, q, run, fails, parents, parentRepo, links, school, school2, manager, governorateName, newManagerOfSchool, studentCounts });
       throw new Rollback();
     });
   } catch (error) {
@@ -190,9 +193,9 @@ describe('parents schema (migration create-parents) and the users flag (migratio
       const user = randomUUID();
       const id = randomUUID();
       const insertParent = (parentId: string, userId: string) =>
-        f.run(`INSERT INTO parents (id, user_id, organization_id, full_name, created_by, version, created_at, updated_at) VALUES (:id, :userId, :org, 'أ ب ج', :by, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, { id: parentId, userId, org: randomUUID(), by: randomUUID() });
+        f.run(`INSERT INTO parents (id, user_id, organization_id, created_by, version, created_at, updated_at) VALUES (:id, :userId, :org, :by, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, { id: parentId, userId, org: randomUUID(), by: randomUUID() });
       await insertParent(id, user);
-      await f.fails(`INSERT INTO parents (id, user_id, organization_id, full_name, created_by, version, created_at, updated_at) VALUES (:id, :userId, :org, 'أ ب ج', :by, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, { id: randomUUID(), userId: user, org: randomUUID(), by: randomUUID() });
+      await f.fails(`INSERT INTO parents (id, user_id, organization_id, created_by, version, created_at, updated_at) VALUES (:id, :userId, :org, :by, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, { id: randomUUID(), userId: user, org: randomUUID(), by: randomUUID() });
 
       const address = (active: string, ended: string, village: string | null, center: string | null) =>
         f.run(`INSERT INTO parent_addresses (id, parent_id, governorate_id, governorate_name, center_name, village_name, created_by, created_at, ended_at, active) VALUES (:id, :p, :g, 'م', ${center ? ':c' : 'NULL'}, ${village ? ':v' : 'NULL'}, :by, UTC_TIMESTAMP(3), ${ended}, ${active})`, { id: randomUUID(), p: id, g: randomUUID(), c: center, v: village, by: randomUUID() });
@@ -215,6 +218,39 @@ describe('parents schema (migration create-parents) and the users flag (migratio
   });
 });
 
+describe('REGRESSION: a row that is neither current nor ended is rejected by the real database (NULL-safe CHECK constraints)', () => {
+  // The first draft of the CHECK constraints used `active = 1 ...`: for `active` NULL and `ended_at` NULL that evaluates to NULL, which a CHECK
+  // ACCEPTS, so a row that was neither current nor ended could be stored. The constraints now use the NULL-safe `<=>`.
+  it('parent_addresses: neither current (active NULL) nor ended (ended_at NULL) is refused; current-and-ended and ended-without-date are refused too', async () => {
+    await withFixture(async (f) => {
+      const parent = randomUUID();
+      await f.run(`INSERT INTO parents (id, user_id, organization_id, created_by, version, created_at, updated_at) VALUES (:id, :u, :o, :by, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, { id: parent, u: randomUUID(), o: randomUUID(), by: randomUUID() });
+      const insert = (active: string, ended: string) =>
+        `INSERT INTO parent_addresses (id, parent_id, governorate_id, governorate_name, created_by, created_at, ended_at, active) VALUES ('${randomUUID()}', '${parent}', '${randomUUID()}', 'م', '${randomUUID()}', UTC_TIMESTAMP(3), ${ended}, ${active})`;
+      await f.fails(insert('NULL', 'NULL')); // the defect: neither current nor ended
+      await f.fails(insert('1', 'UTC_TIMESTAMP(3)')); // current AND ended
+      await f.fails(insert('0', 'NULL')); // not the 1/NULL convention
+      await f.run(insert('1', 'NULL')); // current: accepted
+      await f.run(insert('NULL', 'UTC_TIMESTAMP(3)')); // ended: accepted
+    });
+  });
+
+  it('parent_schools: neither active nor removed is refused; active-but-removed and removed-without-who are refused too', async () => {
+    await withFixture(async (f) => {
+      const parent = randomUUID();
+      await f.run(`INSERT INTO parents (id, user_id, organization_id, created_by, version, created_at, updated_at) VALUES (:id, :u, :o, :by, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, { id: parent, u: randomUUID(), o: randomUUID(), by: randomUUID() });
+      const insert = (active: string, unlinkedAt: string, unlinkedBy: string) =>
+        `INSERT INTO parent_schools (id, parent_id, school_id, linked_at, linked_by, unlinked_at, unlinked_by, active, version, created_at, updated_at)
+         VALUES ('${randomUUID()}', '${parent}', '${randomUUID()}', UTC_TIMESTAMP(3), '${randomUUID()}', ${unlinkedAt}, ${unlinkedBy}, ${active}, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`;
+      await f.fails(insert('NULL', 'NULL', 'NULL')); // the defect: neither active nor removed
+      await f.fails(insert('1', 'UTC_TIMESTAMP(3)', `'${randomUUID()}'`)); // active AND removed
+      await f.fails(insert('NULL', 'UTC_TIMESTAMP(3)', 'NULL')); // removed without who
+      await f.run(insert('1', 'NULL', 'NULL')); // active: accepted
+      await f.run(insert('NULL', 'UTC_TIMESTAMP(3)', `'${randomUUID()}'`)); // removed: accepted
+    });
+  });
+});
+
 describe('the real ParentService over the SQL repositories', () => {
   it('registers a new Parent: account with the initial password and the pending change, role, parent, address history row and link', async () => {
     await withFixture(async (f) => {
@@ -228,6 +264,9 @@ describe('the real ParentService over the SQL repositories', () => {
       const [stored] = await f.q<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = :id', { id: user.id });
       expect(await new BcryptPasswordHasher(4).verify(phone.slice(-4), stored!.password_hash)).toBe(true); // the initial password: last four digits, stored only as a hash
       expect(await roleService.hasRole(user.id, 'PARENT', f.tx)).toBe(true);
+      const [named] = await f.q<{ full_name: string }>('SELECT full_name FROM users WHERE id = :id', { id: user.id });
+      expect(named!.full_name).toBe(NAME); // the canonical name is stored on the account, once
+      expect(await f.q('SHOW COLUMNS FROM parents LIKE \'full_name\'')).toHaveLength(0); // and not copied onto the Parent record
       const [row] = await f.q<{ must_change_password: number }>('SELECT must_change_password FROM users WHERE id = :id', { id: user.id });
       expect(Number(row!.must_change_password)).toBe(1);
 
@@ -259,9 +298,18 @@ describe('the real ParentService over the SQL repositories', () => {
       expect([...second.parent.schoolIds].sort()).toEqual([f.school.id, f.school2.id].sort());
       expect(await codeOf(f.parents.registerParent({ schoolId: f.school2.id, name: NAME, phone, address: { kind: 'raw', text: f.governorateName } }, manager2))).toBe('PARENT_ALREADY_LINKED_TO_SCHOOL');
       expect(await codeOf(f.parents.registerParent({ schoolId: f.school2.id, name: 'محمود خالد سعيد', phone, address: { kind: 'raw', text: f.governorateName } }, manager2))).toBe('PARENT_IDENTITY_CONFLICT');
-      // the account of an existing non-Parent (the school manager) is an identity conflict: no module vouches for a name yet
+      // an existing account WITHOUT a Parent record (the school manager) is matched by its stored name: none stored -> identity conflict
       const managerPhone = (await identity.findById(f.manager, f.tx))!.phone;
-      expect(await codeOf(f.parents.registerParent({ schoolId: f.school.id, name: NAME, phone: managerPhone, address: { kind: 'raw', text: f.governorateName } }, f.manager))).toBe('PARENT_IDENTITY_CONFLICT');
+      const asManager = { schoolId: f.school.id, name: NAME, phone: managerPhone, address: { kind: 'raw' as const, text: f.governorateName } };
+      expect(await codeOf(f.parents.registerParent(asManager, f.manager))).toBe('PARENT_IDENTITY_CONFLICT');
+      await identity.ensureFullName(f.manager, 'محمود خالد سعيد', f.tx);
+      expect(await codeOf(f.parents.registerParent(asManager, f.manager))).toBe('PARENT_IDENTITY_CONFLICT'); // a different stored name
+      const hashBefore = (await f.q<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = :id', { id: f.manager }))[0]!.password_hash;
+      expect((await f.parents.registerParent({ ...asManager, name: 'محمود خالد سعيد' }, f.manager)).accountCreated).toBe(false); // the same stored name: reused
+      const after = await f.q<{ password_hash: string; must_change_password: number; full_name: string }>('SELECT password_hash, must_change_password, full_name FROM users WHERE id = :id', { id: f.manager });
+      expect(after[0]).toMatchObject({ password_hash: hashBefore, full_name: 'محمود خالد سعيد' });
+      expect(Number(after[0]!.must_change_password)).toBe(0);
+      expect((await roleService.listActiveRoles(f.manager, f.tx)).sort()).toEqual(['PARENT', 'SCHOOL_MANAGER']);
     });
   });
 
@@ -277,20 +325,32 @@ describe('the real ParentService over the SQL repositories', () => {
       const rows = await f.q<{ n: number }>('SELECT COUNT(*) AS n FROM parent_addresses WHERE parent_id = :id AND active = 1', { id: parent.id });
       expect(Number(rows[0]!.n)).toBe(1);
 
-      const page = await f.parents.listParentsOfSchool({ schoolId: f.school.id, sort: 'name', direction: 'asc', page: { page: 1, pageSize: 10 } }, f.tx);
+      const page = await f.parents.listParentsOfSchool({ schoolId: f.school.id, sort: 'createdAt', direction: 'asc', page: { page: 1, pageSize: 10 } }, f.tx);
       expect(page.total).toBe(1);
       expect(page.items[0]).toMatchObject({ id: parent.id, phone: (await identity.findByPhone(phone, f.tx))!.phone });
-      expect((await f.parents.listParentsOfSchool({ schoolId: f.school2.id, sort: 'name', direction: 'asc', page: { page: 1, pageSize: 10 } }, f.tx)).total).toBe(0);
+      expect((await f.parents.listParentsOfSchool({ schoolId: f.school2.id, sort: 'createdAt', direction: 'asc', page: { page: 1, pageSize: 10 } }, f.tx)).total).toBe(0);
 
       await f.parents.removeSchoolLink(parent.id, f.school.id, f.manager);
       expect((await f.parents.getParent(parent.id, f.tx)).schoolIds).toEqual([]);
       expect(await identity.findByPhone(phone, f.tx)).toBeTruthy(); // the account survives
       expect((await f.parents.listSchoolLinkHistory(parent.id, f.tx)).map((l) => l.isActive)).toEqual([false]);
-      expect((await f.parents.listParentsOfSchool({ schoolId: f.school.id, sort: 'name', direction: 'asc', page: { page: 1, pageSize: 10 } }, f.tx)).total).toBe(0);
+      expect((await f.parents.listParentsOfSchool({ schoolId: f.school.id, sort: 'createdAt', direction: 'asc', page: { page: 1, pageSize: 10 } }, f.tx)).total).toBe(0);
       expect(await codeOf(f.parents.removeSchoolLink(parent.id, f.school.id, f.manager))).toBe('PARENT_SCHOOL_LINK_NOT_FOUND');
       // re-linking after removal works and the history keeps both rows
       await f.parents.registerParent({ schoolId: f.school.id, name: NAME, phone, address: { kind: 'raw', text: f.governorateName } }, f.manager);
       expect((await f.parents.listSchoolLinkHistory(parent.id, f.tx)).map((l) => l.isActive).sort()).toEqual([false, true]);
+    });
+  });
+
+  it('refuses to remove a school link while students depend on it (guard inside the transaction), and keeps every row', async () => {
+    await withFixture(async (f) => {
+      const { parent } = await f.parents.registerParent({ schoolId: f.school.id, name: NAME, phone: phoneOf(), address: { kind: 'raw', text: f.governorateName } }, f.manager);
+      f.studentCounts.set(`${parent.id}:${f.school.id}`, 3);
+      expect(await codeOf(f.parents.removeSchoolLink(parent.id, f.school.id, f.manager))).toBe('PARENT_HAS_STUDENTS_IN_SCHOOL');
+      const rows = await f.q<{ active: number | null; unlinked_at: string | null }>('SELECT active, unlinked_at FROM parent_schools WHERE parent_id = :id', { id: parent.id });
+      expect(rows).toHaveLength(1);
+      expect(Number(rows[0]!.active)).toBe(1);
+      expect(rows[0]!.unlinked_at).toBeNull();
     });
   });
 

@@ -46,3 +46,6 @@ Password-recovery flows must not turn `USER_NOT_FOUND` into an account-existence
 
 ## Tests
 Unit: `tests/unit/identity` (phone, password policy, aggregate, service, messages, module boundaries). Real database: `tests/db/users.test.ts` (`npm run test:db`, needs `npm run db:migrate`).
+
+## Canonical personal name (`users.full_name`)
+The single stored personal name of the person behind an account, shared by every role (organization manager, school manager, parent...). Rule (`normalizePersonName`): EXACTLY three parts, NFC, whitespace collapsed, no control characters, at most 200 characters, no Arabic letter folding (`INVALID_PERSON_NAME`). `createUser({ fullName })` stores it for a new account; `ensureFullName(id, name)` sets a missing name, accepts the same name and refuses a different one with `PERSON_NAME_MISMATCH` (409): an existing name is never overwritten. `UserDto.fullName` is null for accounts that never had one. Migration `20261019100000-users-full-name` is nullable and invents nothing; `npm run person-names:report|apply` handle accounts created before it (see `docs/PARENTS.md`).

@@ -50,7 +50,7 @@ export function createParentHandlers(getService: () => ParentHandlerService) {
     updateParent: async (parentId: string, actorId: string, body: unknown) => {
       const b = obj(body);
       const address = addressOf(b);
-      return serializeParent(await getService().updateParent(parentId, { ...(b.name !== undefined ? { name: b.name } : {}), ...(address ? { address } : {}) }, actorId));
+      return serializeParent(await getService().updateParent(parentId, { ...(address ? { address } : {}) }, actorId));
     },
 
     removeSchoolLink: async (parentId: string, schoolId: string, actorId: string) =>

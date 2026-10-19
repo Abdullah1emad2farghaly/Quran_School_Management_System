@@ -1,13 +1,11 @@
 /**
  * Parent domain events (outbox, same transaction as the change). Payloads carry identifiers ONLY: no names, phones or address text.
  *  - ParentRegistered: a Parent record was created for an account (new or an existing, identity-confirmed one).
- *  - ParentUpdated: the Parent's name was corrected.
  *  - ParentAddressChanged: a new current Parent Address was stored (the previous one stays in the history).
  *  - ParentSchoolLinked / ParentSchoolLinkRemoved: the Parent-to-School relationship (one per school, with history).
  */
 export const ParentEventTypes = {
   PARENT_REGISTERED: 'ParentRegistered',
-  PARENT_UPDATED: 'ParentUpdated',
   PARENT_ADDRESS_CHANGED: 'ParentAddressChanged',
   PARENT_SCHOOL_LINKED: 'ParentSchoolLinked',
   PARENT_SCHOOL_LINK_REMOVED: 'ParentSchoolLinkRemoved',

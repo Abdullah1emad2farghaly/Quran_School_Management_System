@@ -85,7 +85,7 @@ export interface SchoolServiceDeps {
   readonly organizations: Pick<OrganizationLookup, 'requireById' | 'requireOrganizationCountryId' | 'isOrganizationAdmin' | 'listAdministeredOrganizationIds'>;
   /** School addresses use the shared address contract (registered governorate, free-text center and village). */
   readonly address: Pick<UnifiedAddressLookup, 'validateSchoolAddress'>;
-  readonly identity: Pick<IdentityService, 'findById' | 'createUser'>;
+  readonly identity: Pick<IdentityService, 'findById' | 'createUser' | 'ensureFullName'>;
   readonly roles: Pick<RoleService, 'hasRole' | 'assignRole'>;
   /** Produces the unguessable password of a newly created applicant account (see `submitSchool`). Required for submissions. */
   readonly generateApplicantPassword?: () => string;
@@ -207,7 +207,7 @@ export class SchoolService {
   submitSchool(input: SubmitSchoolInput, tx?: TransactionContext): Promise<SchoolSubmissionResult> {
     return this.inTransaction(tx, async (t) => {
       const form = this.validateSubmission(input);
-      const applicant = await this.applicants.resolve(form.phone, input.authenticatedUserId, t, form.password, true);
+      const applicant = await this.applicants.resolve(form.phone, input.authenticatedUserId, t, form.password, true, form.applicantName);
       const school = await this.buildSchool(input, applicant.userId, applicant.userId, input.organizationId, t, form.applicantName);
       await this.persistNew(school, applicant.userId, t);
       return { school: toSchoolDto(school), applicant };

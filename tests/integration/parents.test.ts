@@ -43,6 +43,7 @@ describe('POST /parents', () => {
     expect((await request(app).post(PARENTS).set(authA).send({})).body.error.code).toBe('VALIDATION_FAILED');
     expect((await request(app).post(PARENTS).set(authA).send(body('not-a-uuid'))).status).toBe(400);
     expect((await request(app).post(PARENTS).set(authA).send(body(schoolA.id, { name: 'أحمد محمد' }))).body.error.code).toBe('INVALID_PARENT_NAME');
+    expect((await request(app).post(PARENTS).set(authA).send(body(schoolA.id, { name: 'أحمد محمد علي حسن' }))).body.error.code).toBe('INVALID_PARENT_NAME');
     expect((await request(app).post(PARENTS).set(authA).send(body(schoolA.id, { address: 'مكان / سمالوط' }))).body.error.code).toBe('PARENT_ADDRESS_GOVERNORATE_NOT_FOUND');
   });
 
@@ -122,14 +123,14 @@ describe('the Parent\'s first login (mandatory password change, enforced by the 
 });
 
 describe('GET/PATCH/DELETE of a school\'s Parents', () => {
-  it('lists only the school\'s Parents (paginated), reads one, corrects name and address with history, and ends the link', async () => {
+  it('lists only the school\'s Parents (paginated), reads one, corrects the address with history, and ends the link', async () => {
     const { app, t, authA, authB, schoolA, schoolB } = await setup();
     const a1 = await request(app).post(PARENTS).set(authA).send(body(schoolA.id));
     await request(app).post(PARENTS).set(authA).send(body(schoolA.id, { phone: '01002222222', name: 'ب ب ب' }));
     await request(app).post(PARENTS).set(authB).send(body(schoolB.id, { phone: '01003333333', name: 'ج ج ج' }));
     const id = a1.body.data.parent.id as string;
 
-    const list = await request(app).get(`${PARENTS}/schools/${schoolA.id}?pageSize=1&sort=name`).set(authA);
+    const list = await request(app).get(`${PARENTS}/schools/${schoolA.id}?pageSize=1&sort=createdAt`).set(authA);
     expect(list.status).toBe(200);
     expect(list.body.meta.total).toBe(2);
     expect(list.body.data).toHaveLength(1);
@@ -140,12 +141,14 @@ describe('GET/PATCH/DELETE of a school\'s Parents', () => {
     expect((await request(app).get(`${PARENTS}/00000000-0000-4000-8000-000000000000`).set(authA)).status).toBe(403);
     expect((await request(app).get(`${PARENTS}/not-a-uuid`).set(authA)).status).toBe(400);
 
-    const patched = await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ name: 'أحمد محمد علي حسن', address: 'المنيا / مطاي' });
+    const patched = await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ address: 'المنيا / مطاي' });
     expect(patched.status).toBe(200);
-    expect(patched.body.data).toMatchObject({ name: 'أحمد محمد علي حسن', address: { centerName: 'مطاي', villageName: null }, phone: '+201001234567' });
+    expect(patched.body.data).toMatchObject({ name: 'أحمد محمد علي', address: { centerName: 'مطاي', villageName: null }, phone: '+201001234567' });
     expect((await t.parents.listAddressHistory(id)).map((h) => h.centerName)).toEqual(['سمالوط', 'مطاي']);
     expect((await request(app).patch(`${PARENTS}/${id}`).set(authA).send({})).body.error.code).toBe('PARENT_UPDATE_EMPTY');
-    expect((await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ name: 'أحمد' })).body.error.code).toBe('INVALID_PARENT_NAME');
+    // the personal name is the account's canonical name: it cannot be changed through the Parents API
+    expect((await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ name: 'محمود خالد سعيد' })).body.error.code).toBe('PARENT_UPDATE_EMPTY');
+    expect((await request(app).get(`${PARENTS}/${id}`).set(authA)).body.data.name).toBe('أحمد محمد علي');
 
     const removed = await request(app).delete(`${PARENTS}/${id}/schools/${schoolA.id}`).set(authA);
     expect(removed.status).toBe(200);

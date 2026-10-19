@@ -82,7 +82,7 @@ describe('FixedWindowCounter (public submission abuse limit)', () => {
 
 describe('school handlers', () => {
   const body = {
-    applicant: { name: 'أحمد', phone: '01012345678' },
+    applicant: { name: 'أحمد محمد علي', phone: '01012345678' },
     organizationId: 'org-1',
     school: { name: 'فرع', governorateId: 'g', centerName: 'مركز حر', gps: { latitude: 30, longitude: 31, accuracyMeters: 5 } },
   };
@@ -237,13 +237,13 @@ describe('organization handlers and route registration', () => {
     const { service, calls } = fake();
     const h = createOrganizationHandlers(() => service);
     const result = await h.register({
-      applicant: { name: 'أحمد', phone: '01012345678' },
+      applicant: { name: 'أحمد محمد علي', phone: '01012345678' },
       organization: { name: 'دار', countryId: 'c', governorateId: 'g', centerName: 'ct' },
       authenticatedUserId: 'EVIL',
       roles: ['MAIN_ADMIN'],
     });
     expect(calls[0]!.args[0]).toEqual({
-      applicant: { name: 'أحمد', phone: '01012345678' },
+      applicant: { name: 'أحمد محمد علي', phone: '01012345678' },
       organization: { name: 'دار', countryId: 'c', governorateId: 'g', centerName: 'ct', villageName: null },
     });
     expect(result.applicant).toEqual({ userId: 'u', accountCreated: true });

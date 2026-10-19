@@ -67,10 +67,10 @@ export function createSessionHarness() {
 
   let n = 0;
   /** Creates a user (with one role) and returns its credentials. */
-  async function createUser(options: { password?: string; role?: RoleCode; mustChangePassword?: boolean } = {}) {
+  async function createUser(options: { password?: string; role?: RoleCode; mustChangePassword?: boolean; fullName?: string } = {}) {
     const phone = `010${String(20000000 + ++n)}`;
     const password = options.password ?? 'secret1';
-    const user = await identity.createUser({ phone, password, mustChangePassword: options.mustChangePassword === true });
+    const user = await identity.createUser({ phone, password, mustChangePassword: options.mustChangePassword === true, ...(options.fullName !== undefined ? { fullName: options.fullName } : {}) });
     await roles.assignRole({ userId: user.id, roleCode: options.role ?? 'PARENT', assignedBy: null });
     return { id: user.id, phone, password };
   }

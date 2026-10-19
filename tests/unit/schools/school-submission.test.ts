@@ -8,13 +8,13 @@ describe('public school submission: the applicant account', () => {
   it('creates the applicant account and a PENDING school in one step, granting nothing', async () => {
     const t = await createSchoolsHarness();
     const usersBefore = t.users.rows.size;
-    const result = await submit(t, { phone: '01012345678', name: '  أحمد   محمد ' });
+    const result = await submit(t, { phone: '01012345678', name: '  أحمد   محمد   علي ' });
 
     expect(result.applicant.accountCreated).toBe(true);
     expect(t.users.rows.size).toBe(usersBefore + 1);
     const user = (await t.identity.findByPhone('+201012345678'))!; // normalized to E.164
     expect(user).toMatchObject({ id: result.applicant.userId, isActive: true });
-    expect(result.school).toMatchObject({ status: 'PENDING', createdBy: user.id, applicantUserId: user.id, applicantName: 'أحمد محمد', decidedBy: null, organizationId: t.org.id, countryId: t.country.id });
+    expect(result.school).toMatchObject({ status: 'PENDING', createdBy: user.id, applicantUserId: user.id, applicantName: 'أحمد محمد علي', decidedBy: null, organizationId: t.org.id, countryId: t.country.id });
     expect(result.school).not.toHaveProperty('type');
     expect(await t.activeRoles(user.id)).toEqual([]); // no role at all: not MAIN_ADMIN, not ORGANIZATION_MANAGER, not SCHOOL_MANAGER
     expect(await t.service.isSchoolManager(user.id, result.school.id)).toBe(false);
@@ -65,8 +65,8 @@ describe('public school submission: the applicant account', () => {
     await bad({ applicant: { name: 5, phone: '01012345678' } }, 'INVALID_APPLICANT_NAME');
     await bad({ applicant: undefined }, 'INVALID_APPLICANT_NAME');
     await bad({ applicant: { name: 'x'.repeat(201), phone: '01012345678' } }, 'INVALID_APPLICANT_NAME');
-    await bad({ applicant: { name: 'أحمد', phone: '12345' } }, 'INVALID_PHONE_NUMBER');
-    await bad({ applicant: { name: 'أحمد', phone: undefined } }, 'INVALID_PHONE_NUMBER');
+    await bad({ applicant: { name: 'أحمد محمد علي', phone: '12345' } }, 'INVALID_PHONE_NUMBER');
+    await bad({ applicant: { name: 'أحمد محمد علي', phone: undefined } }, 'INVALID_PHONE_NUMBER');
     await bad({ name: '   ' }, 'INVALID_SCHOOL_NAME');
     await bad({ gps: { ...gps, accuracyMeters: 20.5 } }, 'GPS_ACCURACY_EXCEEDS_LIMIT');
     await bad({ gps: { ...gps, latitude: 120 } }, 'INVALID_GPS_COORDINATES');

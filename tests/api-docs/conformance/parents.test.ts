@@ -48,7 +48,7 @@ describe('Module 17 endpoints conform to their OpenAPI documentation (real respo
     api.conforms(await request(app).get(`${PARENTS}/me`)); // 401
 
     // list
-    expect(api.conforms(await request(app).get(`${PARENTS}/schools/${schoolA.id}?page=1&pageSize=5&sort=name`).set(authA)).status).toBe(200);
+    expect(api.conforms(await request(app).get(`${PARENTS}/schools/${schoolA.id}?page=1&pageSize=5&sort=-createdAt`).set(authA)).status).toBe(200);
     api.conforms(await request(app).get(`${PARENTS}/schools/${schoolA.id}`).set(authB)); // 403
     api.conforms(await request(app).get(`${PARENTS}/schools/not-a-uuid`).set(authA)); // 400
 
@@ -59,7 +59,7 @@ describe('Module 17 endpoints conform to their OpenAPI documentation (real respo
 
     // update
     expect(api.conforms(await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ address: 'المنيا / مطاي' })).status).toBe(200);
-    api.conforms(await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ name: 'أحمد' })); // 400
+    api.conforms(await request(app).patch(`${PARENTS}/${id}`).set(authA).send({ name: 'محمود خالد سعيد' })); // 400 nothing to update (the name is not updatable)
     api.conforms(await request(app).patch(`${PARENTS}/${id}`).set(authA).send({})); // 400 empty
     api.conforms(await request(app).patch(`${PARENTS}/${id}`).set(parentAuth).send({ name: 'أحمد محمد حسن' })); // 403 a Parent cannot edit
 
@@ -68,6 +68,9 @@ describe('Module 17 endpoints conform to their OpenAPI documentation (real respo
     api.conforms(await request(app).delete(`${PARENTS}/${id}/schools/${schoolA.id}`).set(authA)); // 404 not linked any more
     api.conforms(await request(app).delete(`${PARENTS}/${id}/schools/${schoolB.id}`).set(authA)); // 403 not A's school
     api.conforms(await request(app).delete(`${PARENTS}/${id}/schools/not-a-uuid`).set(authA)); // 400
+    // a Parent with students in the school cannot be unlinked (422)
+    t.studentCounts.set(`${id}:${schoolB.id}`, 1);
+    api.conforms(await request(app).delete(`${PARENTS}/${id}/schools/${schoolB.id}`).set(authB));
   });
 
   it('exercised every documented operation of Module 17', () => {

@@ -18,6 +18,7 @@ export {
   assertPasswordPolicy,
   initialPasswordFromPhone,
 } from '../domain/value-objects/password-policy';
+export { PERSON_NAME_PARTS, PERSON_NAME_MAX_LENGTH, checkPersonName, normalizePersonName, personNameKey, isSamePersonName, type PersonNameFailure } from '../domain/value-objects/person-name';
 export { IdentityErrorCodes, identityError, type IdentityErrorCode } from '../domain/errors/identity-errors';
 export {
   IdentityEventTypes,

@@ -16,7 +16,8 @@ export interface ParentAddressEntry {
   readonly endedAt: Date | null;
 }
 
-export type ParentSortKey = 'createdAt' | 'name';
+/** The personal name lives on the account (Module 08), so a Parent list cannot be sorted by it without reading another module's table. */
+export type ParentSortKey = 'createdAt';
 
 export interface ParentListQuery {
   readonly schoolId: string;

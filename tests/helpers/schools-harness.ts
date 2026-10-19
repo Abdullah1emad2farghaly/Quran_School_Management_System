@@ -138,7 +138,7 @@ export async function createSchoolsHarness(options: { failRoleAssignment?: boole
   const addressInput = { governorateId: gov.id };
   /** A public submission form (applicant + school) for `organizationId`. */
   const form = (over: { phone?: string; name?: string; schoolName?: string; organizationId?: string } = {}) => ({
-    applicant: { name: over.name ?? 'أحمد محمد', phone: over.phone ?? '01012345678', password: 'Pass1234' },
+    applicant: { name: over.name ?? 'أحمد محمد علي', phone: over.phone ?? '01012345678', password: 'Pass1234' },
     organizationId: over.organizationId ?? org.id,
     name: over.schoolName ?? 'مدرسة النور',
     ...addressInput,
@@ -156,7 +156,7 @@ export async function createSchoolsHarness(options: { failRoleAssignment?: boole
   /** A PENDING school requested by `applicantUserId` (an existing user), as a public submission would create it. */
   const request = async (applicantUserId: string, name = 'فرع النور', organizationId = org.id) => {
     const phone = (await identity.findById(applicantUserId))!.phone;
-    return (await service.submitSchool({ applicant: { name: 'مقدم الطلب', phone }, organizationId, name, ...addressInput, gps, authenticatedUserId: applicantUserId })).school;
+    return (await service.submitSchool({ applicant: { name: 'مقدم الطلب الأول', phone }, organizationId, name, ...addressInput, gps, authenticatedUserId: applicantUserId })).school;
   };
   const events = () => store.messages.map((m) => m.eventType);
   const activeRoles = async (userId: string) => roleService.listActiveRoles(userId);

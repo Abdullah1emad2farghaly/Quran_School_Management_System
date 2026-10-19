@@ -9,6 +9,8 @@ export interface UserDto {
   readonly isActive: boolean;
   /** The account must change its (initial) password before normal use. Account-level, enforced by Module 10. */
   readonly mustChangePassword: boolean;
+  /** The canonical three-part personal name, or null when the account has none yet. */
+  readonly fullName: string | null;
   readonly statusChangedAt: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -21,6 +23,7 @@ export function toUserDto(user: User): UserDto {
     status: user.status,
     isActive: user.isActive,
     mustChangePassword: user.mustChangePassword,
+    fullName: user.fullName,
     statusChangedAt: user.statusChangedAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

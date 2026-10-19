@@ -77,7 +77,7 @@ describe('IdentityService.createUser', () => {
     const { service } = setup();
     const user = await service.createUser({ phone: '01012345678', password: 'secret1' });
     expect(Object.keys(user).sort()).toEqual(
-      ['createdAt', 'id', 'isActive', 'mustChangePassword', 'phone', 'status', 'statusChangedAt', 'updatedAt'].sort(),
+      ['createdAt', 'fullName', 'id', 'isActive', 'mustChangePassword', 'phone', 'status', 'statusChangedAt', 'updatedAt'].sort(),
     );
     expect(JSON.stringify(user)).not.toContain('secret1');
   });

@@ -16,6 +16,11 @@ export interface UserSnapshot {
    * Parents). Account-level, never role-level. Cleared by any successful password replacement (change or reset).
    */
   readonly mustChangePassword: boolean;
+  /**
+   * The canonical personal name of the person behind the account (exactly three parts), shared by every role the account holds. Null for
+   * accounts created before names were collected or by flows that never collect one. Set once; never silently replaced.
+   */
+  readonly fullName: string | null;
   /** Optimistic-lock counter, incremented by the repository on every update. */
   readonly version: number;
   readonly createdAt: Date;
@@ -32,7 +37,7 @@ export class User extends AggregateRoot<string> {
   }
 
   /** `passwordHash` must already be hashed; plaintext passwords never reach the domain. */
-  static create(input: { phone: string; passwordHash: string; clock: Clock; id?: string; mustChangePassword?: boolean }): User {
+  static create(input: { phone: string; passwordHash: string; clock: Clock; id?: string; mustChangePassword?: boolean; fullName?: string | null }): User {
     const now = input.clock.now();
     const user = new User({
       id: input.id ?? newUuid(),
@@ -41,6 +46,7 @@ export class User extends AggregateRoot<string> {
       status: 'ACTIVE',
       statusChangedAt: now,
       mustChangePassword: input.mustChangePassword === true,
+      fullName: input.fullName ?? null,
       version: 1,
       createdAt: now,
       updatedAt: now,
@@ -67,6 +73,15 @@ export class User extends AggregateRoot<string> {
   }
   get mustChangePassword(): boolean {
     return this.state.mustChangePassword;
+  }
+  get fullName(): string | null {
+    return this.state.fullName;
+  }
+
+  /** Sets the canonical name ONLY when the account has none. The caller has already normalized it; replacing an existing name is refused by the service. */
+  assignFullName(fullName: string, clock: Clock): void {
+    if (this.state.fullName !== null) throw new Error('The account already has a personal name');
+    this.state = { ...this.state, fullName, updatedAt: clock.now() };
   }
   get statusChangedAt(): Date {
     return this.state.statusChangedAt;

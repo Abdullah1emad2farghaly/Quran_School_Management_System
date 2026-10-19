@@ -56,3 +56,6 @@ Migrations `20261012100000-create-schools`, `20261013100000-add-schools-applican
 
 ## Parents (Module 17) and the password-change flag
 Migration `20261018100000-users-must-change-password` (`users.must_change_password`, NOT NULL DEFAULT 0) and `20261018110000-create-parents`: `parents`, `parent_addresses` (history, one current row per Parent), `parent_schools` (link history, one active link per Parent and school). No foreign key to another module's table; the CHECKs use the NULL-safe `<=>`. See `docs/PARENTS.md`.
+
+## Canonical personal name (migrations `20261019100000-users-full-name`, `20261019110000-parents-use-account-name`)
+`users.full_name VARCHAR(200) NULL` (exactly three parts, validated by the application; no data is invented for existing accounts). `parents.full_name` was removed: the migration copies exactly-three-part Parent names to accounts that have none and STOPS without dropping anything when any Parent is inconsistent with its account. `npm run person-names:report|apply` fill older accounts from names recorded earlier, only when unambiguous.

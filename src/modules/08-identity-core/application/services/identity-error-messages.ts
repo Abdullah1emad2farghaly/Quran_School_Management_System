@@ -24,4 +24,15 @@ export const IDENTITY_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
       en: 'The user was modified by another request. Please try again.',
     },
   },
+  {
+    code: IdentityErrorCodes.INVALID_PERSON_NAME,
+    message: { ar: 'الاسم يجب أن يتكوّن من ثلاثة أجزاء بالضبط.', en: 'The name must consist of exactly three parts.' },
+  },
+  {
+    code: IdentityErrorCodes.PERSON_NAME_MISMATCH,
+    message: {
+      ar: 'الاسم المُرسل يختلف عن الاسم المسجّل لهذا الحساب.',
+      en: 'The submitted name differs from the name already registered for this account.',
+    },
+  },
 ];

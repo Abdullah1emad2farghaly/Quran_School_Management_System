@@ -3,7 +3,7 @@ import { codeOf, createSchoolsHarness, gps } from '../../helpers/schools-harness
 
 type Harness = Awaited<ReturnType<typeof createSchoolsHarness>>;
 const form = (t: Harness, over: { phone?: string; name?: string; applicantName?: string; organization?: object } = {}) => ({
-  applicant: { name: over.applicantName ?? 'أحمد محمد', phone: over.phone ?? '01012345678', password: 'Pass1234' },
+  applicant: { name: over.applicantName ?? 'أحمد محمد علي', phone: over.phone ?? '01012345678', password: 'Pass1234' },
   organization: { name: over.name ?? 'دار القرآن', countryId: t.country.id, governorateId: t.gov.id, ...over.organization },
 });
 
@@ -25,7 +25,7 @@ describe('organization registration (own workflow, independent of schools)', () 
     expect(t.schools.rows.size).toBe(0); // no placeholder school
     expect(t.events()).toEqual(expect.arrayContaining(['UserCreated', 'OrganizationCreated', 'OrganizationAdminAssigned', 'RoleAssigned']));
     const link = [...t.adminRepo.rows.values()].find((r) => r.userId === user.id)!;
-    expect(link).toMatchObject({ organizationId: result.organization.id, name: 'أحمد محمد', assignedBy: null, revokedAt: null });
+    expect(link).toMatchObject({ organizationId: result.organization.id, name: 'أحمد محمد علي', assignedBy: null, revokedAt: null });
   });
 
   it('the new account is created with the password the applicant typed: they can log in with it, and it is never returned', async () => {
@@ -57,7 +57,7 @@ describe('organization registration (own workflow, independent of schools)', () 
       expect(t.orgRepo.rows.size).toBe(orgsBefore);
     };
     await bad({ applicant: { name: '  ', phone: '01012345678' } }, 'INVALID_APPLICANT_NAME');
-    await bad({ applicant: { name: 'أحمد', phone: 'abc' } }, 'INVALID_PHONE_NUMBER');
+    await bad({ applicant: { name: 'أحمد محمد علي', phone: 'abc' } }, 'INVALID_PHONE_NUMBER');
     await bad({ organization: { ...form(t).organization, name: '' } }, 'INVALID_ORGANIZATION_NAME');
     await bad({ organization: { ...form(t).organization, name: undefined } }, 'INVALID_ORGANIZATION_NAME');
     await bad({ organization: { ...form(t).organization, countryId: undefined } }, 'INVALID_PARENT_ADDRESS');
@@ -177,7 +177,7 @@ describe('school country invariant and the school keeps its own address', () => 
   it('a French organization can have French schools but not Egyptian ones; each organization chooses its own country', async () => {
     const t = await createSchoolsHarness();
     const fr = await t.registration.registerOrganization({
-      applicant: { name: 'Jean', phone: '01088888881', password: 'Pass1234' },
+      applicant: { name: 'Jean Pierre Martin', phone: '01088888881', password: 'Pass1234' },
       organization: { name: 'Org FR', countryId: t.france.id, governorateId: t.paris.id },
     });
     const managerFr = fr.applicant.userId;

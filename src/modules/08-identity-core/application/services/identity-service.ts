@@ -3,6 +3,7 @@ import type { OutboxService } from '../../../06-domain-events-outbox/public';
 import { User } from '../../domain/entities/user';
 import { identityError } from '../../domain/errors/identity-errors';
 import { assertPasswordPolicy } from '../../domain/value-objects/password-policy';
+import { isSamePersonName, normalizePersonName } from '../../domain/value-objects/person-name';
 import { normalizePhone } from '../../domain/value-objects/phone-number';
 import { toUserDto, type UserDto } from '../dto/user-dto';
 import type { PasswordHasher } from '../ports/password-hasher';
@@ -18,6 +19,8 @@ export interface CreateUserInput {
    * phone digits). Account-level: it applies only to the account being created here, never to an existing one.
    */
   readonly mustChangePassword?: boolean;
+  /** The canonical three-part personal name of the person (normalized and validated here: INVALID_PERSON_NAME). Optional for accounts created by flows that collect no name. */
+  readonly fullName?: unknown;
 }
 
 export interface IdentityServiceDeps {
@@ -58,11 +61,12 @@ export class IdentityService {
   async createUser(input: CreateUserInput, tx?: TransactionContext): Promise<UserDto> {
     const phone = normalizePhone(input.phone);
     assertPasswordPolicy(input.password);
+    const fullName = input.fullName === undefined || input.fullName === null ? null : normalizePersonName(input.fullName);
     const passwordHash = await this.hasher.hash(input.password);
 
     return this.inTransaction(tx, async (t) => {
       if (await this.repository.findByPhone(phone, t)) throw identityError('USER_PHONE_ALREADY_EXISTS');
-      const user = User.create({ phone, passwordHash, clock: this.clock, mustChangePassword: input.mustChangePassword === true });
+      const user = User.create({ phone, passwordHash, clock: this.clock, mustChangePassword: input.mustChangePassword === true, fullName });
       await this.repository.insert(user, t);
       await this.outbox.publishFrom(user, t);
       return toUserDto(user);
@@ -115,6 +119,27 @@ export class IdentityService {
     assertPasswordPolicy(newPassword);
     const passwordHash = await this.hasher.hash(newPassword);
     return this.mutate(id, tx, (user) => user.replacePasswordHash(passwordHash, this.clock));
+  }
+
+  /**
+   * Makes sure the account carries the canonical personal name `name` (exactly three parts): sets it when the account has none, does
+   * nothing when it is the same name, and refuses a different one with PERSON_NAME_MISMATCH. An existing name is NEVER overwritten.
+   * Only the caller that owns the proof of identity (the authenticated applicant, the account being created) may call it.
+   */
+  async ensureFullName(id: string, name: unknown, tx?: TransactionContext): Promise<UserDto> {
+    const normalized = normalizePersonName(name);
+    return this.inTransaction(tx, async (t) => {
+      const user = await this.repository.findById(id, t);
+      if (!user) throw identityError('USER_NOT_FOUND');
+      if (user.fullName === null) {
+        user.assignFullName(normalized, this.clock);
+        await this.repository.update(user, t);
+        await this.outbox.publishFrom(user, t);
+      } else if (!isSamePersonName(user.fullName, normalized)) {
+        throw identityError('PERSON_NAME_MISMATCH');
+      }
+      return toUserDto(user);
+    });
   }
 
   private async mutate(id: string, tx: TransactionContext | undefined, change: (user: User) => void): Promise<UserDto> {

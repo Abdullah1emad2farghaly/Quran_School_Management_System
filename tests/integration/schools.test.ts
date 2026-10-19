@@ -32,7 +32,7 @@ async function build(options: { maxSubmissions?: number } = {}) {
   const admin = await t.newOrgAdmin(t.org.id);
   const adminAuth = await login(admin);
   const orgForm = (over: { phone?: string; name?: string; countryId?: string; governorateId?: string } = {}) => ({
-    applicant: { name: 'أحمد محمد', phone: over.phone ?? '01112345678', password: 'Pass1234' },
+    applicant: { name: 'أحمد محمد علي', phone: over.phone ?? '01112345678', password: 'Pass1234' },
     organization: { name: over.name ?? 'دار القرآن', countryId: over.countryId ?? t.country.id, governorateId: over.governorateId ?? t.gov.id, centerName: 'مركز غير مسجل' },
   });
   const schoolBody = (organizationId: string, over: { name?: string; governorateId?: string; countryId?: string } = {}) => ({
@@ -40,7 +40,7 @@ async function build(options: { maxSubmissions?: number } = {}) {
     school: { name: over.name ?? 'الرئيسية', governorateId: over.governorateId ?? t.gov.id, ...(over.countryId ? { countryId: over.countryId } : {}), centerName: 'مركز غير مسجل', gps },
   });
   const submitForm = (over: { phone?: string; schoolName?: string; organizationId?: string } = {}) => ({
-    applicant: { name: 'سارة', phone: over.phone ?? '01122223333', password: 'Pass1234' },
+    applicant: { name: 'سارة أحمد علي', phone: over.phone ?? '01122223333', password: 'Pass1234' },
     organizationId: over.organizationId ?? t.org.id,
     school: { name: over.schoolName ?? 'مدرسة مقدمة', governorateId: t.gov.id, centerName: 'مركز حر', villageName: 'قرية حرة', gps },
   });

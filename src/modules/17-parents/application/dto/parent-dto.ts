@@ -15,6 +15,7 @@ export interface ParentDto {
   readonly id: string;
   readonly userId: string;
   readonly organizationId: string;
+  /** The account's canonical three-part personal name (Module 08). */
   readonly name: string;
   /** The normalized phone (the login identity, Module 08). */
   readonly phone: string;
@@ -45,13 +46,13 @@ export const toParentAddressDto = (e: ParentAddressEntry): ParentAddressDto => (
   since: e.createdAt,
 });
 
-export function toParentDto(input: { parent: Parent; phone: string; address: ParentAddressEntry | undefined; links: readonly ParentSchoolLink[] }): ParentDto {
+export function toParentDto(input: { parent: Parent; phone: string; name: string; address: ParentAddressEntry | undefined; links: readonly ParentSchoolLink[] }): ParentDto {
   const s = input.parent.snapshot;
   return {
     id: s.id,
     userId: s.userId,
     organizationId: s.organizationId,
-    name: s.fullName,
+    name: input.name,
     phone: input.phone,
     address: input.address ? toParentAddressDto(input.address) : null,
     schoolIds: input.links.filter((l) => l.isActive).map((l) => l.snapshot.schoolId),

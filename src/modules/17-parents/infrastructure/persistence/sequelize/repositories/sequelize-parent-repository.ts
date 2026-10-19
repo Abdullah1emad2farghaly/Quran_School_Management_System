@@ -11,7 +11,6 @@ interface ParentRow {
   id: string;
   userId: string;
   organizationId: string;
-  fullName: string;
   createdBy: string;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -30,14 +29,14 @@ interface AddressRow {
 }
 
 const SELECT = `
-  SELECT p.id, p.user_id AS userId, p.organization_id AS organizationId, p.full_name AS fullName, p.created_by AS createdBy,
+  SELECT p.id, p.user_id AS userId, p.organization_id AS organizationId, p.created_by AS createdBy,
          p.created_at AS createdAt, p.updated_at AS updatedAt, p.version
     FROM parents p`;
 const SELECT_ADDRESS = `
   SELECT id, parent_id AS parentId, governorate_id AS governorateId, governorate_name AS governorateName, center_name AS centerName,
          village_name AS villageName, created_by AS createdBy, created_at AS createdAt, ended_at AS endedAt
     FROM parent_addresses`;
-const SORT_COLUMN = { createdAt: 'p.created_at', name: 'p.full_name' } as const;
+const SORT_COLUMN = { createdAt: 'p.created_at' } as const;
 
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
@@ -48,8 +47,8 @@ export class SequelizeParentRepository implements ParentRepository {
     const s = parent.snapshot;
     try {
       await this.db.query(
-        `INSERT INTO parents (id, user_id, organization_id, full_name, created_by, version, created_at, updated_at)
-         VALUES (:id, :userId, :organizationId, :fullName, :createdBy, 1, :createdAt, :updatedAt)`,
+        `INSERT INTO parents (id, user_id, organization_id, created_by, version, created_at, updated_at)
+         VALUES (:id, :userId, :organizationId, :createdBy, 1, :createdAt, :updatedAt)`,
         { replacements: { ...s }, transaction: sequelizeTransactionOf(tx) ?? null },
       );
     } catch (error) {
@@ -62,8 +61,8 @@ export class SequelizeParentRepository implements ParentRepository {
   async update(parent: Parent, tx: TransactionContext): Promise<void> {
     const s = parent.snapshot;
     const [, affected] = await this.db.query(
-      'UPDATE parents SET full_name = :fullName, updated_at = :updatedAt, version = version + 1 WHERE id = :id AND version = :version',
-      { replacements: { id: s.id, version: s.version, fullName: s.fullName, updatedAt: s.updatedAt }, type: QueryTypes.UPDATE, transaction: sequelizeTransactionOf(tx) ?? null },
+      'UPDATE parents SET updated_at = :updatedAt, version = version + 1 WHERE id = :id AND version = :version',
+      { replacements: { id: s.id, version: s.version, updatedAt: s.updatedAt }, type: QueryTypes.UPDATE, transaction: sequelizeTransactionOf(tx) ?? null },
     );
     if (Number(affected) !== 1) throw parentError('PARENT_CONCURRENT_MODIFICATION');
   }
@@ -155,7 +154,6 @@ export class SequelizeParentRepository implements ParentRepository {
       id: r.id,
       userId: r.userId,
       organizationId: r.organizationId,
-      fullName: r.fullName,
       createdBy: r.createdBy,
       createdAt: asDate(r.createdAt),
       updatedAt: asDate(r.updatedAt),

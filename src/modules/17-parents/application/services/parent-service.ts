@@ -20,7 +20,7 @@ import { isSameParentName, normalizeParentName } from '../../domain/value-object
 import { toParentAddressDto, toParentDto, toParentSchoolLinkDto, type ParentAddressDto, type ParentDto, type ParentSchoolLinkDto } from '../dto/parent-dto';
 import type { ParentAddressEntry, ParentRepository, ParentSortKey } from '../ports/parent-repository';
 import type { ParentSchoolLinkRepository } from '../ports/parent-school-link-repository';
-import { NO_VERIFIED_ACCOUNT_NAMES, type VerifiedAccountNames } from '../ports/verified-account-names';
+import type { ParentStudentDependencies } from '../ports/parent-student-dependencies';
 
 /**
  * The address of a registration/update: EITHER the raw `Governorate / Center or City / Village` text (the approved input format, also what an
@@ -33,7 +33,7 @@ export type ParentAddressSubmission =
 
 export interface RegisterParentInput {
   readonly schoolId: string;
-  /** Three-part name (§32). */
+  /** The Parent's personal name: exactly three parts. */
   readonly name: unknown;
   /** Any accepted phone format; normalized to E.164. */
   readonly phone: unknown;
@@ -47,8 +47,8 @@ export interface ParentRegistrationResult {
   readonly accountCreated: boolean;
 }
 
+/** V1: only the address can be corrected here. The personal name is the account's canonical name (Module 08) shared by every role of the account. */
 export interface UpdateParentInput {
-  readonly name?: unknown;
   readonly address?: ParentAddressSubmission | undefined;
 }
 
@@ -66,8 +66,8 @@ export interface ParentServiceDeps {
   readonly address: Pick<UnifiedAddressService, 'validateParentAddress' | 'validateRawParentAddress'>;
   readonly identity: Pick<IdentityService, 'findById' | 'findByPhone' | 'createUser'>;
   readonly roles: Pick<RoleService, 'assignRole' | 'hasRole'>;
-  /** Evidence for reusing an existing account that has no Parent record yet. Defaults to "no evidence": such an account is an identity conflict. */
-  readonly accountNames?: VerifiedAccountNames;
+  /** Students that depend on a Parent-to-School relationship (Module 19 supplies the real one; see `parent-student-dependencies.ts`). */
+  readonly studentDependencies: ParentStudentDependencies;
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
   readonly clock?: Clock;
@@ -78,14 +78,18 @@ export interface ParentServiceDeps {
  *
  * It does NOT authorize its callers: routes use the Authorization Engine (`parents.*` permissions, see parent-authorization.ts) before they
  * call it. What it enforces itself are the business rules:
- *  - a Parent is `User -> PARENT role -> Parent entity`, with a three-part name, the phone and a Parent Address (country = the organization's);
+ *  - a Parent is `User -> PARENT role -> Parent entity`, with an EXACTLY three-part personal name, the phone and a Parent Address (country =
+ *    the organization's). The name is stored once, on the account (`users.full_name`, Module 08), never on the Parent record;
  *  - the school must exist and be ACTIVE; the organization is the school's organization;
- *  - a NEW phone creates a new account whose initial password is the last four digits of the phone, flagged as "must change password"
- *    (account level, Module 08/10). An EXISTING phone is never merged, overwritten or given a new password: the existing Parent record is
- *    reused (same organization + same full name) or, for an account without a Parent record, only when its owning module vouches for the same
- *    name (`VerifiedAccountNames`); otherwise PARENT_IDENTITY_CONFLICT;
+ *  - a NEW phone creates a new account (with the name) whose initial password is the last four digits of the phone, flagged as "must change
+ *    password" (account level, Module 08/10). An EXISTING phone is never merged, overwritten or given a new password: the account is reused
+ *    only when its stored three-part name equals the submitted one (the approved matching criterion; it is not independent proof of
+ *    identity) and, if it already has a Parent record, that record belongs to the same organization. A missing or different stored name, or
+ *    anything else that cannot be matched, is PARENT_IDENTITY_CONFLICT. The account's name, password and security state are never touched and
+ *    the PARENT role is added only when missing;
  *  - a Parent is never reused across organizations (PARENT_ORGANIZATION_CONFLICT); within the organization each school gets its own link;
- *  - removing a school link keeps the account, the Parent record, the address history and the other links;
+ *  - removing a school link keeps the account, the Parent record, the address history and the other links, and is refused while the Parent
+ *    still has students in that school (PARENT_HAS_STUDENTS_IN_SCHOOL);
  *  - there is deliberately NO global deactivation or deletion of a Parent (decision D-3 is still open).
  * Every write is one transaction together with its outbox events.
  */
@@ -96,7 +100,7 @@ export class ParentService {
   private readonly address: ParentServiceDeps['address'];
   private readonly identity: ParentServiceDeps['identity'];
   private readonly roles: ParentServiceDeps['roles'];
-  private readonly accountNames: VerifiedAccountNames;
+  private readonly studentDependencies: ParentStudentDependencies;
   private readonly unitOfWork: UnitOfWork;
   private readonly outbox: OutboxService;
   private readonly clock: Clock;
@@ -108,7 +112,7 @@ export class ParentService {
     this.address = deps.address;
     this.identity = deps.identity;
     this.roles = deps.roles;
-    this.accountNames = deps.accountNames ?? NO_VERIFIED_ACCOUNT_NAMES;
+    this.studentDependencies = deps.studentDependencies;
     this.unitOfWork = deps.unitOfWork;
     this.outbox = deps.outbox;
     this.clock = deps.clock ?? new SystemClock();
@@ -131,9 +135,9 @@ export class ParentService {
 
       const existingUser = await this.identity.findByPhone(phone, t);
       if (!existingUser) {
-        const user = await this.identity.createUser({ phone, password: initialPasswordFromPhone(phone), mustChangePassword: true }, t);
+        const user = await this.identity.createUser({ phone, password: initialPasswordFromPhone(phone), mustChangePassword: true, fullName: name }, t);
         await this.roles.assignRole({ userId: user.id, roleCode: 'PARENT', assignedBy: actorId }, t);
-        const parent = await this.createParent(user.id, organizationId, name, address, actorId, t);
+        const parent = await this.createParent(user.id, organizationId, address, actorId, t);
         const link = await this.createLink(parent, school.id, actorId, t);
         return { parent: await this.toDto(parent, t), link: toParentSchoolLinkDto(link), accountCreated: true };
       }
@@ -144,18 +148,19 @@ export class ParentService {
 
       if (existingParent) {
         if (existingParent.organizationId !== organizationId) throw parentError('PARENT_ORGANIZATION_CONFLICT');
-        if (!isSameParentName(existingParent.fullName, name)) throw parentError('PARENT_IDENTITY_CONFLICT');
+        if (!isSameParentName(existingUser.fullName, name)) throw parentError('PARENT_IDENTITY_CONFLICT');
         if (await this.links.findActive(existingParent.id, school.id, t)) throw parentError('PARENT_ALREADY_LINKED_TO_SCHOOL');
         await this.ensureParentRole(existingUser.id, actorId, t);
         const link = await this.createLink(existingParent, school.id, actorId, t);
         return { parent: await this.toDto(existingParent, t), link: toParentSchoolLinkDto(link), accountCreated: false };
       }
 
-      // An account that is not a Parent yet (an organization manager, a teacher...): reuse only when its owning module vouches for the name.
-      const vouched = await this.accountNames.verifiedNamesOf(existingUser.id, t);
-      if (!vouched.some((known) => isSameParentName(known, name))) throw parentError('PARENT_IDENTITY_CONFLICT');
+      // An account that is not a Parent yet (an organization manager, a school manager, a teacher...): the approved matching criterion is the
+      // canonical three-part name stored on the account. A missing or different stored name is an identity conflict. (A matching name is the
+      // approved criterion for this workflow; it is not independent proof of identity.)
+      if (!isSameParentName(existingUser.fullName, name)) throw parentError('PARENT_IDENTITY_CONFLICT');
       await this.ensureParentRole(existingUser.id, actorId, t);
-      const parent = await this.createParent(existingUser.id, organizationId, name, address, actorId, t);
+      const parent = await this.createParent(existingUser.id, organizationId, address, actorId, t);
       const link = await this.createLink(parent, school.id, actorId, t);
       return { parent: await this.toDto(parent, t), link: toParentSchoolLinkDto(link), accountCreated: false };
     });
@@ -185,7 +190,7 @@ export class ParentService {
     const ids = items.map((p) => p.id);
     const [addresses, links] = await Promise.all([this.parents.findCurrentAddresses(ids, tx), this.links.listActiveByParents(ids, tx)]);
     const dtos = await Promise.all(
-      items.map(async (parent) => toParentDto({ parent, phone: await this.phoneOf(parent.userId, tx), address: addresses.get(parent.id), links: links.get(parent.id) ?? [] })),
+      items.map(async (parent) => toParentDto({ parent, ...(await this.accountOf(parent.userId, tx)), address: addresses.get(parent.id), links: links.get(parent.id) ?? [] })),
     );
     return buildPageResult(dtos, total, input.page);
   }
@@ -193,22 +198,20 @@ export class ParentService {
   // ---------------------------------------------------------------------------------------------- update
 
   /**
-   * Corrects the Parent's name and/or address. A new address becomes the current one and the previous one stays in the history (with the
-   * Governorate name as it was); an unchanged name/address changes nothing. The phone, the organization and the account never change here.
+   * Corrects the Parent's address. A new address becomes the current one and the previous one stays in the history (with the Governorate
+   * name as it was); an unchanged address changes nothing. The phone, the name, the organization and the account never change here.
    */
   async updateParent(parentId: string, input: UpdateParentInput, actorId: string, tx?: TransactionContext): Promise<ParentDto> {
-    if (input.name === undefined && input.address === undefined) throw parentError('PARENT_UPDATE_EMPTY');
-    const name = input.name === undefined ? undefined : normalizeParentName(input.name);
+    const submitted = input.address;
+    if (submitted === undefined) throw parentError('PARENT_UPDATE_EMPTY');
 
     return this.inTransaction(tx, async (t) => {
       const parent = await this.parents.lockById(parentId, t);
       if (!parent) throw parentError('PARENT_NOT_FOUND');
 
       let changed = false;
-      if (name !== undefined && parent.rename(name, actorId, this.clock)) changed = true;
-
-      if (input.address !== undefined) {
-        const next = await this.validateAddress(input.address, parent.organizationId, t);
+      {
+        const next = await this.validateAddress(submitted, parent.organizationId, t);
         const current = await this.parents.findCurrentAddress(parent.id, t);
         if (!current || !sameAddress(current, next)) {
           await this.parents.replaceCurrentAddress(this.addressEntry(parent.id, next, actorId), t);
@@ -228,13 +231,15 @@ export class ParentService {
 
   /**
    * Ends the Parent's relationship with ONE school. The account, the Parent record, the address history and the links to other schools are
-   * untouched; the ended link stays in the history. (Module 19 will add the rule that a Parent with children in the school cannot be unlinked.)
+   * untouched; the ended link stays in the history. A Parent who still has students in the school cannot be unlinked (PARENT_HAS_STUDENTS_IN_SCHOOL, via the Module 19 guard).
    */
   removeSchoolLink(parentId: string, schoolId: string, actorId: string, tx?: TransactionContext): Promise<ParentSchoolLinkDto> {
     return this.inTransaction(tx, async (t) => {
       if (!(await this.parents.lockById(parentId, t))) throw parentError('PARENT_NOT_FOUND');
       const link = await this.links.lockActive(parentId, schoolId, t);
       if (!link) throw parentError('PARENT_SCHOOL_LINK_NOT_FOUND');
+      // Never leave a student whose Parent relationship with this school would become invalid.
+      if ((await this.studentDependencies.countStudentsOfParentInSchool(parentId, schoolId, t)) > 0) throw parentError('PARENT_HAS_STUDENTS_IN_SCHOOL');
       link.unlink(actorId, this.clock);
       await this.links.update(link, t);
       await this.outbox.publishFrom(link, t);
@@ -298,8 +303,8 @@ export class ParentService {
     };
   }
 
-  private async createParent(userId: string, organizationId: string, name: string, address: ParentAddress, actorId: string, t: TransactionContext): Promise<Parent> {
-    const parent = Parent.register({ userId, organizationId, fullName: name, createdBy: actorId, clock: this.clock });
+  private async createParent(userId: string, organizationId: string, address: ParentAddress, actorId: string, t: TransactionContext): Promise<Parent> {
+    const parent = Parent.register({ userId, organizationId, createdBy: actorId, clock: this.clock });
     await this.parents.insert(parent, t);
     await this.parents.insertAddress(this.addressEntry(parent.id, address, actorId), t);
     await this.outbox.publishFrom(parent, t);
@@ -318,19 +323,21 @@ export class ParentService {
     if (!(await this.roles.hasRole(userId, 'PARENT', t))) await this.roles.assignRole({ userId, roleCode: 'PARENT', assignedBy: actorId }, t);
   }
 
-  private async phoneOf(userId: string, tx?: TransactionContext): Promise<string> {
+  /** The phone and the canonical personal name come from the account (Module 08), the single source of both. */
+  private async accountOf(userId: string, tx?: TransactionContext): Promise<{ phone: string; name: string }> {
     const user = await this.identity.findById(userId, tx);
-    if (!user) throw new Error(`Parent account ${userId} does not exist`); // accounts are never deleted: a data-integrity failure, not a client error
-    return user.phone;
+    // Accounts are never deleted and a Parent's account always carries its name: a data-integrity failure, not a client error.
+    if (!user || user.fullName === null) throw new Error(`Parent account ${userId} is missing or has no personal name`);
+    return { phone: user.phone, name: user.fullName };
   }
 
   private async toDto(parent: Parent, tx?: TransactionContext): Promise<ParentDto> {
-    const [phone, address, links] = await Promise.all([
-      this.phoneOf(parent.userId, tx),
+    const [account, address, links] = await Promise.all([
+      this.accountOf(parent.userId, tx),
       this.parents.findCurrentAddress(parent.id, tx),
       this.links.listActiveByParent(parent.id, tx),
     ]);
-    return toParentDto({ parent, phone, address, links });
+    return toParentDto({ parent, ...account, address, links });
   }
 
   private inTransaction<T>(tx: TransactionContext | undefined, work: (tx: TransactionContext) => Promise<T>): Promise<T> {

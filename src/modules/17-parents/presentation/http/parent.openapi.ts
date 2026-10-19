@@ -30,7 +30,7 @@ const addressErrors: ErrorDoc = {
   status: 400,
   codes: ['INVALID_PARENT_NAME', 'PARENT_ADDRESS_REQUIRED', 'PARENT_UPDATE_EMPTY', 'INVALID_PARENT_ADDRESS', 'PARENT_ADDRESS_GOVERNORATE_NOT_FOUND', 'PARENT_ADDRESS_GOVERNORATE_INACTIVE', 'PARENT_ADDRESS_COUNTRY_MISMATCH', 'INVALID_PHONE_NUMBER'],
   description:
-    'The name has fewer than three parts, the phone is malformed, the address is missing/ambiguous (send `address` OR `addressFields`), an update changes nothing (`PARENT_UPDATE_EMPTY`), or the address is invalid: the governorate must be a registered, ACTIVE governorate of the organization\'s country (exact name match for the raw text), a village needs a center/city.',
+    'The name does not have exactly three parts, the phone is malformed, the address is missing/ambiguous (send `address` OR `addressFields`), an update carries no address (`PARENT_UPDATE_EMPTY`), or the address is invalid: the governorate must be a registered, ACTIVE governorate of the organization\'s country (exact name match for the raw text), a village needs a center/city.',
 };
 
 const addressSchema = s.object(
@@ -49,7 +49,7 @@ const parentSchema = s.object(
     id: s.uuid(),
     userId: s.uuid({ description: 'The login account (Module 08).' }),
     organizationId: s.uuid({ description: 'The organization of the school that registered the Parent. Never changes.' }),
-    name: s.string({ description: 'Normalized three-part name.', example: 'أحمد محمد علي' }),
+    name: s.string({ description: 'The account\'s canonical personal name: exactly three parts (stored once, on the account).', example: 'أحمد محمد علي' }),
     phone: s.string({ description: 'The normalized phone number (the login identifier).', example: '+201001234567' }),
     address: ref('ParentAddress'),
     schoolIds: s.array(s.uuid(), { description: 'The schools the Parent is currently linked to (all in the same organization).' }),
@@ -139,14 +139,14 @@ export const parentApiDoc: ModuleApiDoc = {
       operationId: 'registerParent',
       summary: 'Register a Parent (or reuse the existing one) for a school',
       description:
-        'The School Manager registers a Parent of THEIR school with a three-part name, a phone number and an address (the country is the organization\'s). **New phone:** a new account is created with the last four digits of the phone as its initial password and the mandatory first-login password change (the Parent can use nothing but `POST /auth/change-password` and logout until it is changed); the PARENT role is assigned. **Existing phone:** the account is never merged, overwritten or given a new password. An existing Parent of the SAME organization with the SAME full name is reused and linked to this school (the stored name and address are not changed; use `PATCH /parents/{id}`); a different name, an account whose identity cannot be confirmed, or a deactivated account is `PARENT_IDENTITY_CONFLICT` / `PARENT_ACCOUNT_INACTIVE`; a Parent of another organization is `PARENT_ORGANIZATION_CONFLICT`. Linking the same school twice is `PARENT_ALREADY_LINKED_TO_SCHOOL`. The password is never returned.',
+        'The School Manager registers a Parent of THEIR school with a three-part personal name, a phone number and an address (the country is the organization\'s). **New phone:** a new account is created with the last four digits of the phone as its initial password and the mandatory first-login password change (the Parent can use nothing but `POST /auth/change-password` and logout until it is changed); the PARENT role is assigned. **Existing phone:** the account is never merged, overwritten or given a new password. The account is matched by the canonical three-part name stored on the account: the same name reuses the account and links it to this school (the stored name, password and address are never changed; use `PATCH /parents/{id}` for the address) - for an existing Parent of the same organization, or for an account that holds another role such as ORGANIZATION_MANAGER or SCHOOL_MANAGER, which then also receives the PARENT role. A different name, an account with no stored name, or any other identity that cannot be matched is `PARENT_IDENTITY_CONFLICT`; a deactivated account is `PARENT_ACCOUNT_INACTIVE`. A matching name is the approved matching criterion, not independent proof of identity; a Parent of another organization is `PARENT_ORGANIZATION_CONFLICT`. Linking the same school twice is `PARENT_ALREADY_LINKED_TO_SCHOOL`. The password is never returned.',
       authorization: schoolManager(ParentPermissions.CREATE, 'The school named in the body (the caller must be its active manager).'),
       request: {
         description: 'The school, the Parent\'s name and phone, and the address (as text OR as fields).',
         schema: s.object(
           {
             schoolId: s.uuid({ example: SCHOOL_ID }),
-            name: s.string({ maxLength: 200, description: 'Full name: at least three parts.', example: 'أحمد محمد علي' }),
+            name: s.string({ maxLength: 200, description: 'The Parent\'s personal name: EXACTLY three parts (two or four parts are `INVALID_PARENT_NAME`).', example: 'أحمد محمد علي' }),
             phone: s.string({ maxLength: 40, description: 'Any accepted phone format; normalized to E.164.', example: '01001234567' }),
             address: ADDRESS_TEXT,
             addressFields: addressFieldsSchema,
@@ -192,7 +192,7 @@ export const parentApiDoc: ModuleApiDoc = {
       path: '/schools/:schoolId',
       operationId: 'listSchoolParents',
       summary: 'List the Parents of a school',
-      description: 'A paginated list of the Parents with an ACTIVE link to the school. Only the FIRST sort field is applied (`createdAt` or `name`).',
+      description: 'A paginated list of the Parents with an ACTIVE link to the school, newest first by default (`sort=createdAt` or `-createdAt`; the name cannot be sorted: it lives on the account, data of another module).',
       authorization: schoolManager(ParentPermissions.LIST, 'The school in the path (the caller must be its active manager).'),
       pathParams: schoolIdParam,
       query: listQueryParameters(PARENT_LIST_SPEC),
@@ -214,16 +214,15 @@ export const parentApiDoc: ModuleApiDoc = {
       method: 'patch',
       path: '/:id',
       operationId: 'updateParent',
-      summary: 'Correct a Parent\'s name and/or address',
+      summary: 'Correct a Parent\'s address',
       description:
-        'Changes the three-part name and/or the address. A new address becomes the current one and the previous address stays in the history (with the governorate name as it was). An unchanged value changes nothing. The phone, the organization and the account (password, status, roles) are never changed here. At least one of `name`, `address`, `addressFields` is required (`PARENT_UPDATE_EMPTY`).',
+        'Changes the Parent\'s address. A new address becomes the current one and the previous address stays in the history (with the governorate name as it was). An unchanged address changes nothing. The name (the account\'s canonical name, shared by every role of the account), the phone, the organization and the account (password, status, roles) are never changed here. `address` or `addressFields` is required (`PARENT_UPDATE_EMPTY`).',
       authorization: schoolManager(ParentPermissions.UPDATE, 'A school the Parent is actively linked to (loaded server-side).'),
       pathParams: parentIdParam,
       request: {
-        description: 'The corrected name and/or address.',
+        description: 'The corrected address (as text OR as fields).',
         schema: s.object(
           {
-            name: s.string({ maxLength: 200, description: 'Full name: at least three parts.', example: 'أحمد محمد علي' }),
             address: ADDRESS_TEXT,
             addressFields: s.object(
               {
@@ -237,7 +236,7 @@ export const parentApiDoc: ModuleApiDoc = {
           },
           [],
         ),
-        examples: { newAddress: { summary: 'Move the Parent to a new address', value: { address: 'المنيا / مطاي' } }, rename: { summary: 'Correct the name', value: { name: 'أحمد محمد علي حسن' } } },
+        examples: { newAddress: { summary: 'Move the Parent to a new address', value: { address: 'المنيا / مطاي' } } },
       },
       success: { status: 200, description: 'The Parent after the change.', data: ref('Parent'), example: parentExample({ address: { ...addressExample, centerName: 'مطاي', villageName: null } }) },
       errors: [
@@ -253,7 +252,7 @@ export const parentApiDoc: ModuleApiDoc = {
       operationId: 'removeParentSchoolLink',
       summary: 'End a Parent\'s link to one school',
       description:
-        'Ends the Parent-to-School relationship for THIS school only. The login account, the Parent record, the address history and the links to other schools are untouched, and the ended link stays in the history. There is no global deactivation or deletion of a Parent in V1.',
+        'Ends the Parent-to-School relationship for THIS school only, and only while the Parent has no students in this school (`PARENT_HAS_STUDENTS_IN_SCHOOL`; enforced through the Students module guard). The login account, the Parent record, the address history and the links to other schools are untouched, and the ended link stays in the history. There is no global deactivation or deletion of a Parent in V1.',
       authorization: schoolManager(ParentPermissions.REMOVE_SCHOOL_LINK, 'The school in the path (the caller must be its active manager).'),
       pathParams: { ...parentIdParam, ...schoolIdParam },
       success: { status: 200, description: 'The ended link.', data: ref('ParentSchoolLink'), example: linkExample({ schoolId: OTHER_SCHOOL_ID, unlinkedAt: '2026-10-19T08:00:00.000Z', unlinkedBy: USER_ID, isActive: false }) },
@@ -261,6 +260,7 @@ export const parentApiDoc: ModuleApiDoc = {
         NOT_ALLOWED,
         { status: 404, codes: ['PARENT_NOT_FOUND', 'PARENT_SCHOOL_LINK_NOT_FOUND'], description: 'The Parent does not exist, or is not linked to this school.' },
         { status: 409, codes: ['PARENT_CONCURRENT_MODIFICATION'], description: 'A concurrent update could not be resolved; retry.' },
+        { status: 422, codes: ['PARENT_HAS_STUDENTS_IN_SCHOOL'], description: 'The Parent still has students in this school; the relationship cannot be removed.' },
       ],
     },
   ],

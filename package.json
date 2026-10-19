@@ -22,7 +22,9 @@
     "db:seed": "sequelize-cli db:seed:all",
     "bootstrap:main-admin": "tsx src/app/cli/bootstrap-main-admin.ts",
     "bootstrap:organization": "tsx src/app/cli/bootstrap-organization.ts",
-    "seed:geography": "tsx src/app/cli/seed-geography.ts"
+    "seed:geography": "tsx src/app/cli/seed-geography.ts",
+    "person-names:report": "tsx src/app/cli/person-names.ts report",
+    "person-names:apply": "tsx src/app/cli/person-names.ts apply"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

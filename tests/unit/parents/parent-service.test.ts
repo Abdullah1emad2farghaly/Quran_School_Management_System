@@ -54,7 +54,10 @@ describe('registering a NEW parent', () => {
 
   it('validates the name, the phone and the address before touching anything, and an invalid address creates no account', async () => {
     const { t, register } = await setup();
-    expect(await codeOf(register({ name: 'أحمد محمد' }))).toBe('INVALID_PARENT_NAME');
+    expect(await codeOf(register({ name: 'أحمد محمد' }))).toBe('INVALID_PARENT_NAME'); // two parts
+    expect(await codeOf(register({ name: 'أحمد محمد علي حسن' }))).toBe('INVALID_PARENT_NAME'); // four parts
+    expect(await codeOf(register({ name: '   ' }))).toBe('INVALID_PARENT_NAME');
+    expect(await codeOf(register({ name: undefined }))).toBe('INVALID_PARENT_NAME');
     expect(await codeOf(register({ phone: '123' }))).toBe('INVALID_PHONE_NUMBER');
     expect(await codeOf(register({ address: undefined }))).toBe('PARENT_ADDRESS_REQUIRED');
     expect(await codeOf(register({ address: { kind: 'raw', text: 'مدينة غير موجودة / سمالوط' } }))).toBe('PARENT_ADDRESS_GOVERNORATE_NOT_FOUND');
@@ -173,37 +176,62 @@ describe('reusing an existing phone number', () => {
     expect(await codeOf(t.parents.registerParent({ schoolId: second.id, name: NAME, phone: PHONE, address: ADDRESS }, manager2.id))).toBe('PARENT_ACCOUNT_INACTIVE');
   });
 
-  it('an existing account WITHOUT a Parent record (an organization manager) is an identity conflict unless its owning module vouches for the same name', async () => {
-    const { t, school, manager, register } = await setup();
-    const orgManager = await t.h.createUser({ role: 'ORGANIZATION_MANAGER', password: 'org-pass1' });
-    const phone = orgManager.phone;
-
-    expect(await codeOf(register({ phone }))).toBe('PARENT_IDENTITY_CONFLICT'); // no evidence at all
-    t.verifiedNames.set(orgManager.id, ['محمود خالد سعيد']);
-    expect(await codeOf(register({ phone }))).toBe('PARENT_IDENTITY_CONFLICT'); // vouched name differs
-    expect(t.parentRepo.rows.size).toBe(0);
-
-    t.verifiedNames.set(orgManager.id, ['  أحمد محمد   علي ']);
-    const result = await register({ phone });
-    expect(result.accountCreated).toBe(false);
-    expect(result.parent.userId).toBe(orgManager.id);
-    expect(result.parent.schoolIds).toEqual([school.id]);
-    expect(manager.id).not.toBe(orgManager.id);
-
-    // the account keeps its password, gets NO mandatory-change flag, and simply gains the PARENT role
-    const after = (await t.h.identity.findById(orgManager.id))!;
-    expect(after.mustChangePassword).toBe(false);
-    expect(await t.h.identity.verifyPassword(orgManager.id, 'org-pass1')).toBe(true);
-    expect((await t.h.roles.listActiveRoles(orgManager.id)).sort()).toEqual(['ORGANIZATION_MANAGER', 'PARENT']);
+  it('stores the personal name on the ACCOUNT (once) and nowhere else', async () => {
+    const { t, register } = await setup();
+    const { parent } = await register({ name: '  أحمد   محمد  علي ' });
+    const user = (await t.h.identity.findByPhone(PHONE))!;
+    expect(user.fullName).toBe(NAME);
+    expect(parent.name).toBe(NAME);
+    expect(JSON.stringify([...t.parentRepo.rows.values()])).not.toContain('أحمد');
   });
 
-  it('keeps a pending password change of a reused multi-role account, and never adds one to an account without it', async () => {
+  it('an existing ORGANIZATION_MANAGER account with the SAME stored name is reused: same account, password and security state, plus the PARENT role', async () => {
     const { t, school, register } = await setup();
-    const pending = await t.h.createUser({ role: 'TEACHER', password: '1111', mustChangePassword: true });
-    t.verifiedNames.set(pending.id, [NAME]);
+    const orgManager = await t.newNamedUser('ORGANIZATION_MANAGER', NAME, 'org-pass1');
+
+    const result = await register({ phone: orgManager.phone, name: '  أحمد  محمد   علي ' });
+
+    expect(result.accountCreated).toBe(false);
+    expect(result.parent).toMatchObject({ userId: orgManager.id, schoolIds: [school.id], name: NAME });
+    const after = (await t.h.identity.findById(orgManager.id))!;
+    expect(after.mustChangePassword).toBe(false); // no new requirement merely because a role was added
+    expect(after.fullName).toBe(NAME); // the stored name is untouched
+    expect(await t.h.identity.verifyPassword(orgManager.id, 'org-pass1')).toBe(true); // password untouched
+    expect((await t.h.roles.listActiveRoles(orgManager.id)).sort()).toEqual(['ORGANIZATION_MANAGER', 'PARENT']);
+    expect(await t.h.identity.findByPhone(orgManager.phone)).toMatchObject({ id: orgManager.id }); // still ONE account for that phone
+  });
+
+  it('an existing SCHOOL_MANAGER account with the same stored name can also become a Parent (one account, two roles)', async () => {
+    const { t, school, manager, register } = await setup();
+    await t.h.identity.ensureFullName(manager.id, NAME);
+    const managerPhone = (await t.h.identity.findById(manager.id))!.phone;
+    const result = await register({ phone: managerPhone });
+    expect(result.parent.userId).toBe(manager.id);
+    expect((await t.h.roles.listActiveRoles(manager.id)).sort()).toEqual(['PARENT', 'SCHOOL_MANAGER']);
+    expect(result.parent.schoolIds).toEqual([school.id]);
+  });
+
+  it('an existing account whose stored name is MISSING or DIFFERENT is PARENT_IDENTITY_CONFLICT and nothing changes', async () => {
+    const { t, register } = await setup();
+    const nameless = await t.h.createUser({ role: 'ORGANIZATION_MANAGER', password: 'org-pass1' });
+    expect(await codeOf(register({ phone: nameless.phone }))).toBe('PARENT_IDENTITY_CONFLICT'); // existing name missing
+    const other = await t.newNamedUser('ORGANIZATION_MANAGER', 'محمود خالد سعيد', 'org-pass2');
+    expect(await codeOf(register({ phone: other.phone }))).toBe('PARENT_IDENTITY_CONFLICT'); // different name
+    expect(await codeOf(register({ phone: other.phone, name: 'محمود خالد' }))).toBe('INVALID_PARENT_NAME');
+    for (const u of [nameless, other]) {
+      expect(await t.h.roles.listActiveRoles(u.id)).toEqual(['ORGANIZATION_MANAGER']);
+      expect((await t.h.identity.findById(u.id))!.mustChangePassword).toBe(false);
+    }
+    expect((await t.h.identity.findById(nameless.id))!.fullName).toBeNull(); // the submitted name never fills or overwrites an account's name
+    expect(t.parentRepo.rows.size).toBe(0);
+  });
+
+  it('keeps a pending password change of a reused account, and never adds one to an account without it', async () => {
+    const { t, register } = await setup();
+    const pending = await t.h.createUser({ role: 'TEACHER', password: '1111', mustChangePassword: true, fullName: NAME });
     await register({ phone: pending.phone });
     expect((await t.h.identity.findById(pending.id))!.mustChangePassword).toBe(true);
-    expect(school.id).toBeTruthy();
+    expect(await t.h.identity.verifyPassword(pending.id, '1111')).toBe(true);
   });
 });
 
@@ -223,23 +251,16 @@ describe('update, history and school links', () => {
     expect(history[0]!.governorateName).toBe('المنيا');
   });
 
-  it('an unchanged name/address writes nothing; an empty update is refused; the name needs three parts', async () => {
+  it('an unchanged address writes nothing; an empty update is refused; the name is not updatable here', async () => {
     const { t, register } = await setup();
     const { parent } = await register();
     const before = t.h.store.messages.length;
-    await t.parents.updateParent(parent.id, { name: ' أحمد  محمد علي ', address: ADDRESS }, t.orgAdmin.id);
+    await t.parents.updateParent(parent.id, { address: ADDRESS }, t.orgAdmin.id);
     expect(t.h.store.messages.length).toBe(before);
     expect((await t.parents.listAddressHistory(parent.id)).length).toBe(1);
     expect(await codeOf(t.parents.updateParent(parent.id, {}, t.orgAdmin.id))).toBe('PARENT_UPDATE_EMPTY');
-    expect(await codeOf(t.parents.updateParent(parent.id, { name: 'أحمد' }, t.orgAdmin.id))).toBe('INVALID_PARENT_NAME');
-    expect(await codeOf(t.parents.updateParent('00000000-0000-4000-8000-000000000000', { name: NAME }, t.orgAdmin.id))).toBe('PARENT_NOT_FOUND');
-  });
-
-  it('renaming keeps the phone, account and organization', async () => {
-    const { t, register } = await setup();
-    const { parent } = await register();
-    const renamed = await t.parents.updateParent(parent.id, { name: 'أحمد محمد علي حسن' }, t.orgAdmin.id);
-    expect(renamed).toMatchObject({ name: 'أحمد محمد علي حسن', phone: E164, userId: parent.userId, organizationId: parent.organizationId });
+    expect(await codeOf(t.parents.updateParent('00000000-0000-4000-8000-000000000000', { address: ADDRESS }, t.orgAdmin.id))).toBe('PARENT_NOT_FOUND');
+    expect((await t.parents.getParent(parent.id)).name).toBe(NAME);
   });
 
   it('removing a school link keeps the account, the Parent, the address history and the OTHER links; the ended link stays in the history; re-linking works', async () => {
@@ -274,9 +295,20 @@ describe('update, history and school links', () => {
     const m2 = await t.newSchoolManager(other.id);
     await t.parents.registerParent({ schoolId: other.id, name: 'ج ج ج', phone: '01003333333', address: ADDRESS }, m2.id);
 
-    const page = await t.parents.listParentsOfSchool({ schoolId: school.id, sort: 'name', direction: 'asc', page: { page: 1, pageSize: 1 } });
-    expect(page.items.map((p) => p.name)).toEqual(['أ أ أ']);
+    const page = await t.parents.listParentsOfSchool({ schoolId: school.id, sort: 'createdAt', direction: 'asc', page: { page: 1, pageSize: 1 } });
+    expect(page.items).toHaveLength(1);
     expect(page.total).toBe(2);
+  });
+
+  it('refuses to unlink a Parent who still has students in the school, and unlinks once none depend on it', async () => {
+    const { t, school, manager, register } = await setup();
+    const { parent } = await register();
+    t.studentCounts.set(`${parent.id}:${school.id}`, 2);
+    expect(await codeOf(t.parents.removeSchoolLink(parent.id, school.id, manager.id))).toBe('PARENT_HAS_STUDENTS_IN_SCHOOL');
+    expect(await t.parents.isLinkedToSchool(parent.id, school.id)).toBe(true); // nothing changed
+    expect((await t.parents.listSchoolLinkHistory(parent.id)).map((l) => l.isActive)).toEqual([true]);
+    t.studentCounts.set(`${parent.id}:${school.id}`, 0);
+    expect((await t.parents.removeSchoolLink(parent.id, school.id, manager.id)).isActive).toBe(false);
   });
 
   it('own profile: found for a Parent, PARENT_NOT_FOUND for any other account', async () => {

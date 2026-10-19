@@ -8,6 +8,10 @@ export const IdentityErrorCodes = {
   USER_ALREADY_ACTIVE: 'USER_ALREADY_ACTIVE',
   USER_ALREADY_INACTIVE: 'USER_ALREADY_INACTIVE',
   USER_CONCURRENT_MODIFICATION: 'USER_CONCURRENT_MODIFICATION',
+  /** A personal name must be exactly three parts (organization creator, school applicant, Parent). */
+  INVALID_PERSON_NAME: 'INVALID_PERSON_NAME',
+  /** The account already has a different canonical personal name: it is never silently replaced. */
+  PERSON_NAME_MISMATCH: 'PERSON_NAME_MISMATCH',
 } as const;
 export type IdentityErrorCode = (typeof IdentityErrorCodes)[keyof typeof IdentityErrorCodes];
 
@@ -19,6 +23,8 @@ const KIND: Record<IdentityErrorCode, ErrorKind> = {
   USER_ALREADY_ACTIVE: 'BUSINESS_RULE',
   USER_ALREADY_INACTIVE: 'BUSINESS_RULE',
   USER_CONCURRENT_MODIFICATION: 'CONFLICT',
+  INVALID_PERSON_NAME: 'VALIDATION',
+  PERSON_NAME_MISMATCH: 'CONFLICT',
 };
 
 export function identityError(code: IdentityErrorCode, params?: Record<string, string | number>): AppError {

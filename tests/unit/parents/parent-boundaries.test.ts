@@ -69,6 +69,28 @@ describe('Module 17 boundaries', () => {
     }
   });
 
+  it('stores no personal name of its own: the name is the account\'s canonical name (Module 08)', () => {
+    for (const f of files.filter((x) => /\/(domain|infrastructure)\//.test(where(x)))) {
+      expect([path.basename(f), /full_?name/i.test(stripComments(f))]).toEqual([path.basename(f), false]);
+    }
+  });
+
+  it('has no stand-in identity source: existing accounts are matched by the stored account name only', () => {
+    expect(files.filter((f) => /VerifiedAccountNames|NO_VERIFIED_ACCOUNT_NAMES|verifiedNamesOf|accountNames/.test(readFileSync(f, 'utf-8')))).toEqual([]);
+    expect(readFileSync(path.resolve(__dirname, '../../../src/config/parents.ts'), 'utf-8')).not.toMatch(/accountNames|verifiedNames/);
+  });
+
+  it('TRIPWIRE: the temporary "no students yet" unlink guard is wired only while Module 19 has no source code', () => {
+    const students = path.resolve(__dirname, '../../../src/modules/19-students');
+    const hasSources = sourceFiles(students).length > 0;
+    const config = readFileSync(path.resolve(__dirname, '../../../src/config/parents.ts'), 'utf-8');
+    const usesTemporaryGuard = /studentDependencies:\s*STUDENTS_MODULE_NOT_IMPLEMENTED_YET/.test(config);
+    // When Module 19 is implemented this fails on purpose: wire the Students module's real guard (it must count the Parent's students in the
+    // school consistently inside the unlink transaction) and delete the temporary one.
+    expect({ module19HasSources: hasSources, usesTemporaryGuard: hasSources && usesTemporaryGuard }).toEqual({ module19HasSources: hasSources, usesTemporaryGuard: false });
+    expect(usesTemporaryGuard || hasSources).toBe(true); // some guard is always wired
+  });
+
   it('has no global parent deactivation or deletion (decision D-3 is open) and never touches passwords itself', () => {
     for (const f of files) {
       const text = stripComments(f);
