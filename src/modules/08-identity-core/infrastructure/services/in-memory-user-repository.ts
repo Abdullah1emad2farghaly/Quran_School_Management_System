@@ -35,6 +35,7 @@ export class InMemoryUserRepository implements UserRepository {
       passwordHash: user.passwordHash,
       status: user.status,
       statusChangedAt: user.statusChangedAt,
+      mustChangePassword: user.mustChangePassword,
       version,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

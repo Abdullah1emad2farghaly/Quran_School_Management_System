@@ -29,6 +29,8 @@ Lifetimes are constants in code (`token-policy.ts`), **not** environment setting
 - **Password reset** (Module 11) calls `SessionService.revokeAllForUser(userId, 'PASSWORD_RESET')`.
 
 ## HTTP API (`/api/v1/auth`)
+`POST /auth/change-password` (authenticated; `currentPassword`, `newPassword`; 204) lets the user change their own password (policy 4-12 characters, must differ from the current one, wrong current password -> `CURRENT_PASSWORD_INCORRECT`). **Mandatory first-login change (account-level flag `users.must_change_password`, Module 17):** while the flag is set, `requireAuthentication` answers every protected route with `403 PASSWORD_CHANGE_REQUIRED`; only `POST /auth/change-password`, `/auth/logout` and `/auth/logout-all` (`requireAuthenticationAllowingPasswordChange`) and the public login/refresh stay reachable. Login and refresh report `mustChangePassword`. The flag is read live from the user on every request; a successful change clears it, the session stays valid and no token is reissued.
+
 The endpoints (`POST /login`, `/refresh`, `/logout`, `/logout-all`) are documented in the OpenAPI document served at `/api-docs` (`docs/API-DOCUMENTATION.md`; contract in `src/modules/10-sessions-jwt/presentation/http/auth.openapi.ts`).
 
 Token responses carry `Cache-Control: no-store`. The access token is accepted **only** from `Authorization: Bearer <token>` (never from the URL or body). `roles` in the response is informational for the UI; the backend never trusts it.

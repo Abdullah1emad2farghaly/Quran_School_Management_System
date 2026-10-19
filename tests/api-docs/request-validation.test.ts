@@ -10,6 +10,7 @@ import { buildApiDocument } from '../../src/app/openapi/api-documents';
 import { createAuthRouter } from '../../src/modules/10-sessions-jwt/public';
 import { createRecoveryRouter } from '../../src/modules/11-otp-password-recovery/public';
 import { createOrganizationRouter, createSchoolRouter } from '../../src/modules/16-schools/public';
+import { createParentRouter } from '../../src/modules/17-parents/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -28,7 +29,7 @@ const stubService = new Proxy({}, {
   },
 });
 const stubAuth: RequestHandler = (req, _res, next) => {
-  req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1' };
+  req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1', mustChangePassword: false };
   next();
 };
 const pass: RequestHandler = (_req, _res, next) => next();
@@ -42,6 +43,7 @@ function buildApp() {
   app.use('/auth', createAuthRouter({ getService, requireAuthentication: stubAuth } as never));
   app.use('/organizations', createOrganizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
   app.use('/schools', createSchoolRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
+  app.use('/parents', createParentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

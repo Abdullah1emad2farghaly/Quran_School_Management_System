@@ -6,9 +6,14 @@ import type { SessionService } from '../../application/services/session-service'
 import { sessionError } from '../../domain/errors/session-errors';
 
 export interface AuthRouterDeps {
-  readonly getService: () => Pick<SessionService, 'login' | 'refresh' | 'logout' | 'logoutAll'>;
+  readonly getService: () => Pick<SessionService, 'login' | 'refresh' | 'logout' | 'logoutAll' | 'changePassword'>;
   /** Middleware that authenticates the access token (see `createRequireAuthentication`). */
   readonly requireAuthentication: RequestHandler;
+  /**
+   * Same authentication but ALSO accepted while the account must still change its initial password (`allowPasswordChangePending`).
+   * Used only by `/auth/change-password`, `/auth/logout` and `/auth/logout-all`. Falls back to the strict middleware when omitted.
+   */
+  readonly requireAuthenticationAllowingPasswordChange?: RequestHandler;
 }
 
 type AsyncHandler = (req: Request, res: Response) => Promise<void>;
@@ -32,16 +37,19 @@ function serialize(result: AuthResult) {
     refreshToken: result.refreshToken,
     refreshTokenExpiresAt: result.refreshTokenExpiresAt.toISOString(),
     user: result.user,
+    mustChangePassword: result.mustChangePassword,
     roles: result.roles,
   };
 }
 
 /**
- * /auth: login, refresh, logout, logout-all.
- * Login and refresh are public (they ARE the authentication); logout and logout-all need a valid access token.
+ * /auth: login, refresh, logout, logout-all, change-password.
+ * Login and refresh are public (they ARE the authentication); logout, logout-all and change-password need a valid access token and are
+ * the ONLY authenticated routes that stay open while the account still has to change its initial password.
  */
 export function createAuthRouter(deps: AuthRouterDeps): Router {
   const router = Router();
+  const authAllowingPasswordChange = deps.requireAuthenticationAllowingPasswordChange ?? deps.requireAuthentication;
 
   router.post(
     '/login',
@@ -68,7 +76,7 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
 
   router.post(
     '/logout',
-    deps.requireAuthentication,
+    authAllowingPasswordChange,
     handle(async (req, res) => {
       if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
       await deps.getService().logout(req.auth.sessionId);
@@ -79,10 +87,25 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
 
   router.post(
     '/logout-all',
-    deps.requireAuthentication,
+    authAllowingPasswordChange,
     handle(async (req, res) => {
       if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
       await deps.getService().logoutAll(req.auth.userId);
+      noStore(res);
+      sendNoContent(res);
+    }),
+  );
+
+  router.post(
+    '/change-password',
+    authAllowingPasswordChange,
+    validate(
+      body('currentPassword').isString().withMessage('INVALID_VALUE').bail().notEmpty().withMessage('REQUIRED_FIELD').isLength({ max: 128 }).withMessage('INVALID_VALUE'),
+      body('newPassword').isString().withMessage('INVALID_VALUE').bail().notEmpty().withMessage('REQUIRED_FIELD').isLength({ max: 128 }).withMessage('INVALID_VALUE'),
+    ),
+    handle(async (req, res) => {
+      if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
+      await deps.getService().changePassword(req.auth.userId, { currentPassword: req.body.currentPassword, newPassword: req.body.newPassword });
       noStore(res);
       sendNoContent(res);
     }),

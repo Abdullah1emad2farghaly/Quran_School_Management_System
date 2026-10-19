@@ -11,10 +11,11 @@ function build() {
   registerAllErrorMessages();
   const h = createSessionHarness();
   const requireAuthentication = createRequireAuthentication(() => h.service);
+  const requireAuthenticationAllowingPasswordChange = createRequireAuthentication(() => h.service, { allowPasswordChangePending: true });
   const app = express();
   app.use(requestContextMiddleware);
   app.use(express.json());
-  app.use('/api/v1/auth', createAuthRouter({ getService: () => h.service, requireAuthentication }));
+  app.use('/api/v1/auth', createAuthRouter({ getService: () => h.service, requireAuthentication, requireAuthenticationAllowingPasswordChange }));
   // a protected route owned by "another module": proves req.auth is available to it
   app.get('/api/v1/whoami', requireAuthentication, (req, res) => {
     res.json({ userId: req.auth?.userId, sessionId: req.auth?.sessionId });
@@ -179,5 +180,72 @@ describe('logout', () => {
     const b = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
     expect((await request(app).get('/api/v1/whoami').set(bearer(a.body.data.accessToken))).body.error.code).toBe('SESSION_REVOKED');
     expect((await request(app).get('/api/v1/whoami').set(bearer(b.body.data.accessToken))).status).toBe(200);
+  });
+});
+
+
+describe('mandatory first-login password change (account-level, enforced by the backend)', () => {
+  const login = async (app: express.Express, u: { phone: string; password: string }) =>
+    request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+
+  it('reports the requirement at login and blocks every ordinary protected route until the password is changed', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ password: '4567', mustChangePassword: true });
+    const res = await login(app, u);
+    expect(res.status).toBe(200);
+    expect(res.body.data.mustChangePassword).toBe(true);
+    const blocked = await request(app).get('/api/v1/whoami').set(bearer(res.body.data.accessToken));
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('PASSWORD_CHANGE_REQUIRED');
+  });
+
+  it('lets only change-password and the logouts through while the change is pending, and never returns a password', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ password: '4567', mustChangePassword: true });
+    const session = (await login(app, u)).body.data;
+    const token = bearer(session.accessToken);
+
+    const changed = await request(app).post('/api/v1/auth/change-password').set(token).send({ currentPassword: '4567', newPassword: 'my-new-pass' });
+    expect(changed.status).toBe(204);
+    expect(changed.text).toBe('');
+    // the same session works at once, and a fresh login no longer reports the requirement
+    expect((await request(app).get('/api/v1/whoami').set(token)).status).toBe(200);
+    const again = await login(app, { phone: u.phone, password: 'my-new-pass' });
+    expect(again.body.data.mustChangePassword).toBe(false);
+    expect((await login(app, u)).status).toBe(401);
+  });
+
+  it('allows logout and logout-all while pending, and refresh keeps reporting the requirement', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ password: '4567', mustChangePassword: true });
+    const first = (await login(app, u)).body.data;
+    const refreshed = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: first.refreshToken });
+    expect(refreshed.body.data.mustChangePassword).toBe(true);
+    expect((await request(app).post('/api/v1/auth/logout').set(bearer(refreshed.body.data.accessToken))).status).toBe(204);
+    const second = (await login(app, u)).body.data;
+    expect((await request(app).post('/api/v1/auth/logout-all').set(bearer(second.accessToken))).status).toBe(204);
+  });
+
+  it('rejects a wrong current password, an identical new password and a policy-breaking one', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ password: '4567', mustChangePassword: true });
+    const token = bearer((await login(app, u)).body.data.accessToken);
+    const change = (body: object) => request(app).post('/api/v1/auth/change-password').set(token).send(body);
+    expect((await change({ currentPassword: 'nope', newPassword: 'abcd1234' })).body.error.code).toBe('CURRENT_PASSWORD_INCORRECT');
+    expect((await change({ currentPassword: '4567', newPassword: '4567' })).body.error.code).toBe('NEW_PASSWORD_SAME_AS_CURRENT');
+    expect((await change({ currentPassword: '4567', newPassword: 'abc' })).body.error.code).toBe('INVALID_PASSWORD');
+    expect((await change({ currentPassword: '4567', newPassword: 'x'.repeat(13) })).body.error.code).toBe('INVALID_PASSWORD');
+    // nothing changed: the requirement is still pending
+    expect((await request(app).get('/api/v1/whoami').set(token)).body.error.code).toBe('PASSWORD_CHANGE_REQUIRED');
+  });
+
+  it('does not affect ordinary accounts, and a password change by an ordinary account needs the right current password', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const session = (await login(app, u)).body.data;
+    expect(session.mustChangePassword).toBe(false);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(session.accessToken))).status).toBe(200);
+    const wrong = await request(app).post('/api/v1/auth/change-password').set(bearer(session.accessToken)).send({ currentPassword: 'wrong-one', newPassword: 'other-pass1' });
+    expect(wrong.status).toBe(400);
   });
 });

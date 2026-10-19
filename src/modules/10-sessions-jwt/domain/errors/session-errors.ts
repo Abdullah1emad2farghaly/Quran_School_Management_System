@@ -11,6 +11,12 @@ export const SessionErrorCodes = {
   REFRESH_TOKEN_EXPIRED: 'REFRESH_TOKEN_EXPIRED',
   REFRESH_TOKEN_REUSED: 'REFRESH_TOKEN_REUSED',
   SESSION_CONCURRENT_MODIFICATION: 'SESSION_CONCURRENT_MODIFICATION',
+  /** The account still has an initial password that must be changed first: only the password change and logout are allowed. */
+  PASSWORD_CHANGE_REQUIRED: 'PASSWORD_CHANGE_REQUIRED',
+  /** The current password given to the password change is wrong. */
+  CURRENT_PASSWORD_INCORRECT: 'CURRENT_PASSWORD_INCORRECT',
+  /** The new password equals the current one, so nothing would change. */
+  NEW_PASSWORD_SAME_AS_CURRENT: 'NEW_PASSWORD_SAME_AS_CURRENT',
 } as const;
 export type SessionErrorCode = (typeof SessionErrorCodes)[keyof typeof SessionErrorCodes];
 
@@ -25,6 +31,9 @@ const KIND: Record<SessionErrorCode, ErrorKind> = {
   REFRESH_TOKEN_EXPIRED: 'UNAUTHENTICATED',
   REFRESH_TOKEN_REUSED: 'UNAUTHENTICATED',
   SESSION_CONCURRENT_MODIFICATION: 'CONFLICT',
+  PASSWORD_CHANGE_REQUIRED: 'FORBIDDEN',
+  CURRENT_PASSWORD_INCORRECT: 'VALIDATION',
+  NEW_PASSWORD_SAME_AS_CURRENT: 'BUSINESS_RULE',
 };
 
 export function sessionError(code: SessionErrorCode): AppError {

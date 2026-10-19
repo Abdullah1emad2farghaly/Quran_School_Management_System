@@ -26,6 +26,6 @@ export { JwtAccessTokenService } from '../infrastructure/security/jwt-access-tok
 export { HmacRefreshTokenHasher, CryptoRefreshTokenGenerator } from '../infrastructure/security/refresh-token-crypto';
 export { InMemorySessionRepository } from '../infrastructure/services/in-memory-session-repository';
 export { SequelizeSessionRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-session-repository';
-export { createRequireAuthentication } from '../presentation/http/authentication.middleware';
+export { createRequireAuthentication, type RequireAuthenticationOptions } from '../presentation/http/authentication.middleware';
 export { createAuthRouter, type AuthRouterDeps } from '../presentation/http/auth.routes';
 export { authApiDoc } from '../presentation/http/auth.openapi';

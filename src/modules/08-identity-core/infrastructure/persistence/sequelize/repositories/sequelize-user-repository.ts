@@ -14,6 +14,7 @@ interface UserRow {
   passwordHash: string;
   status: UserStatus;
   statusChangedAt: Date | string;
+  mustChangePassword: number | boolean;
   version: number | string;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -21,7 +22,7 @@ interface UserRow {
 
 const SELECT_USER = `
   SELECT id, phone, password_hash AS passwordHash, status, status_changed_at AS statusChangedAt,
-         version, created_at AS createdAt, updated_at AS updatedAt
+         must_change_password AS mustChangePassword, version, created_at AS createdAt, updated_at AS updatedAt
     FROM users`;
 
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
@@ -33,9 +34,9 @@ export class SequelizeUserRepository implements UserRepository {
     try {
       await this.db.query(
         `INSERT INTO users
-           (id, phone, password_hash, status, status_changed_at, version, created_at, updated_at)
+           (id, phone, password_hash, status, status_changed_at, must_change_password, version, created_at, updated_at)
          VALUES
-           (:id, :phone, :passwordHash, :status, :statusChangedAt, 1, :createdAt, :updatedAt)`,
+           (:id, :phone, :passwordHash, :status, :statusChangedAt, :mustChangePassword, 1, :createdAt, :updatedAt)`,
         {
           replacements: {
             id: user.id,
@@ -43,6 +44,7 @@ export class SequelizeUserRepository implements UserRepository {
             passwordHash: user.passwordHash,
             status: user.status,
             statusChangedAt: user.statusChangedAt,
+            mustChangePassword: user.mustChangePassword ? 1 : 0,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
           },
@@ -60,7 +62,7 @@ export class SequelizeUserRepository implements UserRepository {
     const [, affectedRows] = await this.db.query(
       `UPDATE users
           SET password_hash = :passwordHash, status = :status, status_changed_at = :statusChangedAt,
-              updated_at = :updatedAt, version = version + 1
+              must_change_password = :mustChangePassword, updated_at = :updatedAt, version = version + 1
         WHERE id = :id AND version = :version`,
       {
         replacements: {
@@ -69,6 +71,7 @@ export class SequelizeUserRepository implements UserRepository {
           passwordHash: user.passwordHash,
           status: user.status,
           statusChangedAt: user.statusChangedAt,
+          mustChangePassword: user.mustChangePassword ? 1 : 0,
           updatedAt: user.updatedAt,
         },
         type: QueryTypes.UPDATE,
@@ -100,6 +103,7 @@ export class SequelizeUserRepository implements UserRepository {
       passwordHash: r.passwordHash,
       status: r.status,
       statusChangedAt: asDate(r.statusChangedAt),
+      mustChangePassword: Number(r.mustChangePassword) === 1,
       version: Number(r.version),
       createdAt: asDate(r.createdAt),
       updatedAt: asDate(r.updatedAt),

@@ -28,7 +28,14 @@ import { createSessionHarness } from './session-harness';
 const tx = {} as TransactionContext;
 
 /** In-memory wiring of Modules 08-10 (real sessions and tokens), 12 (the real Authorization Engine with the Module 13 and 16 registrations) plus 13, 14, 15 and 16, for HTTP tests. */
-export async function createSchoolsApiHarness() {
+/** A store whose state the harness unit of work saves and restores (for example the Module 17 repositories). */
+export interface RollbackStore {
+  snapshot(): unknown;
+  restore(saved: never): void;
+}
+
+export async function createSchoolsApiHarness(options: { extraStores?: readonly RollbackStore[] } = {}) {
+  const extraStores = options.extraStores ?? [];
   const h = createSessionHarness();
   const orgRepo = new InMemoryOrganizationRepository();
   const adminRepo = new InMemoryOrganizationAdminRepository();
@@ -39,7 +46,7 @@ export async function createSchoolsApiHarness() {
   const unitOfWork: UnitOfWork = {
     run: async (work) => {
       const saved = {
-        u: [...h.users.rows], r: [...h.roleRepo.rows], g: [...orgRepo.rows], a: [...adminRepo.rows], s: schools.snapshot(), m: managers.snapshot(), c: codes.last, o: [...h.store.messages],
+        u: [...h.users.rows], r: [...h.roleRepo.rows], g: [...orgRepo.rows], a: [...adminRepo.rows], s: schools.snapshot(), m: managers.snapshot(), c: codes.last, o: [...h.store.messages], x: extraStores.map((e) => e.snapshot()),
       };
       try {
         return await work(tx);
@@ -55,6 +62,7 @@ export async function createSchoolsApiHarness() {
         schools.restore(saved.s);
         managers.restore(saved.m);
         codes.last = saved.c;
+        extraStores.forEach((e, i) => e.restore(saved.x[i] as never));
         h.store.messages.splice(0, h.store.messages.length, ...saved.o);
         throw error;
       }
@@ -126,5 +134,5 @@ export async function createSchoolsApiHarness() {
     await organizations.assignOrganizationAdmin({ organizationId, userId: user.id, assignedBy: null });
     return user;
   };
-  return { h, service, registration, organizations, schools, managers, engine, requirePermission, country, france, gov, paris, center, org, newOrgAdmin };
+  return { h, service, registration, organizations, schools, managers, engine, requirePermission, country, france, gov, paris, center, org, newOrgAdmin, policies, resolvers, unitOfWork, address };
 }

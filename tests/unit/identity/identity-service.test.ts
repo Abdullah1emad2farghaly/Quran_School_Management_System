@@ -54,11 +54,30 @@ describe('IdentityService.createUser', () => {
     expect(stored.passwordHash).not.toContain('secret1');
   });
 
+  it('creates ordinary accounts WITHOUT a pending password change, and flags an account created with an initial password', async () => {
+    const { service } = setup();
+    const ordinary = await service.createUser({ phone: '01012345678', password: 'secret1' });
+    expect(ordinary.mustChangePassword).toBe(false);
+    const initial = await service.createUser({ phone: '01012349999', password: '9999', mustChangePassword: true });
+    expect(initial.mustChangePassword).toBe(true);
+    expect((await service.getById(initial.id)).mustChangePassword).toBe(true);
+  });
+
+  it('clears a pending password change only when the password is replaced; deactivation and activation keep it', async () => {
+    const { service } = setup();
+    const user = await service.createUser({ phone: '01012349999', password: '9999', mustChangePassword: true });
+    await service.deactivateUser(user.id);
+    await service.activateUser(user.id);
+    expect((await service.getById(user.id)).mustChangePassword).toBe(true);
+    expect((await service.changePassword(user.id, 'brand-new1')).mustChangePassword).toBe(false);
+    expect(await service.verifyPassword(user.id, 'brand-new1')).toBe(true);
+  });
+
   it('never exposes the password or hash in the returned DTO', async () => {
     const { service } = setup();
     const user = await service.createUser({ phone: '01012345678', password: 'secret1' });
     expect(Object.keys(user).sort()).toEqual(
-      ['createdAt', 'id', 'isActive', 'phone', 'status', 'statusChangedAt', 'updatedAt'].sort(),
+      ['createdAt', 'id', 'isActive', 'mustChangePassword', 'phone', 'status', 'statusChangedAt', 'updatedAt'].sort(),
     );
     expect(JSON.stringify(user)).not.toContain('secret1');
   });

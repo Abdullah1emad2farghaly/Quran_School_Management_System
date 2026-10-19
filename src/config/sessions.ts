@@ -43,6 +43,13 @@ export function getSessionService(): SessionService {
 /** Protects a route: authenticated caller required (`req.auth`). Authorization is a separate step (Module 12). */
 export const requireAuthentication: RequestHandler = createRequireAuthentication(getSessionService);
 
+/**
+ * Same, but ALSO accepted while the account must still change its initial password. ONLY for the password change and the logouts
+ * (`/auth/change-password`, `/auth/logout`, `/auth/logout-all`); every other protected route uses `requireAuthentication`, which answers
+ * 403 PASSWORD_CHANGE_REQUIRED until the password was changed.
+ */
+export const requireAuthenticationAllowingPasswordChange: RequestHandler = createRequireAuthentication(getSessionService, { allowPasswordChangePending: true });
+
 let handlersRegistered = false;
 /** Call once at startup, before startOutbox(). */
 export function registerSessionEventHandlers(): void {

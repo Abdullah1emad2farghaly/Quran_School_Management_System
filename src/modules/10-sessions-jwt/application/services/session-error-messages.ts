@@ -45,4 +45,16 @@ export const SESSION_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
     code: SessionErrorCodes.SESSION_CONCURRENT_MODIFICATION,
     message: { ar: 'تعذّر إكمال تسجيل الدخول. أعد المحاولة.', en: 'Sign-in could not be completed. Please try again.' },
   },
+  {
+    code: SessionErrorCodes.PASSWORD_CHANGE_REQUIRED,
+    message: { ar: 'يجب تغيير كلمة المرور الأولية قبل متابعة استخدام النظام.', en: 'You must change your initial password before using the system.' },
+  },
+  {
+    code: SessionErrorCodes.CURRENT_PASSWORD_INCORRECT,
+    message: { ar: 'كلمة المرور الحالية غير صحيحة.', en: 'The current password is incorrect.' },
+  },
+  {
+    code: SessionErrorCodes.NEW_PASSWORD_SAME_AS_CURRENT,
+    message: { ar: 'كلمة المرور الجديدة يجب أن تختلف عن الحالية.', en: 'The new password must be different from the current one.' },
+  },
 ];

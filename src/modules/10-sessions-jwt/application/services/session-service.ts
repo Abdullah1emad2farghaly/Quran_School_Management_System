@@ -1,6 +1,6 @@
 import { AppError, SystemClock, type Clock, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
 import type { OutboxService } from '../../../06-domain-events-outbox/public';
-import { tryNormalizePhone, type IdentityService, type PasswordHasher } from '../../../08-identity-core/public';
+import { assertPasswordPolicy, tryNormalizePhone, type IdentityService, type PasswordHasher } from '../../../08-identity-core/public';
 import type { RoleService } from '../../../09-roles-permissions/public';
 import { AuthSession } from '../../domain/entities/auth-session';
 import { RefreshTokenRecord } from '../../domain/entities/refresh-token-record';
@@ -12,7 +12,7 @@ import type { AccessTokenService, RefreshTokenGenerator, RefreshTokenHasher } fr
 
 export interface SessionServiceDeps {
   readonly repository: SessionRepository;
-  readonly identity: Pick<IdentityService, 'findByPhone' | 'findById' | 'verifyPassword'>;
+  readonly identity: Pick<IdentityService, 'findByPhone' | 'findById' | 'verifyPassword' | 'changePassword'>;
   readonly roles: Pick<RoleService, 'listActiveRoles'>;
   readonly accessTokens: AccessTokenService;
   readonly refreshTokenHasher: RefreshTokenHasher;
@@ -87,7 +87,7 @@ export class SessionService {
     if (!user.isActive) throw sessionError('ACCOUNT_INACTIVE');
 
     const issued = await this.startSession(user.id);
-    return this.buildResult({ userId: user.id, phone: user.phone }, issued.session, issued.rawToken, issued.token);
+    return this.buildResult({ userId: user.id, phone: user.phone, mustChangePassword: user.mustChangePassword }, issued.session, issued.rawToken, issued.token);
   }
 
   /**
@@ -143,7 +143,7 @@ export class SessionService {
     if (outcome.kind === 'failed') throw sessionError(outcome.code);
     const user = await this.identity.findById(outcome.userId);
     if (!user) throw sessionError('SESSION_REVOKED');
-    return this.buildResult({ userId: user.id, phone: user.phone }, outcome.session, outcome.rawToken, outcome.token);
+    return this.buildResult({ userId: user.id, phone: user.phone, mustChangePassword: user.mustChangePassword }, outcome.session, outcome.rawToken, outcome.token);
   }
 
   /**
@@ -162,7 +162,21 @@ export class SessionService {
 
     const user = await this.identity.findById(userId);
     if (!user || !user.isActive) throw sessionError('ACCOUNT_INACTIVE');
-    return { userId, sessionId };
+    return { userId, sessionId, mustChangePassword: user.mustChangePassword };
+  }
+
+  /**
+   * The authenticated user changes their own password: the CURRENT password must be right and the new one must differ and follow the
+   * password policy (4-12 characters). This is the only way out of the mandatory first-login password change: the replacement clears
+   * the account's requirement (Module 08), the existing session stays valid (a user has one active session) and no token is reissued.
+   */
+  async changePassword(userId: string, input: { currentPassword: unknown; newPassword: unknown }): Promise<void> {
+    assertPasswordPolicy(input.newPassword);
+    if (typeof input.currentPassword !== 'string' || !(await this.identity.verifyPassword(userId, input.currentPassword))) {
+      throw sessionError('CURRENT_PASSWORD_INCORRECT');
+    }
+    if (input.newPassword === input.currentPassword) throw sessionError('NEW_PASSWORD_SAME_AS_CURRENT');
+    await this.identity.changePassword(userId, input.newPassword);
   }
 
   /** Logout of the current session. Idempotent. */
@@ -236,7 +250,7 @@ export class SessionService {
   }
 
   private async buildResult(
-    user: { userId: string; phone: string },
+    user: { userId: string; phone: string; mustChangePassword: boolean },
     session: AuthSession,
     rawToken: string,
     token: RefreshTokenRecord,
@@ -249,6 +263,7 @@ export class SessionService {
       refreshToken: rawToken,
       refreshTokenExpiresAt: token.expiresAt,
       user: { id: user.userId, phone: user.phone },
+      mustChangePassword: user.mustChangePassword,
       roles: await this.roles.listActiveRoles(user.userId),
     };
   }

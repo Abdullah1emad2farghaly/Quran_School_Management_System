@@ -13,6 +13,11 @@ export interface CreateUserInput {
   readonly phone: string;
   /** Plain password, validated against the §23 policy and hashed here. Never logged or stored. */
   readonly password: string;
+  /**
+   * Marks the NEW account as having to change this password before normal use (an initial password such as the Parent's last four
+   * phone digits). Account-level: it applies only to the account being created here, never to an existing one.
+   */
+  readonly mustChangePassword?: boolean;
 }
 
 export interface IdentityServiceDeps {
@@ -57,7 +62,7 @@ export class IdentityService {
 
     return this.inTransaction(tx, async (t) => {
       if (await this.repository.findByPhone(phone, t)) throw identityError('USER_PHONE_ALREADY_EXISTS');
-      const user = User.create({ phone, passwordHash, clock: this.clock });
+      const user = User.create({ phone, passwordHash, clock: this.clock, mustChangePassword: input.mustChangePassword === true });
       await this.repository.insert(user, t);
       await this.outbox.publishFrom(user, t);
       return toUserDto(user);
@@ -103,8 +108,8 @@ export class IdentityService {
   }
 
   /**
-   * Replaces the password (policy-checked, hashed). Verifying the OLD password, OTP, or
-   * authorization is the caller's job (Modules 10/11).
+   * Replaces the password (policy-checked, hashed) and clears a pending mandatory-password-change requirement. Verifying the OLD
+   * password, OTP, or authorization is the caller's job (Modules 10/11).
    */
   async changePassword(id: string, newPassword: string, tx?: TransactionContext): Promise<UserDto> {
     assertPasswordPolicy(newPassword);

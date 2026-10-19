@@ -22,7 +22,7 @@ Every module must call `normalizePhone` before storing or comparing a phone. Can
 ## Passwords
 - 4–12 characters (counted as characters, so Arabic letters count once), no composition rule (§23).
 - Stored only as a **bcrypt** hash (`BcryptPasswordHasher`, cost 10; tests use 4). Plaintext is never stored, logged, returned or put in events.
-- `initialPasswordFromPhone(phone)` = last 4 digits (§24). It does not force a change; the parent-creation workflow uses it.
+- `initialPasswordFromPhone(phone)` = last 4 digits (§24); the parent-creation workflow (Module 17) uses it for a NEW account and creates it with `mustChangePassword: true` (`users.must_change_password`, migration `20261018100000`). The flag is **account-level** (never role-level), is part of `UserDto`, is cleared by any successful password replacement (`changePassword`: change or recovery reset) and is enforced by Module 10 (`PASSWORD_CHANGE_REQUIRED`). Existing accounts default to 0.
 
 ## Lifecycle (§22)
 `ACTIVE ⇄ INACTIVE`, reversible, nothing is deleted (history preserved). Invalid transitions fail with `USER_ALREADY_ACTIVE` / `USER_ALREADY_INACTIVE`.

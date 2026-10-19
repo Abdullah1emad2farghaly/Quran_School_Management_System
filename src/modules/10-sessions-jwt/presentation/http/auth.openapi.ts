@@ -12,9 +12,10 @@ const authTokens = s.object(
     refreshToken: s.string({ description: 'Opaque, single-use refresh token. Every refresh rotates it.' }),
     refreshTokenExpiresAt: s.dateTime(),
     user: s.object({ id: s.uuid(), phone: s.string({ description: 'The normalized phone number (the login identifier).' }) }, ['id', 'phone']),
+    mustChangePassword: s.boolean({ description: 'True while the account still has an initial password that must be changed. The backend then answers every protected request except `POST /auth/change-password`, `POST /auth/logout` and `POST /auth/logout-all` with 403 `PASSWORD_CHANGE_REQUIRED`.', example: false }),
     roles: s.array(s.string({ enum: ROLE_CODES }), { description: 'Informational, for the client UI. Authorization is always decided by the backend.' }),
   },
-  ['tokenType', 'accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'user', 'roles'],
+  ['tokenType', 'accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'user', 'mustChangePassword', 'roles'],
 );
 
 const tokensExample = {
@@ -24,6 +25,7 @@ const tokensExample = {
   refreshToken: 'q7Zk2n0b6mXx3Yd8u5Vf1T4hLwEoPaRcGsJiKtNyMlA',
   refreshTokenExpiresAt: '2026-11-14T09:30:00.000Z',
   user: { id: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', phone: '+201001234567' },
+  mustChangePassword: false,
   roles: ['MAIN_ADMIN'],
 };
 
@@ -87,6 +89,31 @@ export const authApiDoc: ModuleApiDoc = {
       description: 'Revokes the session the access token belongs to. Other sessions of the same user stay valid.',
       authorization: authenticatedOnly('The caller\'s own current session.', 'Authentication only: the session comes from the verified access token.'),
       success: { status: 204, description: 'The session was revoked. No content.' },
+    },
+    {
+      method: 'post',
+      path: '/change-password',
+      operationId: 'changePassword',
+      summary: 'Change the caller\'s own password',
+      description:
+        'The authenticated user changes their own password: the current password must be right, the new one must follow the password policy (4-12 characters, no composition rule) and differ from the current one. A successful change clears the account\'s mandatory first-login password change (the initial password of a new Parent account is the last four digits of the phone). This is the only authenticated operation besides the logouts that works while the change is still pending. The current session stays valid; no new tokens are issued.',
+      authorization: authenticatedOnly("The caller's own account.", 'Authentication only: the user comes from the verified access token. Reachable while the account must still change its initial password.'),
+      request: {
+        description: 'The current password and the new password.',
+        schema: s.object(
+          {
+            currentPassword: s.string({ maxLength: 128, example: '4567' }),
+            newPassword: s.string({ maxLength: 128, description: '4-12 characters; must differ from the current password.', example: 'My-New-Pass1' }),
+          },
+          ['currentPassword', 'newPassword'],
+        ),
+        examples: { change: { summary: 'Replace the initial password', value: { currentPassword: '4567', newPassword: 'My-New-Pass1' } } },
+      },
+      success: { status: 204, description: 'The password was changed and the requirement (if any) cleared. No content.', noStore: true },
+      errors: [
+        { status: 400, codes: ['INVALID_PASSWORD', 'CURRENT_PASSWORD_INCORRECT'], description: 'The new password breaks the policy, or the current password is wrong.' },
+        { status: 422, codes: ['NEW_PASSWORD_SAME_AS_CURRENT'], description: 'The new password equals the current one.' },
+      ],
     },
     {
       method: 'post',

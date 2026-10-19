@@ -18,7 +18,14 @@ function build() {
   app.use(requestContextMiddleware);
   app.use(express.json());
   app.use(`${base}/password-recovery`, createRecoveryRouter({ getService: () => h.recovery }));
-  app.use(base, createAuthRouter({ getService: () => h.service, requireAuthentication: createRequireAuthentication(() => h.service) }));
+  app.use(
+    base,
+    createAuthRouter({
+      getService: () => h.service,
+      requireAuthentication: createRequireAuthentication(() => h.service),
+      requireAuthenticationAllowingPasswordChange: createRequireAuthentication(() => h.service, { allowPasswordChangePending: true }),
+    }),
+  );
   app.use(notFoundHandler);
   app.use(errorHandler);
   return { app, h };
@@ -57,6 +64,21 @@ describe('Modules 10 and 11 endpoints conform to their OpenAPI documentation (re
     api.conforms(await request(app).post(`${base}/logout-all`).set({ Authorization: 'Bearer not-a-token' })); // 401 invalid token
   });
 
+  it('change-password: success and error responses, and the mandatory first-login change', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ password: '4567', mustChangePassword: true });
+    const login = api.conforms(await request(app).post(`${base}/login`).send({ phone: u.phone, password: u.password }));
+    expect(login.body.data.mustChangePassword).toBe(true);
+    const bearer = { Authorization: `Bearer ${login.body.data.accessToken}` };
+
+    api.conforms(await request(app).post(`${base}/change-password`).set(bearer).send({}));
+    api.conforms(await request(app).post(`${base}/change-password`).set(bearer).send({ currentPassword: '4567', newPassword: 'abc' }));
+    expect(api.conforms(await request(app).post(`${base}/change-password`).set(bearer).send({ currentPassword: 'wrong', newPassword: 'abcd1234' })).body.error.code).toBe('CURRENT_PASSWORD_INCORRECT');
+    expect(api.conforms(await request(app).post(`${base}/change-password`).set(bearer).send({ currentPassword: '4567', newPassword: '4567' })).body.error.code).toBe('NEW_PASSWORD_SAME_AS_CURRENT');
+    api.conforms(await request(app).post(`${base}/change-password`).send({ currentPassword: '4567', newPassword: 'abcd1234' })); // 401 without a token
+    expect(api.conforms(await request(app).post(`${base}/change-password`).set(bearer).send({ currentPassword: '4567', newPassword: 'abcd1234' })).status).toBe(204);
+  });
+
   it('password recovery: request, verify and reset, with their error responses', async () => {
     const { app, h } = build();
     const u = await h.createUser();
@@ -88,7 +110,7 @@ describe('Modules 10 and 11 endpoints conform to their OpenAPI documentation (re
   });
 
   it('exercised every documented operation of Modules 10 and 11', () => {
-    expect(api.operationCount('10')).toBe(4);
+    expect(api.operationCount('10')).toBe(5);
     expect(api.operationCount('11')).toBe(3);
     api.assertAllExercised('10');
     api.assertAllExercised('11');

@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { requirePermission } from '../../config/authorization';
-import { requireAuthentication, getSessionService } from '../../config/sessions';
+import { requireAuthentication, requireAuthenticationAllowingPasswordChange, getSessionService } from '../../config/sessions';
 import { getOrganizationRegistrationService, getSchoolService, PUBLIC_SUBMISSION_RATE_LIMIT } from '../../config/schools';
+import { getParentService } from '../../config/parents';
 import { getPasswordRecoveryService } from '../../config/password-recovery';
 import { createAuthRouter } from '../../modules/10-sessions-jwt/public';
 import { createRecoveryRouter } from '../../modules/11-otp-password-recovery/public';
 import { createOrganizationRouter, createPublicSubmissionRateLimiter, createSchoolRouter } from '../../modules/16-schools/public';
+import { createParentRouter } from '../../modules/17-parents/public';
 import { healthRouter } from './health.routes';
 
 export const API_BASE_PATH = '/api/v1';
@@ -33,6 +35,7 @@ export function buildApiRouter(): Router {
       publicSubmissionLimit: createPublicSubmissionRateLimiter(PUBLIC_SUBMISSION_RATE_LIMIT),
     }),
   );
-  router.use('/auth', createAuthRouter({ getService: getSessionService, requireAuthentication }));
+  router.use('/parents', createParentRouter({ getService: getParentService, requireAuthentication, requirePermission }));
+  router.use('/auth', createAuthRouter({ getService: getSessionService, requireAuthentication, requireAuthenticationAllowingPasswordChange }));
   return router;
 }

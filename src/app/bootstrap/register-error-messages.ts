@@ -8,6 +8,7 @@ import { RECOVERY_ERROR_MESSAGES } from '../../modules/11-otp-password-recovery/
 import { ORGANIZATION_ERROR_MESSAGES } from '../../modules/13-organization-core/public';
 import { GEOGRAPHY_ERROR_MESSAGES } from '../../modules/14-geography/public';
 import { SCHOOL_ERROR_MESSAGES } from '../../modules/16-schools/public';
+import { PARENT_ERROR_MESSAGES } from '../../modules/17-parents/public';
 import { UNIFIED_ADDRESS_ERROR_MESSAGES } from '../../modules/15-unified-address/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
@@ -28,4 +29,5 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(GEOGRAPHY_ERROR_MESSAGES);
   registerErrorMessages(UNIFIED_ADDRESS_ERROR_MESSAGES);
   registerErrorMessages(SCHOOL_ERROR_MESSAGES);
+  registerErrorMessages(PARENT_ERROR_MESSAGES);
 }

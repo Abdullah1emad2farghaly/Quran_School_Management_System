@@ -987,6 +987,8 @@ Initial password does NOT force a password change.
 
 System only recommends changing it.
 
+**Approved amendment (Module 17):** for a NEWLY created Parent account the initial password MUST be changed before normal use: the account is flagged `must_change_password`, and until it is changed the backend allows only the password change and logout. The requirement belongs to the ACCOUNT, not to the Parent role: reusing an existing account never creates, clears or resets it, and never changes its password.
+
 * * *
 
 # 25\. SESSION / JWT
@@ -1298,6 +1300,8 @@ Required:
 One Parent can have multiple children.
 
 Parent identity is globally reusable across schools.
+
+**Approved amendment (Module 17):** in V1 "globally reusable" means reusable across the schools of the SAME organization, with a separate Parent-to-School relationship per school; a Parent account is never reused across different organizations. A phone number identifies one account but does not by itself prove that two registrations are the same person: an existing account is reused only when the normalized full three-part name matches (and, for an account without a Parent record, when its owning module vouches for that name); otherwise the registration is an identity conflict. Accounts are never merged automatically and an existing account's data, password and security state are never overwritten. Parent National ID is not required. A School Manager creates and reads/lists/updates Parents linked to their own school only; ORGANIZATION_MANAGER and MAIN_ADMIN have no Parent permission from their role; a Parent reads only their own profile in V1. Removing a school relationship never deletes the account or affects other schools; global Parent deactivation/deletion is not implemented while decision D-3 is open. See `docs/PARENTS.md`.
 
 * * *
 
