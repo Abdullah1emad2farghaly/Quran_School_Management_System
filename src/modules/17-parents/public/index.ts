@@ -1,7 +1,7 @@
 // Public contract of Module 17 (Parents): the Parent entity (User -> PARENT role -> Parent), the Parent Address with history,
 // the Parent-to-School relationship, the School Manager registration workflow and the Parent's own profile.
 // Other modules depend on `ParentLookup` (read-only). Parent permissions are registered through the Module 12 engine.
-export { ParentService, type ParentLookup, type ParentServiceDeps, type ParentAddressSubmission, type RegisterParentInput, type UpdateParentInput, type ListParentsInput, type ParentRegistrationResult } from '../application/services/parent-service';
+export { ParentService, type ParentLookup, type ParentSchoolLinkLocker, type ParentServiceDeps, type ParentAddressSubmission, type RegisterParentInput, type UpdateParentInput, type ListParentsInput, type ParentRegistrationResult } from '../application/services/parent-service';
 export { ParentPermissions, PARENT_TARGET_TYPE, registerParentAuthorization, type ParentAuthorizationDeps } from '../application/services/parent-authorization';
 export { PARENT_ERROR_MESSAGES } from '../application/services/parent-error-messages';
 export type { ParentDto, ParentAddressDto, ParentSchoolLinkDto } from '../application/dto/parent-dto';

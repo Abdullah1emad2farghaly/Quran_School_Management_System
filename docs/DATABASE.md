@@ -59,3 +59,8 @@ Migration `20261018100000-users-must-change-password` (`users.must_change_passwo
 
 ## Canonical personal name (migrations `20261019100000-users-full-name`, `20261019110000-parents-use-account-name`)
 `users.full_name VARCHAR(200) NULL` (exactly three parts, validated by the application; no data is invented for existing accounts). `parents.full_name` was removed: the migration copies exactly-three-part Parent names to accounts that have none and STOPS without dropping anything when any Parent is inconsistent with its account. `npm run person-names:report|apply` fill older accounts from names recorded earlier, only when unambiguous.
+
+## Teachers (Module 18)
+Migration `20261019120000-create-teachers`: `teachers` (unique `user_id`, organization; no name column, the name is `users.full_name`) and `teacher_schools` (link history, one active link per Teacher and school, NULL-safe CHECK `<=>`, RESTRICT key to `teachers` only). No foreign key to another module's table. See `docs/TEACHERS.md`.
+
+Migration `20261020100000-create-students`: `students` (GLOBAL unique `national_id`, CHECKs for status / 14-digit National ID / non-blank name, indexes `(school_id, status)`, `(school_id, created_at)`, `(parent_id, school_id)`; `parent_id`, `school_id`, `organization_id` are plain references with no foreign key to other modules' tables) and `student_history` (append-only, `seq` insertion order, `RESTRICT` key to `students` only). No group and no address column. See `docs/STUDENTS.md`.

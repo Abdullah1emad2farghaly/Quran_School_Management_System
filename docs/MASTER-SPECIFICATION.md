@@ -1348,6 +1348,14 @@ Removing Teacher from a school removes only that school relationship.
 
 Global teacher deactivation blocks teaching actions across schools but preserves history.
 
+**Approved amendment (Module 18), business rules:**
+
+-   Teacher initial password: when registering a Teacher who requires a NEW User account, the initial password is the last four digits of the normalized phone number and the account-level `mustChangePassword` flag is set. The Teacher must change the password before normal protected API use; until then only the minimum authentication/session operations needed to change the password and log out are allowed (the same mechanism as for Parents, enforced by the backend). The password is only ever stored hashed and is never logged or returned.
+-   Existing account: when the phone matches an existing User and the identity matches, the account is reused and receives the TEACHER role and the school relationship. The password is never reset and `mustChangePassword` is never set, cleared or otherwise modified by role assignment; the account's security state is preserved.
+-   Identity: the Teacher's personal name is exactly three parts and is the account's canonical stored name. A missing or different stored name is `TEACHER_IDENTITY_CONFLICT`; the existing name is never overwritten and accounts are never merged. A matching name is the approved matching criterion, not independent proof of identity.
+
+**Implementation assumptions pending the project owner's confirmation (provisional, NOT approved business rules):** SCHOOL_MANAGER registers, reads, lists and removes the school link of Teachers of their own school only; ORGANIZATION_MANAGER and MAIN_ADMIN have no Teacher permission from their role; a Teacher reads only their own profile; a Teacher account is reused only within the same organization (a Parent record of the same account must belong to that organization too); no personal data other than the three-part name and the phone is collected; a school link cannot be removed while the Teacher has groups in that school (guard supplied by Module 20); no global Teacher deactivation while decision D-3 is open. See `docs/TEACHERS.md`.
+
 * * *
 
 # 34\. TEACHER PHONE / PARENT PHONE COLLISION

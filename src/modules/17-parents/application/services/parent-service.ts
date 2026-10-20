@@ -247,6 +247,19 @@ export class ParentService {
     });
   }
 
+  // ---------------------------------------------------------------------------------------------- guard for Students (Module 19)
+
+  /**
+   * Locks the Parent row and then the ACTIVE Parent-to-School link row (the same order as `removeSchoolLink`, so the two can never deadlock)
+   * and tells whether the link is active. Module 19 calls it INSIDE the transaction that registers a student, so a student can never be
+   * attached to a relationship that is being removed at the same moment: either the unlink commits first (this returns false) or the student
+   * is committed first (the unlink guard then sees it and refuses). It changes nothing.
+   */
+  async lockActiveSchoolLink(parentId: string, schoolId: string, tx: TransactionContext): Promise<boolean> {
+    if (!(await this.parents.lockById(parentId, tx))) return false;
+    return (await this.links.lockActive(parentId, schoolId, tx)) !== undefined;
+  }
+
   // ---------------------------------------------------------------------------------------------- ParentLookup (read-only contract for other modules)
 
   async findById(parentId: string, tx?: TransactionContext): Promise<ParentDto | undefined> {
@@ -348,6 +361,9 @@ export class ParentService {
 function sameAddress(current: ParentAddressEntry, next: ParentAddress): boolean {
   return current.governorateId === next.governorateId && current.centerName === next.centerName && current.villageName === next.villageName;
 }
+
+/** The locking check Students (19) runs inside their own registration transaction (see `ParentService.lockActiveSchoolLink`). It changes nothing. */
+export type ParentSchoolLinkLocker = Pick<ParentService, 'lockActiveSchoolLink'>;
 
 /** What downstream modules (Students 19, Reports...) should depend on (read-only). */
 export type ParentLookup = Pick<

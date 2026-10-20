@@ -3,8 +3,9 @@ import {
   InMemoryParentSchoolLinkRepository,
   ParentService,
   registerParentAuthorization,
+  type ParentStudentDependencies,
 } from '../../src/modules/17-parents/public';
-import { createSchoolsApiHarness } from './schools-api-harness';
+import { createSchoolsApiHarness, type RollbackStore } from './schools-api-harness';
 
 const gps = { latitude: 30.0444, longitude: 31.2357, accuracyMeters: 12 };
 
@@ -13,14 +14,16 @@ const gps = { latitude: 30.0444, longitude: 31.2357, accuracyMeters: 12 };
  * Module 17. Its unit of work rolls the Parent stores back together with everything else when the work throws.
  * Existing accounts are matched by the canonical name stored on the account (`users.full_name`), exactly as in production.
  */
-export async function createParentsHarness() {
+export async function createParentsHarness(options: { extraStores?: readonly RollbackStore[] } = {}) {
   const parentRepo = new InMemoryParentRepository();
   const links = new InMemoryParentSchoolLinkRepository();
   parentRepo.activeParentIdsOfSchool = (schoolId) => links.activeParentIdsOfSchool(schoolId);
-  const t = await createSchoolsApiHarness({ extraStores: [parentRepo, links] });
+  const t = await createSchoolsApiHarness({ extraStores: [parentRepo, links, ...(options.extraStores ?? [])] });
 
-  /** Students depending on a Parent-to-School link, by `${parentId}:${schoolId}` (what Module 19 will report). */
+  /** Students depending on a Parent-to-School link, by `${parentId}:${schoolId}` (a stand-in for tests that run without Module 19). */
   const studentCounts = new Map<string, number>();
+  /** The real Students guard (Module 19), once a Students harness installs it with `useStudentGuard`; until then `studentCounts` answers. */
+  let studentGuard: ParentStudentDependencies | undefined;
   const parents = new ParentService({
     parents: parentRepo,
     links,
@@ -28,7 +31,10 @@ export async function createParentsHarness() {
     address: t.address,
     identity: t.h.identity,
     roles: t.h.roles,
-    studentDependencies: { countStudentsOfParentInSchool: async (parentId, schoolId) => studentCounts.get(`${parentId}:${schoolId}`) ?? 0 },
+    studentDependencies: {
+      countStudentsOfParentInSchool: async (parentId, schoolId, tx) =>
+        studentGuard ? studentGuard.countStudentsOfParentInSchool(parentId, schoolId, tx) : (studentCounts.get(`${parentId}:${schoolId}`) ?? 0),
+    },
     unitOfWork: t.unitOfWork,
     outbox: t.h.outbox,
     clock: t.h.clock,
@@ -57,5 +63,9 @@ export async function createParentsHarness() {
   const newNamedUser = async (role: string, fullName: string, password?: string) =>
     t.h.createUser({ role: role as never, fullName, ...(password ? { password } : {}) });
 
-  return { ...t, parentRepo, links, parents, studentCounts, newNamedUser, orgAdmin, newSchool, newSchoolManager, otherOrg };
+  const useStudentGuard = (guard: ParentStudentDependencies): void => {
+    studentGuard = guard;
+  };
+
+  return { ...t, parentRepo, links, parents, studentCounts, useStudentGuard, newNamedUser, orgAdmin, newSchool, newSchoolManager, otherOrg };
 }

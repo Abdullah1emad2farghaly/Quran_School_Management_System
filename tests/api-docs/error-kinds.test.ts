@@ -12,6 +12,8 @@ import { geographyError, GeographyErrorCodes } from '../../src/modules/14-geogra
 import { unifiedAddressError, UnifiedAddressErrorCodes } from '../../src/modules/15-unified-address/domain/errors/unified-address-errors';
 import { schoolError, SchoolErrorCodes } from '../../src/modules/16-schools/domain/errors/school-errors';
 import { parentError, ParentErrorCodes } from '../../src/modules/17-parents/domain/errors/parent-errors';
+import { teacherError, TeacherErrorCodes } from '../../src/modules/18-teachers/domain/errors/teacher-errors';
+import { studentError, StudentErrorCodes } from '../../src/modules/19-students/domain/errors/student-errors';
 import { operationsOf } from './support/lint';
 
 type Factory = (code: never) => { kind: keyof typeof HTTP_STATUS_BY_KIND };
@@ -25,6 +27,8 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [UnifiedAddressErrorCodes, ((code: never) => unifiedAddressError(code)) as Factory],
   [SchoolErrorCodes, schoolError as Factory],
   [ParentErrorCodes, parentError as Factory],
+  [TeacherErrorCodes, teacherError as Factory],
+  [StudentErrorCodes, studentError as Factory],
 ];
 
 /** The status each module-owned code REALLY answers: taken from the module's own error factory, never retyped. */

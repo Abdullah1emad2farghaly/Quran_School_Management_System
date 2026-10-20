@@ -68,3 +68,6 @@ Schools that belong directly to an organization (every school starts PENDING and
 
 ## Parents (Module 17)
 The Parent entity (`User -> PARENT role -> Parent`), the Parent Address with history and the Parent-to-School links with history, registered by the SCHOOL_MANAGER with same-organization account reuse and identity-conflict rules. Depends only on the public contracts of Modules 06, 08, 09, 12, 15 and 16; exposes `ParentLookup` for Students (19). Permissions and the PARENT scope resolver are registered through the Module 12 engine. Module 08/10 gained the account-level mandatory password change. See `docs/PARENTS.md`.
+
+## Teachers (Module 18)
+The Teacher entity (`User -> TEACHER role -> Teacher -> school links`), registered by the SCHOOL_MANAGER with the approved initial password and mandatory first-login change (the Module 08/10 account-level mechanism built for Parents, reused as is) or identity-matched account reuse. Depends only on the public contracts of Modules 06, 08, 09, 12, 16 and 17 (`ParentLookup`, read-only); exposes `TeacherLookup` for Groups (20). Permissions and the TEACHER scope resolver go through the Module 12 engine. See `docs/TEACHERS.md`.

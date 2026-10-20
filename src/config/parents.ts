@@ -2,7 +2,6 @@ import { SystemClock } from '../modules/00-shared-kernel/public';
 import {
   ParentService,
   SequelizeParentRepository,
-  STUDENTS_MODULE_NOT_IMPLEMENTED_YET,
   SequelizeParentSchoolLinkRepository,
   registerParentAuthorization,
 } from '../modules/17-parents/public';
@@ -12,6 +11,7 @@ import { getIdentityService } from './identity';
 import { getOutboxService } from './outbox';
 import { getRoleService } from './roles';
 import { getSchoolService } from './schools';
+import { getStudentService } from './students';
 import { getUnifiedAddressService } from './unified-address';
 
 let service: ParentService | undefined;
@@ -31,9 +31,9 @@ export function getParentService(): ParentService {
       address: getUnifiedAddressService(),
       identity: getIdentityService(),
       roles: getRoleService(),
-      // TEMPORARY: Module 19 (Students) does not exist, so no student can depend on a Parent-to-School link. Replace this with the Students
-      // module's implementation when Module 19 is implemented (a boundary test fails as soon as Module 19 has source files).
-      studentDependencies: STUDENTS_MODULE_NOT_IMPLEMENTED_YET,
+      // Module 19 (Students): how many students of the Parent exist in the school (every status), counted inside the unlink transaction.
+      // Reached lazily (inside the function): `students.ts` imports this file too, and neither touches the other at import time.
+      studentDependencies: { countStudentsOfParentInSchool: (parentId, schoolId, tx) => getStudentService().countStudentsOfParentInSchool(parentId, schoolId, tx) },
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
       clock: new SystemClock(),
