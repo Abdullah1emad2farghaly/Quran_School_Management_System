@@ -13,6 +13,7 @@ import { createOrganizationRouter, createSchoolRouter } from '../../src/modules/
 import { createParentRouter } from '../../src/modules/17-parents/public';
 import { createTeacherRouter } from '../../src/modules/18-teachers/public';
 import { createStudentRouter } from '../../src/modules/19-students/public';
+import { createGroupRouter } from '../../src/modules/20-groups/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -48,6 +49,7 @@ function buildApp() {
   app.use('/parents', createParentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/teachers', createTeacherRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/students', createStudentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/groups', createGroupRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

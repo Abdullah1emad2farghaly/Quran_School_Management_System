@@ -4,6 +4,7 @@ import {
   registerStudentAuthorization,
   type StudentGroupAccess,
 } from '../../src/modules/19-students/public';
+import type { RollbackStore } from './schools-api-harness';
 import { createTeachersHarness } from './teachers-harness';
 
 export const PARENT_NAME = 'أحمد محمد علي';
@@ -15,13 +16,17 @@ export const NATIONAL_ID = '30001010123456';
  * services) plus Module 19. Its unit of work rolls the Student store back together with everything else when the work throws. The real
  * Students guard replaces the stand-in unlink guard of the Parents harness. Group assignments (Module 20) are simulated by `assignToGroup`.
  */
-export async function createStudentsHarness() {
+export async function createStudentsHarness(options: { extraStores?: readonly RollbackStore[] } = {}) {
   const studentRepo = new InMemoryStudentRepository();
-  const t = await createTeachersHarness({ extraStores: [studentRepo] });
+  const t = await createTeachersHarness({ extraStores: [studentRepo, ...(options.extraStores ?? [])] });
 
   /** `${teacherId}:${studentId}` pairs standing for "the student is in a group of this teacher" (what Module 20 will answer). */
   const groupPairs = new Set<string>();
-  const groupAccess: StudentGroupAccess = { isStudentInGroupOfTeacher: async (studentId, teacherId) => groupPairs.has(`${teacherId}:${studentId}`) };
+  /** The real Groups access (Module 20), once a Groups harness installs it with `useGroupAccess`; until then `groupPairs` answers. */
+  let realGroupAccess: StudentGroupAccess | undefined;
+  const groupAccess: StudentGroupAccess = {
+    isStudentInGroupOfTeacher: async (studentId, teacherId) => (realGroupAccess ? realGroupAccess.isStudentInGroupOfTeacher(studentId, teacherId) : groupPairs.has(`${teacherId}:${studentId}`)),
+  };
 
   const students = new StudentService({
     students: studentRepo,
@@ -48,5 +53,9 @@ export async function createStudentsHarness() {
     students.registerStudent({ schoolId, parentId, fullName: STUDENT_NAME, nationalId: nextNationalId(), ...over } as never, managerId);
   const assignToGroup = (teacherId: string, studentId: string) => groupPairs.add(`${teacherId}:${studentId}`);
 
-  return { ...t, studentRepo, students, groupPairs, newParent, nextNationalId, registerStudent, assignToGroup };
+  const useGroupAccess = (access: StudentGroupAccess): void => {
+    realGroupAccess = access;
+  };
+
+  return { ...t, studentRepo, students, groupPairs, newParent, nextNationalId, registerStudent, assignToGroup, useGroupAccess };
 }

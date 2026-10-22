@@ -11,6 +11,7 @@ import { SCHOOL_ERROR_MESSAGES } from '../../modules/16-schools/public';
 import { PARENT_ERROR_MESSAGES } from '../../modules/17-parents/public';
 import { TEACHER_ERROR_MESSAGES } from '../../modules/18-teachers/public';
 import { STUDENT_ERROR_MESSAGES } from '../../modules/19-students/public';
+import { GROUP_ERROR_MESSAGES } from '../../modules/20-groups/public';
 import { UNIFIED_ADDRESS_ERROR_MESSAGES } from '../../modules/15-unified-address/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
@@ -34,4 +35,5 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(PARENT_ERROR_MESSAGES);
   registerErrorMessages(TEACHER_ERROR_MESSAGES);
   registerErrorMessages(STUDENT_ERROR_MESSAGES);
+  registerErrorMessages(GROUP_ERROR_MESSAGES);
 }

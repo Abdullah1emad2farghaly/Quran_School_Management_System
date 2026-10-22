@@ -309,14 +309,20 @@ describe('the real TeacherService over the SQL repositories', () => {
     });
   });
 
-  it('is atomic: a failure while linking rolls back the account, role and teacher', async () => {
+  it('is atomic: a failure while linking rolls back the account, role, teacher and link (compared with the row counts taken just BEFORE the failing registration, so rows that already exist in the database do not matter)', async () => {
     await withFixture(
       async (f) => {
+        const tables = ['users', 'user_roles', 'teachers', 'teacher_schools'] as const;
+        const counts = async () => {
+          const out: Record<string, number> = {};
+          for (const table of tables) out[table] = Number((await f.q<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`))[0]!.n);
+          return out;
+        };
+        const before = await counts();
         const phone = phoneOf();
         await expect(f.teachers.registerTeacher({ schoolId: f.school.id, name: NAME, phone }, f.manager)).rejects.toThrow('injected failure');
         expect(await identity.findByPhone(phone, f.tx)).toBeUndefined();
-        const left = await f.q<{ n: number }>(`SELECT COUNT(*) AS n FROM teachers`);
-        expect(Number(left[0]!.n)).toBe(0);
+        expect(await counts()).toEqual(before);
       },
       { failLinkInsert: true },
     );

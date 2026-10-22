@@ -225,7 +225,8 @@ export const studentApiDoc: ModuleApiDoc = {
         reference: REFERENCE,
       },
       pathParams: studentIdParam,
-      success: { status: 200, description: 'The Student (full view, or the minimal Teacher view).', data: ref('Student'), example: studentExample() },
+      // The body is the full student (School Manager, Parent) or the minimal view (Teacher): documented as `anyOf` both.
+      success: { status: 200, description: 'The Student: the full view (School Manager, the Student\'s Parent) or the minimal Teacher view.', data: { anyOf: [ref('Student'), ref('StudentTeacherView')] }, example: studentExample() },
       errors: [NOT_ALLOWED, notFound],
     },
     {

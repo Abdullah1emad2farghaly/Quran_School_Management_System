@@ -1,12 +1,12 @@
 import { SystemClock } from '../modules/00-shared-kernel/public';
 import {
-  GROUPS_MODULE_NOT_IMPLEMENTED_YET_FOR_STUDENTS,
   SequelizeStudentRepository,
   StudentService,
   registerStudentAuthorization,
 } from '../modules/19-students/public';
 import { getAuthorizationPolicyRegistry, getAuthorizationResolvers } from './authorization';
 import { getSequelize, getUnitOfWork } from './database';
+import { getGroupService } from './groups';
 import { getOutboxService } from './outbox';
 import { getParentService } from './parents';
 import { getSchoolService } from './schools';
@@ -44,8 +44,6 @@ registerStudentAuthorization({
   schools: { isSchoolManager: (userId, schoolId) => getSchoolService().isSchoolManager(userId, schoolId) },
   parents: { findByUserId: (userId) => getParentService().findByUserId(userId) },
   teachers: { findByUserId: (userId) => getTeacherService().findByUserId(userId) },
-  // TEMPORARY: Module 20 (Groups) does not exist, so no Teacher can be proven to teach a Student: every Teacher read is denied (fail closed).
-  // Replace this with the Groups module's implementation when Module 20 is implemented (a boundary test fails as soon as Module 20 has
-  // source files).
-  groupAccess: GROUPS_MODULE_NOT_IMPLEMENTED_YET_FOR_STUDENTS,
+  // Module 20 (Groups): the student is currently in an ACTIVE group of this Teacher. Reached lazily, like the other lookups above.
+  groupAccess: { isStudentInGroupOfTeacher: (studentId, teacherId) => getGroupService().isStudentInGroupOfTeacher(studentId, teacherId) },
 });

@@ -4,6 +4,7 @@ import {
   TeacherService,
   registerTeacherAuthorization,
 } from '../../src/modules/18-teachers/public';
+import type { TeacherGroupDependencies } from '../../src/modules/18-teachers/public';
 import { createParentsHarness } from './parents-harness';
 import type { RollbackStore } from './schools-api-harness';
 
@@ -20,6 +21,8 @@ export async function createTeachersHarness(options: { extraStores?: readonly Ro
 
   /** Groups depending on a Teacher-to-School link, by `${teacherId}:${schoolId}` (what Module 20 will report). */
   const groupCounts = new Map<string, number>();
+  /** The real Groups guard (Module 20), once a Groups harness installs it with `useGroupGuard`; until then `groupCounts` answers. */
+  let groupGuard: TeacherGroupDependencies | undefined;
   const teachers = new TeacherService({
     teachers: teacherRepo,
     links,
@@ -27,11 +30,16 @@ export async function createTeachersHarness(options: { extraStores?: readonly Ro
     identity: t.h.identity,
     roles: t.h.roles,
     parents: t.parents,
-    groupDependencies: { countGroupsOfTeacherInSchool: async (teacherId, schoolId) => groupCounts.get(`${teacherId}:${schoolId}`) ?? 0 },
+    groupDependencies: {
+      countGroupsOfTeacherInSchool: async (teacherId, schoolId, tx) => (groupGuard ? groupGuard.countGroupsOfTeacherInSchool(teacherId, schoolId, tx) : (groupCounts.get(`${teacherId}:${schoolId}`) ?? 0)),
+    },
     unitOfWork: t.unitOfWork,
     outbox: t.h.outbox,
     clock: t.h.clock,
   });
   registerTeacherAuthorization({ policies: t.policies, resolvers: t.resolvers, teachers, schools: t.service });
-  return { ...t, teacherRepo, teacherLinks: links, teachers, groupCounts };
+  const useGroupGuard = (guard: TeacherGroupDependencies): void => {
+    groupGuard = guard;
+  };
+  return { ...t, teacherRepo, teacherLinks: links, teachers, groupCounts, useGroupGuard };
 }

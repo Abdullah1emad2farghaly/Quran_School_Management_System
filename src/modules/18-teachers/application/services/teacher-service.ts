@@ -207,6 +207,17 @@ export class TeacherService {
     return (await this.links.listActiveByTeacher(teacherId, tx)).map((l) => l.snapshot.schoolId);
   }
 
+  /**
+   * Locks the Teacher row and then the ACTIVE Teacher-to-School link row (the same order as `removeSchoolLink`, so the two can never deadlock) and
+   * tells whether the link is active. Module 20 calls it INSIDE the transaction that assigns a Teacher to a group, so a group can never be given
+   * to a Teacher whose link is being removed at the same moment: either the unlink commits first (this returns false) or the group is committed
+   * first (the unlink guard then sees it and refuses). It changes nothing.
+   */
+  async lockActiveSchoolLink(teacherId: string, schoolId: string, tx: TransactionContext): Promise<boolean> {
+    if (!(await this.teachers.lockById(teacherId, tx))) return false;
+    return (await this.links.lockActive(teacherId, schoolId, tx)) !== undefined;
+  }
+
   async isLinkedToSchool(teacherId: string, schoolId: string, tx?: TransactionContext): Promise<boolean> {
     return (await this.links.findActive(teacherId, schoolId, tx)) !== undefined;
   }
@@ -252,6 +263,9 @@ export class TeacherService {
     return tx ? work(tx) : this.unitOfWork.run(work);
   }
 }
+
+/** The locking check Groups (20) run inside their own transaction (see `TeacherService.lockActiveSchoolLink`). It changes nothing. */
+export type TeacherSchoolLinkLocker = Pick<TeacherService, 'lockActiveSchoolLink'>;
 
 /** What downstream modules (Groups 20, Reports...) should depend on (read-only). */
 export type TeacherLookup = Pick<TeacherService, 'findById' | 'findByUserId' | 'listActiveSchoolIds' | 'isLinkedToSchool' | 'listSchoolLinkHistory'>;

@@ -1,6 +1,5 @@
 import { SystemClock } from '../modules/00-shared-kernel/public';
 import {
-  GROUPS_MODULE_NOT_IMPLEMENTED_YET,
   SequelizeTeacherRepository,
   SequelizeTeacherSchoolLinkRepository,
   TeacherService,
@@ -12,6 +11,7 @@ import { getIdentityService } from './identity';
 import { getOutboxService } from './outbox';
 import { getParentService } from './parents';
 import { getRoleService } from './roles';
+import { getGroupService } from './groups';
 import { getSchoolService } from './schools';
 
 let service: TeacherService | undefined;
@@ -30,9 +30,9 @@ export function getTeacherService(): TeacherService {
       identity: getIdentityService(),
       roles: getRoleService(),
       parents: getParentService(),
-      // TEMPORARY: Module 20 (Groups) does not exist, so no group can depend on a Teacher-to-School link. Replace this with the Groups module's
-      // implementation when Module 20 is implemented (a boundary test fails as soon as Module 20 has source files).
-      groupDependencies: GROUPS_MODULE_NOT_IMPLEMENTED_YET,
+      // Module 20 (Groups): the ACTIVE groups of the Teacher in the school, counted inside the unlink transaction. Reached lazily (inside the
+      // function): `groups.ts` imports this file too, and neither touches the other at import time.
+      groupDependencies: { countGroupsOfTeacherInSchool: (teacherId, schoolId, tx) => getGroupService().countGroupsOfTeacherInSchool(teacherId, schoolId, tx) },
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
       clock: new SystemClock(),

@@ -354,16 +354,20 @@ describe('the real ParentService over the SQL repositories', () => {
     });
   });
 
-  it('is atomic: a failure while linking rolls back the account, role, parent and address', async () => {
+  it('is atomic: a failure while linking rolls back the account, role, parent, address and link (compared with the row counts taken just BEFORE the failing registration, so rows that already exist in the database do not matter)', async () => {
     await withFixture(
       async (f) => {
+        const tables = ['users', 'user_roles', 'parents', 'parent_addresses', 'parent_schools'] as const;
+        const counts = async () => {
+          const out: Record<string, number> = {};
+          for (const table of tables) out[table] = Number((await f.q<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`))[0]!.n);
+          return out;
+        };
+        const before = await counts();
         const phone = phoneOf();
         await expect(f.parents.registerParent({ schoolId: f.school.id, name: NAME, phone, address: { kind: 'raw', text: f.governorateName } }, f.manager)).rejects.toThrow('injected failure');
         expect(await identity.findByPhone(phone, f.tx)).toBeUndefined();
-        const left = await f.q<{ n: number }>(`SELECT (SELECT COUNT(*) FROM parents) AS n`);
-        expect(Number(left[0]!.n)).toBe(0);
-        const addresses = await f.q<{ n: number }>(`SELECT COUNT(*) AS n FROM parent_addresses`);
-        expect(Number(addresses[0]!.n)).toBe(0);
+        expect(await counts()).toEqual(before);
       },
       { failLinkInsert: true },
     );

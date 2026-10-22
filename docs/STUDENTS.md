@@ -40,7 +40,7 @@ A **business entity only**: no login, no password, no token, no session, no user
 
 ## Teacher view
 A Teacher reading a Student receives only `id, schoolId, fullName, joinDate, status`: no National ID, no Parent reference and no (Parent-derived) address. This is data minimization chosen by the implementation; the approved decision only says a Teacher may read their students. Reversible on request.
-The Teacher relationship comes from Module 20 (Groups), which does not exist yet: `src/config/students.ts` wires the explicit temporary `GROUPS_MODULE_NOT_IMPLEMENTED_YET_FOR_STUDENTS` (**every Teacher read is denied**, fail closed). `tests/unit/students/student-boundaries.test.ts` fails as soon as `src/modules/20-groups` contains source files while that stand-in is still wired. A Teacher **listing** endpoint arrives with Module 20 (it needs the group data).
+The Teacher relationship comes from Module 20 (Groups): since 0.26.0 `src/config/students.ts` wires `GroupService.isStudentInGroupOfTeacher`, so a Teacher reads a student only while the student is in an **ACTIVE group of that Teacher** (and only inside a school they are actively linked to). The temporary fail-closed stand-in `GROUPS_MODULE_NOT_IMPLEMENTED_YET_FOR_STUDENTS` is no longer wired (still exported, unused; a boundary test asserts it). Module 20 also ends the group period of an `ARCHIVED` student through the `StudentStatusChanged` event. A Teacher **listing** of students is the group's student list (`GET /groups/{id}/students`).
 
 ## Endpoints (under `/api/v1/students`, documented in OpenAPI, tag `Students`)
 | Method and path | Permission | Who |
@@ -74,4 +74,4 @@ The MANAGEMENT/`STUDENT` scope resolver is **role-aware** and answers `true` onl
 ## Pending / for confirmation
 1. Record the three approved decisions in `docs/MASTER-SPECIFICATION.md` (not done: only you decide when the specification is amended).
 2. Defaults chosen by the implementation, easy to change: `ARCHIVED` final; only name and join date updatable; archived students still block the Parent unlink; minimal Teacher view; join date defaults to today.
-3. Module 20 must replace the Teacher stand-in; the Student's group is Module 20 data.
+3. (Done in 0.26.0) Module 20 replaced the Teacher stand-in; the Student's group is Module 20 data (`docs/GROUPS.md`).

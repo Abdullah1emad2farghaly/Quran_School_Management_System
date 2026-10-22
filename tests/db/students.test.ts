@@ -141,7 +141,7 @@ async function withFixture(work: (f: Fixture) => Promise<void>): Promise<void> {
       const studentRepo = new SequelizeStudentRepository(sequelize);
       students = new StudentService({ students: studentRepo, schools, parents, unitOfWork: savepointUnitOfWork, outbox });
       const newParent: Fixture['newParent'] = async (schoolId, name = 'أحمد محمد علي') => {
-        const result = await parents.registerParent({ schoolId, name, phone: phoneOf(), address: { kind: 'raw', text: 'المنيا / سمالوط / برمشا' } }, manager, tx);
+        const result = await parents.registerParent({ schoolId, name, phone: phoneOf(), address: { kind: 'raw', text: `${governorateName} / سمالوط / برمشا` } }, manager, tx);
         return result.parent;
       };
       await work({ tx, q, run, fails, parents, students, studentRepo, school, school2, manager, organizationId: organization.id, newParent });
@@ -188,7 +188,9 @@ describe('students schema (migration create-students)', () => {
       await fails(insertStudentSql, row({ school: school2.id })); // another school
       await fails(insertStudentSql, row({ org: randomUUID(), school: randomUUID() })); // another organization
       await fails(insertStudentSql, row({ nid: nationalIdOf(), status: 'DELETED' }));
-      for (const bad of ['123', '3000101012345a', '300010101234567']) await fails(insertStudentSql, row({ nid: bad }));
+      // Exactly 14 characters or fewer on purpose: a longer value would be silently TRUNCATED by CHAR(14) on a server whose sql_mode is not strict
+      // (the application validates the length before it ever reaches the database), so only the CHECK is exercised here.
+      for (const bad of ['123', '3000101012345a', '3000101012-456']) await fails(insertStudentSql, row({ nid: bad }));
       await fails(insertStudentSql, row({ nid: nationalIdOf(), name: '   ' }));
       expect((await q<{ n: number }>(`SELECT COUNT(*) AS n FROM students WHERE national_id = :nid`, { nid }))[0]!.n).toBe(1);
     });
