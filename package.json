@@ -23,6 +23,9 @@
     "bootstrap:main-admin": "tsx src/app/cli/bootstrap-main-admin.ts",
     "bootstrap:organization": "tsx src/app/cli/bootstrap-organization.ts",
     "seed:geography": "tsx src/app/cli/seed-geography.ts",
+    "convert:quran": "tsx src/app/cli/convert-kfgqpc-hafs.ts",
+    "verify:quran": "tsx docs/verification/module21/verify-module21-real-dataset.ts",
+    "import:quran": "tsx src/app/cli/import-quran-structure.ts",
     "person-names:report": "tsx src/app/cli/person-names.ts report",
     "person-names:apply": "tsx src/app/cli/person-names.ts apply"
   },

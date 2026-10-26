@@ -1,0 +1,165 @@
+
+=== 1. Source and checksums
+PASS  archive SHA-256 equals the published value  [227e6b1564d980f2bd09c2c35ebfb0330ac268c79a7c247cd1ab665bc635f245]
+PASS  archive SHA-256 is on the converter's approved list
+PASS  quarter file (quran-data.xml) SHA-256 is the pinned approved value  [8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a]
+PASS  dataset checksum = SHA-256 of the exact bytes of the dataset file written to disk  [58d0069640dc853dc2a4d20806de61c0a4eee8a59479d6f1ae7ebf4a08b267d3]
+PASS  dataset checksum differs from the archive checksum (they identify different artifacts)
+PASS  the dataset records the archive and each source file with their real SHA-256
+PASS  conversion is deterministic (second run is byte-identical)
+PASS  the real edition profile (with its page anchors) accepts the dataset
+archive SHA-256   : 227e6b1564d980f2bd09c2c35ebfb0330ac268c79a7c247cd1ab665bc635f245  (the official .zip, unmodified)
+quarter file      : 8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a  (quran-data.xml, unmodified)
+dataset checksum  : 58d0069640dc853dc2a4d20806de61c0a4eee8a59479d6f1ae7ebf4a08b267d3  (the converted dataset file: 2545041 bytes)
+
+=== 2. How the approved sources relate to each other (informational: both are stored exactly as stated, nothing is reconciled)
+printed marker symbols: 199 | quarter records: 240 | markers at a quarter start: 198 | markers NOT at a quarter start: 15:49
+quarter starts without a printed marker: 42 (41 of them at the first ayah of a surah)
+juz start (official Excel) versus the first quarter of that juz (quarter file):
+  juz 4: Excel 3:92 | quarter 25: 3:93
+  juz 11: Excel 9:94 | quarter 81: 9:93
+  juz 20: Excel 27:60 | quarter 153: 27:56
+  juz 21: Excel 29:45 | quarter 161: 29:46
+  juz 23: Excel 36:21 | quarter 177: 36:28
+PASS  the sources differ at exactly the five juz 4, 11, 20, 21, 23 (the only places where a juz start and its first quarter disagree)
+PASS  the only printed marker that is not at a quarter start is 15:49 (quarter 106 is at 15:50, as the quarter source states)
+
+=== IN-MEMORY SERVICE: values against the official files (full population)
+PASS  dataset info: checksum is the real dataset checksum (not a placeholder)
+PASS  dataset info: counts  [{"surahs":114,"ayahs":6236,"pages":604,"lines":9046,"quarters":240,"quarterMarks":199}]
+PASS  dataset info: coverage = 240 quarter records imported, 199 printed markers (a separate count), and the juz relation  [{"quarters":{"expected":240,"imported":240},"printedQuarterMarkers":199,"juz":{"total":30,"markerConfirmed":16,"surahStartNoMarker":9,"markerConflict":5}}]
+PASS  dataset info: two attributions (KFGQPC; Tanzil with its stated license and copyright) and 6 recorded source files
+PASS  114 surahs, names equal the official names, ayah counts sum to 6236
+PASS  all 6236 ayah texts are byte-identical to the official text
+PASS  all 6236 ayahs: surah/ayah numbers equal the official ones
+PASS  all 6236 ayahs: first page and line range equal the official CSV
+PASS  all 6236 ayahs: juz equals the value in the official EXCEL workbook (read directly from the .xlsx)
+PASS  startsRubMarker is true exactly for the 199 ayahs whose official text starts with the marker
+PASS  getAyah(surah, ayah) returns the same record as by global position
+PASS  604 pages, 9046 lines numbered 1..9046 in page/line order
+PASS  pages 1 and 2 have 8 lines, every other page 15
+PASS  114 banner lines, 112 basmala lines, 8820 text lines
+PASS  page 1: banner line, then the text of 1:1 at line 2; page 349 line 15 is TEXT (23:118)
+PASS  ayah -> line -> ayah is consistent: every text line contains the ayahs it names, and every ayah is on a line that names it
+PASS  no ayah crosses a page in the official layout
+PASS  getLineByGlobalIndex returns the line listed on its page
+PASS  30 juz in order; each juz start is the first ayah whose Excel jozz is that juz, and every ayah's juz is consistent with them
+PASS  juz starts of the five juz that differ from the printed markers are the Excel values 3:92, 9:94, 27:60, 29:45, 36:21 (stored as stated)
+PASS  juz relation to the printed markers (informational): 16 confirmed, 9 at a surah start, 5 differing
+PASS  240 quarter records, in order, each EXACTLY as the Tanzil XML states it (compared with the file)
+PASS  quarter numbers are 1..N without gaps or repeats, positions strictly increase, hizb = ceil(quarter / 4)
+PASS  QUARTER 106 is at Al-Hijr 15:50 (the Tanzil position), not 15:49
+PASS  ayah 15:49 belongs to quarter 105 and ayah 15:50 to quarter 106
+PASS  every ayah's quarter is the quarter that starts at or before it (all 6236)
+PASS  getQuarter(1..240) equals the listed record; 0 and 241 do not exist
+PASS  199 printed marker symbols, ordinal 1..199, strictly increasing, each on an ayah whose text starts with the marker
+PASS  the PRINTED marker symbol is at 15:49 (a fact about the text); the quarter record is 15:50 (the quarter source): the two are separate resources
+
+=== IN-MEMORY SERVICE: pagination edges and invalid or nonexistent identifiers (service level)
+PASS  pageSize 1 -> 1 item of 286; last page of surah 2 has 86; a page beyond the end is empty; descending order
+PASS  nonexistent identifiers answer undefined: surah 0/115, ayah 1:8, position 0/6237, page 0/605, line 0/9047
+
+=== IN-MEMORY SERVICE: every endpoint's data against the OpenAPI schemas
+PASS  OpenAPI: GET /dataset (1 response bodies)
+PASS  OpenAPI: GET /surahs (1 response bodies)
+PASS  OpenAPI: GET /surahs/{surah} (all 114) (114 response bodies)
+PASS  OpenAPI: GET /surahs/{surah}/ayahs (every ayah via pagination) (6236 response bodies)
+PASS  paginating every surah visits each of the 6236 ayahs exactly once, in order
+PASS  OpenAPI: GET /surahs/{surah}/ayahs/{ayah} and GET /ayahs/{position} (all 6236) (6236 response bodies)
+PASS  OpenAPI: GET /pages/{page} (all 604, incl. 1, 349, 604) (604 response bodies)
+PASS  OpenAPI: GET /juz (1 response bodies)
+PASS  OpenAPI: GET /quarters (1 response bodies)
+PASS  OpenAPI: GET /quarters/{quarter} (all 240) (240 response bodies)
+PASS  OpenAPI: GET /quarter-marks (1 response bodies)
+
+=== 3. SQLITE EMULATION (NOT MariaDB): schema built from the project migrations, real repository SQL, real import use case
+PASS  before any import the database holds no dataset
+PASS  reads fail closed with QURAN_DATASET_NOT_IMPORTED
+PASS  import through the real use case (real checksum, no --replace)  [IMPORTED]
+
+=== 3a. Persisted data, queried directly in the database
+PASS  persisted rows: quran_surahs = 114  [114]
+PASS  persisted rows: quran_ayahs = 6236  [6236]
+PASS  persisted rows: quran_pages = 604  [604]
+PASS  persisted rows: quran_lines = 9046  [9046]
+PASS  persisted rows: quran_juz = 30  [30]
+PASS  persisted rows: quran_quarters = 240  [240]
+PASS  persisted rows: quran_quarter_marks = 199  [199]
+PASS  persisted rows: quran_dataset_imports = 1  [1]
+PASS  persisted rows: quran_hizb = 0  [0]
+PASS  exactly one ACTIVE import, recording the real dataset checksum, the 4 source files and the counts
+PASS  foreign keys: no violation
+PASS  surah ayah_counts sum to 6236 and first_global_ayah values are consecutive
+PASS  every ayah row joins its surah and (surah, ayah) is unique
+PASS  PERSISTED text of all 6236 ayahs is byte-identical to the official text
+PASS  PERSISTED page and line range equal the official CSV, and the PERSISTED juz equals the official Excel, for all 6236 ayahs
+PASS  PERSISTED quarters: all 240 rows equal the Tanzil XML records, in order; quarter 106 is stored at 15:50
+PASS  PERSISTED ayah quarter_number equals the quarter that starts at or before each ayah (all 6236)
+PASS  PERSISTED markers: has_rub_marker = 1 for exactly the 199 marked ayahs = the quarter_marks rows
+PASS  PERSISTED juz starts: 30 rows, juz 4/11/20/21/23 stored as MARKER_CONFLICT with the official jozz values
+PASS  PERSISTED lines: 604 pages x lines, kinds 8820 / 114 / 112, (page, line) unique
+
+=== SQLITE-BACKED SERVICE (reads the persisted rows through SequelizeQuranStructureRepository): values against the official files (full population)
+PASS  dataset info: checksum is the real dataset checksum (not a placeholder)
+PASS  dataset info: counts  [{"surahs":114,"ayahs":6236,"pages":604,"lines":9046,"quarters":240,"quarterMarks":199}]
+PASS  dataset info: coverage = 240 quarter records imported, 199 printed markers (a separate count), and the juz relation  [{"quarters":{"expected":240,"imported":240},"printedQuarterMarkers":199,"juz":{"total":30,"markerConfirmed":16,"surahStartNoMarker":9,"markerConflict":5}}]
+PASS  dataset info: two attributions (KFGQPC; Tanzil with its stated license and copyright) and 6 recorded source files
+PASS  114 surahs, names equal the official names, ayah counts sum to 6236
+PASS  all 6236 ayah texts are byte-identical to the official text
+PASS  all 6236 ayahs: surah/ayah numbers equal the official ones
+PASS  all 6236 ayahs: first page and line range equal the official CSV
+PASS  all 6236 ayahs: juz equals the value in the official EXCEL workbook (read directly from the .xlsx)
+PASS  startsRubMarker is true exactly for the 199 ayahs whose official text starts with the marker
+PASS  getAyah(surah, ayah) returns the same record as by global position
+PASS  604 pages, 9046 lines numbered 1..9046 in page/line order
+PASS  pages 1 and 2 have 8 lines, every other page 15
+PASS  114 banner lines, 112 basmala lines, 8820 text lines
+PASS  page 1: banner line, then the text of 1:1 at line 2; page 349 line 15 is TEXT (23:118)
+PASS  ayah -> line -> ayah is consistent: every text line contains the ayahs it names, and every ayah is on a line that names it
+PASS  no ayah crosses a page in the official layout
+PASS  getLineByGlobalIndex returns the line listed on its page
+PASS  30 juz in order; each juz start is the first ayah whose Excel jozz is that juz, and every ayah's juz is consistent with them
+PASS  juz starts of the five juz that differ from the printed markers are the Excel values 3:92, 9:94, 27:60, 29:45, 36:21 (stored as stated)
+PASS  juz relation to the printed markers (informational): 16 confirmed, 9 at a surah start, 5 differing
+PASS  240 quarter records, in order, each EXACTLY as the Tanzil XML states it (compared with the file)
+PASS  quarter numbers are 1..N without gaps or repeats, positions strictly increase, hizb = ceil(quarter / 4)
+PASS  QUARTER 106 is at Al-Hijr 15:50 (the Tanzil position), not 15:49
+PASS  ayah 15:49 belongs to quarter 105 and ayah 15:50 to quarter 106
+PASS  every ayah's quarter is the quarter that starts at or before it (all 6236)
+PASS  getQuarter(1..240) equals the listed record; 0 and 241 do not exist
+PASS  199 printed marker symbols, ordinal 1..199, strictly increasing, each on an ayah whose text starts with the marker
+PASS  the PRINTED marker symbol is at 15:49 (a fact about the text); the quarter record is 15:50 (the quarter source): the two are separate resources
+
+=== SQLITE-BACKED SERVICE (reads the persisted rows through SequelizeQuranStructureRepository): pagination edges and invalid or nonexistent identifiers (service level)
+PASS  pageSize 1 -> 1 item of 286; last page of surah 2 has 86; a page beyond the end is empty; descending order
+PASS  nonexistent identifiers answer undefined: surah 0/115, ayah 1:8, position 0/6237, page 0/605, line 0/9047
+
+=== SQLITE-BACKED SERVICE (reads the persisted rows through SequelizeQuranStructureRepository): every endpoint's data against the OpenAPI schemas
+PASS  OpenAPI: GET /dataset (1 response bodies)
+PASS  OpenAPI: GET /surahs (1 response bodies)
+PASS  OpenAPI: GET /surahs/{surah} (all 114) (114 response bodies)
+PASS  OpenAPI: GET /surahs/{surah}/ayahs (every ayah via pagination) (6236 response bodies)
+PASS  paginating every surah visits each of the 6236 ayahs exactly once, in order
+PASS  OpenAPI: GET /surahs/{surah}/ayahs/{ayah} and GET /ayahs/{position} (all 6236) (6236 response bodies)
+PASS  OpenAPI: GET /pages/{page} (all 604, incl. 1, 349, 604) (604 response bodies)
+PASS  OpenAPI: GET /juz (1 response bodies)
+PASS  OpenAPI: GET /quarters (1 response bodies)
+PASS  OpenAPI: GET /quarters/{quarter} (all 240) (240 response bodies)
+PASS  OpenAPI: GET /quarter-marks (1 response bodies)
+
+=== 3b. Constraints, idempotency and rollback
+PASS  constraint rejects: a second ACTIVE import
+PASS  constraint rejects: a duplicate (page, line)
+PASS  constraint rejects: two quarters starting at the same ayah
+PASS  constraint rejects: a quarter number beyond 240
+PASS  constraint rejects: a duplicate quarter marker on the same ayah
+PASS  constraint rejects: a juz with an unknown evidence status
+PASS  constraint rejects: an ayah without text
+PASS  idempotent: importing the same dataset again is UNCHANGED and leaves 6236 ayahs and one import
+PASS  a different dataset is refused without --replace (QURAN_DATASET_REPLACEMENT_NOT_CONFIRMED) and nothing changes
+PASS  a failed replacement is rejected by the database and rolled back completely
+PASS  after the failed replacement the original dataset is whole: counts, checksum, text of 6236 ayahs, one ACTIVE import, no trace of the failed one
+PASS  a failed FIRST import leaves every Quran table empty (no partial data)  [0,0,0,0,0,0,0,0]
+PASS  the original files are unchanged after the whole run (SHA-256 of the archive and of quran-data.xml, re-read from disk)  [227e6b1564d980f2bd09c2c35ebfb0330ac268c79a7c247cd1ab665bc635f245 / 8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a]
+
+ALL CHECKS PASSED (130 passed)
