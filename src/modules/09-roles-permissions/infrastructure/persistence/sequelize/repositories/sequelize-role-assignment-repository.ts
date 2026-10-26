@@ -26,6 +26,21 @@ const SELECT = `
 
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
+interface DriverError {
+  errno?: number;
+  code?: string;
+}
+/**
+ * MySQL/MariaDB InnoDB deadlock (ER_LOCK_DEADLOCK, 1213). Two simultaneous revocations for the same user both lock the
+ * user's rows with `SELECT ... FOR UPDATE` on `uq_user_roles_active_role`; the winner's UPDATE moves an entry of that
+ * unique index (active 1 -> NULL) and needs a gap the other transaction holds, so InnoDB rolls one of them back with a
+ * deadlock error. It is the same race as a stale version, so it is reported with the same retryable code.
+ */
+export function isDeadlockError(error: unknown): boolean {
+  const e = error as (DriverError & { parent?: DriverError; original?: DriverError }) | null | undefined;
+  return [e, e?.parent, e?.original].some((c) => c != null && (c.errno === 1213 || c.code === 'ER_LOCK_DEADLOCK'));
+}
+
 export class SequelizeRoleAssignmentRepository implements RoleAssignmentRepository {
   constructor(private readonly db: Queryable) {}
 
@@ -44,13 +59,15 @@ export class SequelizeRoleAssignmentRepository implements RoleAssignmentReposito
     } catch (error) {
       // The unique (user_id, role_code, active) index is the final guard against concurrent duplicate assignment.
       if (error instanceof UniqueConstraintError) throw roleError('ROLE_ALREADY_ASSIGNED');
+      if (isDeadlockError(error)) throw roleError('ROLE_CONCURRENT_MODIFICATION');
       throw error;
     }
   }
 
   async update(a: RoleAssignment, tx: TransactionContext): Promise<void> {
     const revokedAt = a.revokedAt;
-    const [, affectedRows] = await this.db.query(
+    const [, affectedRows] = await this.db
+      .query(
       `UPDATE user_roles
           SET revoked_at = :revokedAt, revoked_by = :revokedBy,
               active = IF(:revokedAt IS NULL, 1, NULL), updated_at = :updatedAt, version = version + 1
@@ -66,7 +83,11 @@ export class SequelizeRoleAssignmentRepository implements RoleAssignmentReposito
         type: QueryTypes.UPDATE,
         transaction: sequelizeTransactionOf(tx) ?? null,
       },
-    );
+    )
+      .catch((error: unknown) => {
+        if (isDeadlockError(error)) throw roleError('ROLE_CONCURRENT_MODIFICATION');
+        throw error;
+      });
     if (Number(affectedRows) !== 1) throw roleError('ROLE_CONCURRENT_MODIFICATION');
   }
 
@@ -91,11 +112,16 @@ export class SequelizeRoleAssignmentRepository implements RoleAssignmentReposito
   }
 
   private async find(sql: string, userId: string, tx?: TransactionContext): Promise<RoleAssignment[]> {
-    const rows = await this.db.query<Row>(sql, {
-      replacements: { userId },
-      type: QueryTypes.SELECT,
-      transaction: sequelizeTransactionOf(tx) ?? null,
-    });
+    const rows = await this.db
+      .query<Row>(sql, {
+        replacements: { userId },
+        type: QueryTypes.SELECT,
+        transaction: sequelizeTransactionOf(tx) ?? null,
+      })
+      .catch((error: unknown) => {
+        if (isDeadlockError(error)) throw roleError('ROLE_CONCURRENT_MODIFICATION');
+        throw error;
+      });
     return rows.map((r) =>
       RoleAssignment.rehydrate({
         id: r.id,
