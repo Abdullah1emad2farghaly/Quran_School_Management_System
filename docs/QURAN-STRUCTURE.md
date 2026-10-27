@@ -1,6 +1,6 @@
 # Quran Structure (Module 21)
 
-**Status: IN_PROGRESS.** Everything approved is implemented and verified as far as the build environment allows (see "Verification status"); the module is not marked COMPLETED because the project checks that need dependencies and a MariaDB database could not be executed there.
+**Status: COMPLETED (0.29.1).** Approved and verified on the developer machine: `db:migrate` (all migrations), `test:db`, `npm test`, `api:verify`, `typecheck`, `build`, the real-dataset import and `npm run verify:quran`.
 
 Immutable reference data of the one approved V1 edition: **Madinah Mushaf, Hafs narration from Asim, the standard 604-page edition**. Other modules (Module 22 Range Engine, schedules, sessions, memorization) depend on it; Module 20's `startingSurah` is a surah number of this structure.
 
@@ -73,7 +73,7 @@ By decision the juz come from the Excel and the quarters from the quarter file; 
 
 ## Schema
 
-Migrations (additive, in order; earlier ones untouched): `20261022100000-create-quran-structure`, `20261023100000-quran-structure-official-package-model`, `20261024100000-quran-structure-quarters` (the quarter of every ayah and the quarter count of an import; the second and third refuse to run if a reshaped table holds data). Target: MariaDB 10.4. Tables: `quran_dataset_imports` (unique `active`: one ACTIVE import), `quran_surahs`, `quran_ayahs`, `quran_pages`, `quran_lines`, `quran_juz`, `quran_quarters` (quarter 1..240, hizb = ceil(q/4), unique start), `quran_quarter_marks`, and the reserved empty `quran_hizb`. No foreign key leaves the module.
+Migrations (additive, in order; earlier ones untouched): `20261022100000-create-quran-structure`, `20261023100000-quran-structure-official-package-model`, `20261024100000-quran-structure-quarters` (the quarter of every ayah and the quarter count of an import; the second and third refuse to run if a reshaped table holds data), `20261026100000-quran-lines-kind-check-not-null` (`ck_quran_lines_kind` now states `surah_number IS NOT NULL` for banner and basmala lines: a CHECK accepts UNKNOWN, so a NULL surah used to pass; found by `tests/db/quran.test.ts` on MariaDB; drops and re-adds the constraint only, no data touched). Target: MariaDB 10.4. Tables: `quran_dataset_imports` (unique `active`: one ACTIVE import), `quran_surahs`, `quran_ayahs`, `quran_pages`, `quran_lines`, `quran_juz`, `quran_quarters` (quarter 1..240, hizb = ceil(q/4), unique start), `quran_quarter_marks`, and the reserved empty `quran_hizb`. No foreign key leaves the module.
 
 ## Interfaces
 
@@ -108,9 +108,9 @@ The converter refuses a package or quarter file that is not the pinned one, veri
 
 ## Verification status
 
-See `docs/verification/module21/Module21-Final-Verification-Report.md`. Short version: the unit tests pass (including with the real files), the full verification passes 130 checks on the real files (in memory and on a SQLite emulation whose schema is built from the project's three migrations), and the original files were verified unchanged. **Not run (no MariaDB server, no installed dependencies in the build environment):** `npm run db:migrate`, `npm run test:db`, `npm test` (integration, real HTTP routes), `npm run api:verify`, `npm run typecheck`, `npm run build` (there is no `lint` script). The SQLite emulation is not MariaDB.
+See `docs/verification/module21/Module21-Final-Verification-Report.md` for the original verification. Final state (0.29.1): the project checks above pass on the developer machine against MariaDB 10.4, the real KFGQPC package and Tanzil file were imported, and `npm run verify:quran` passes with the real files; the original files were verified unchanged. Four issues found by those runs were fixed in 0.29.1 without touching the approved data: (1) the OpenAPI helper `nullableRef` (Module 04, used only here) now writes a nullable reference as `oneOf: [ref, {type: object, nullable: true, enum: [null]}]`, so banner and basmala lines (`firstAyah`/`lastAyah` null) validate under Ajv; (2) migration `20261026100000-quran-lines-kind-check-not-null` makes the database reject a banner/basmala line without a surah (a CHECK accepts UNKNOWN, so the NULL slipped through); (3) `tests/db/quran.test.ts` no longer collides with an already imported real dataset (it empties the tables only inside its own always-rolled-back transaction); (4) the verification script's schema checker now understands `oneOf` (`docs/verification/module21/openapi-subset-checker.ts`, covered by `tests/api-docs/quran-page-line-schema.test.ts`). There is no `lint` script.
 
 ## Open items
 
-1. Run the checks above on a machine with the dependencies and a development MariaDB, then the first real import and `npm run verify:quran`.
+1. ~~Run the checks and the first real import~~ done (0.29.1).
 2. Written clarification of redistribution and production terms of the sources (does not block development).

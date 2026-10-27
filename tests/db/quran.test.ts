@@ -39,6 +39,15 @@ async function fixture(tx: Parameters<Parameters<UnitOfWork['run']>[0]>[0]) {
   const run = async (sql: string, replacements: Record<string, unknown> = {}) => {
     await sequelize.query(sql, { replacements, transaction });
   };
+  /**
+   * Makes the database look EMPTY for this test only: supersedes the ACTIVE import and removes the dataset rows. It runs inside the test's
+   * transaction, which is always rolled back, so a database that already holds the real Quran dataset is left exactly as it was. The tests
+   * that import the synthetic dataset call it first; without it they would hit QURAN_DATASET_REPLACEMENT_NOT_CONFIRMED on such a database.
+   */
+  const clearExisting = async () => {
+    await run("UPDATE quran_dataset_imports SET status = 'SUPERSEDED', active = NULL WHERE active = 1");
+    for (const table of ['quran_lines', 'quran_pages', 'quran_ayahs', 'quran_quarters', 'quran_quarter_marks', 'quran_juz', 'quran_surahs']) await run(`DELETE FROM ${table}`);
+  };
   let sp = 0;
   /** The statement must fail (a constraint); the transaction stays usable (savepoint). */
   const fails = async (sql: string, replacements: Record<string, unknown> = {}) => {
@@ -72,7 +81,7 @@ async function fixture(tx: Parameters<Parameters<UnitOfWork['run']>[0]>[0]) {
     options.mutate?.(raw);
     return importer.execute({ raw, checksum: options.checksum ?? 'a'.repeat(64), replace: options.replace ?? false }, validateSynthetic);
   };
-  return { q, run, fails, repository, service, importer, importSynthetic, tx };
+  return { q, run, fails, clearExisting, repository, service, importer, importSynthetic, tx };
 }
 
 afterAll(async () => {
@@ -145,7 +154,8 @@ describe('Module 21 schema', () => {
 
 describe('SequelizeQuranStructureRepository + ImportQuranDataset (real database, synthetic dataset)', () => {
   it('imports, then serves exactly what the in-memory implementation serves (parity)', async () => {
-    await withFixture(async ({ importSynthetic, service, repository, q }) => {
+    await withFixture(async ({ clearExisting, importSynthetic, service, repository, q }) => {
+      await clearExisting();
       const summary = await importSynthetic();
       expect(summary).toMatchObject({ outcome: expect.stringMatching(/IMPORTED|REPLACED/), counts: { surahs: 114, ayahs: 6236, pages: 604, quarters: 240, quarterMarks: 162 } });
       const memory = createQuranHarness();
@@ -176,7 +186,8 @@ describe('SequelizeQuranStructureRepository + ImportQuranDataset (real database,
   });
 
   it('is idempotent, refuses an unconfirmed replacement, and replaces on request keeping the previous import as SUPERSEDED', async () => {
-    await withFixture(async ({ importSynthetic, repository, q }) => {
+    await withFixture(async ({ clearExisting, importSynthetic, repository, q }) => {
+      await clearExisting();
       await importSynthetic();
       expect((await importSynthetic()).outcome).toBe('UNCHANGED');
       await expect(importSynthetic({ checksum: 'b'.repeat(64) })).rejects.toMatchObject({ code: 'QURAN_DATASET_REPLACEMENT_NOT_CONFIRMED' });
@@ -189,7 +200,8 @@ describe('SequelizeQuranStructureRepository + ImportQuranDataset (real database,
   });
 
   it('rolls a failed replacement back completely: the previous dataset stays whole and active', async () => {
-    await withFixture(async ({ importSynthetic, importer, repository, service, q }) => {
+    await withFixture(async ({ clearExisting, importSynthetic, importer, repository, service, q }) => {
+      await clearExisting();
       await importSynthetic();
       const before = await service.getAyah(2, 255);
       // passes validation, then violates a CHECK in the database part-way through the inserts

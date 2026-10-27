@@ -29,6 +29,7 @@ import {
   APPROVED_KFGQPC_HAFS_PACKAGES, ImportQuranDataset, InMemoryQuranStructureRepository, QuranStructureService, SequelizeQuranStructureRepository, convertKfgqpcHafsPackage,
   APPROVED_TANZIL_QUARTER_FILES, quranApiDoc, serializeDataset, validateQuranDataset, type QuranStructureLookup,
 } from '../../../src/modules/21-quran-structure/public';
+import { createSubsetChecker } from './openapi-subset-checker';
 import { readZip } from '../../../src/modules/21-quran-structure/infrastructure/source/zip-reader';
 import { readXlsxFirstSheet } from '../../../src/modules/21-quran-structure/infrastructure/source/xlsx-sheet-reader';
 
@@ -47,23 +48,7 @@ const section = (t: string) => console.log(`\n=== ${t}`);
 registerAllErrorMessages();
 const doc: any = buildOpenApiDocument({ modules: [quranApiDoc], basePath: '/api/v1', title: 't', version: 't', messages: defaultMessageCatalog });
 const schemas = doc.components.schemas;
-const schemaProblems: string[] = [];
-function conforms(schema: any, value: any, where: string): void {
-  if (value === null) { if (!schema.nullable) schemaProblems.push(`${where}: null not allowed`); return; }
-  if (schema.$ref) return conforms(schemas[schema.$ref.split('/').pop()!], value, where);
-  if (schema.allOf) return schema.allOf.forEach((s: any) => conforms(s, value, where));
-  const t = schema.type;
-  if (t === 'integer' && !Number.isInteger(value)) schemaProblems.push(`${where}: not an integer`);
-  else if (t === 'string' && typeof value !== 'string') schemaProblems.push(`${where}: not a string`);
-  else if (t === 'boolean' && typeof value !== 'boolean') schemaProblems.push(`${where}: not a boolean`);
-  else if (t === 'array') { if (!Array.isArray(value)) schemaProblems.push(`${where}: not an array`); else value.forEach((v, i) => conforms(schema.items, v, `${where}[${i}]`)); }
-  else if (t === 'object') {
-    for (const r of schema.required ?? []) if (!(r in value)) schemaProblems.push(`${where}: missing "${r}"`);
-    for (const k of Object.keys(value)) { if (!schema.properties?.[k]) schemaProblems.push(`${where}: undocumented "${k}"`); else conforms(schema.properties[k], value[k], `${where}.${k}`); }
-  }
-  if (typeof value === 'number') { if (schema.minimum !== undefined && value < schema.minimum) schemaProblems.push(`${where}: < minimum`); if (schema.maximum !== undefined && value > schema.maximum) schemaProblems.push(`${where}: > maximum`); }
-  if (schema.enum && !schema.enum.includes(value)) schemaProblems.push(`${where}: ${value} not in enum`);
-}
+const { problems: schemaProblems, conforms } = createSubsetChecker(schemas);
 const dataSchema = (p: string) => doc.paths[`/quran${p}`].get.responses['200'].content['application/json'].schema.properties.data;
 const itemSchema = (p: string) => dataSchema(p).items ?? dataSchema(p);
 function allConform(label: string, schema: any, values: unknown[]): void {
