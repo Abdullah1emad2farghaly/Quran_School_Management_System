@@ -7,6 +7,7 @@ export { createStudentArchivedHandler } from '../application/services/student-ar
 export { GROUP_ERROR_MESSAGES } from '../application/services/group-error-messages';
 export type { GroupDto, GroupScopeDto, GroupStudentDto, StudentAssignmentDto, GroupHistoryDto } from '../application/dto/group-dto';
 export type { GroupRepository, GroupListQuery, GroupSortKey } from '../application/ports/group-repository';
+export type { GroupSchedulePort } from '../application/ports/group-schedule-port';
 export { Group, type GroupSnapshot } from '../domain/entities/group';
 export { GroupAssignment, ASSIGNMENT_END_REASONS, type GroupAssignmentSnapshot, type AssignmentEndReason } from '../domain/entities/group-assignment';
 export type { GroupHistoryEntry, GroupHistoryAction } from '../domain/entities/group-history-entry';

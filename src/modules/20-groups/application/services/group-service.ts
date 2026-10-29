@@ -9,6 +9,7 @@ import { groupError } from '../../domain/errors/group-errors';
 import { groupNameKey, normalizeGroupName, normalizeGroupReason, requireLearningMode, requireProgression, requireStartingSurah, type GroupStatus } from '../../domain/value-objects/group-settings';
 import { toAssignmentDto, toGroupDto, type GroupDto, type GroupHistoryDto, type GroupScopeDto, type GroupStudentDto, type StudentAssignmentDto } from '../dto/group-dto';
 import type { GroupRepository, GroupSortKey } from '../ports/group-repository';
+import type { GroupSchedulePort } from '../ports/group-schedule-port';
 
 export interface CreateGroupInput {
   readonly schoolId: string;
@@ -40,6 +41,8 @@ export interface GroupServiceDeps {
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
   readonly clock?: Clock;
+  /** Module 23's schedule check on a Teacher change and the retirement of the slots of an archived group. Optional: without it a group has no schedule rules. */
+  readonly schedule?: GroupSchedulePort;
 }
 
 /**
@@ -66,6 +69,7 @@ export class GroupService {
   private readonly unitOfWork: UnitOfWork;
   private readonly outbox: OutboxService;
   private readonly clock: Clock;
+  private readonly schedule: GroupSchedulePort | undefined;
 
   constructor(deps: GroupServiceDeps) {
     this.groups = deps.groups;
@@ -75,6 +79,7 @@ export class GroupService {
     this.unitOfWork = deps.unitOfWork;
     this.outbox = deps.outbox;
     this.clock = deps.clock ?? new SystemClock();
+    this.schedule = deps.schedule;
   }
 
   // ---------------------------------------------------------------------------------------------- groups
@@ -155,6 +160,8 @@ export class GroupService {
       const group = await this.requireLocked(groupId, t);
       if (group.status === 'ARCHIVED') throw groupError('GROUP_ARCHIVED');
       await this.assertTeacherAssignable(teacherId, group.snapshot.schoolId, group.snapshot.organizationId, t);
+      // A NEW Teacher is validated against the group's existing schedule BEFORE the change is saved (Module 23); the same Teacher is not re-checked.
+      if (group.snapshot.teacherId !== teacherId) await this.schedule?.assertTeacherCanTeach({ id: group.id, schoolId: group.snapshot.schoolId }, teacherId, t);
       return this.saveTeacher(group, teacherId, actorId, t);
     });
   }
@@ -177,6 +184,7 @@ export class GroupService {
       group.archive(actorId, reason, this.clock);
       await this.groups.update(group, t);
       await this.persistGroup(group, t);
+      await this.schedule?.retireSlotsOfArchivedGroup(group.id, actorId, t); // the group's ACTIVE schedule slots become history (Module 23)
       for (const assignment of await this.groups.listCurrentAssignments(group.id, t)) {
         assignment.end('GROUP_ARCHIVED', actorId, this.clock);
         await this.groups.updateAssignment(assignment, t);
@@ -289,6 +297,17 @@ export class GroupService {
     return { id: s.id, schoolId: s.schoolId, teacherId: s.teacherId, status: s.status };
   }
 
+  /**
+   * Like `findScopeById` but a LOCKING read (the group row is locked until the transaction ends): serializes with a Teacher change, an archive and
+   * every other write to the group. Module 23 takes it before it changes a schedule, so the Teacher it reads is the current one.
+   */
+  async lockScopeById(groupId: string, tx: TransactionContext): Promise<GroupScopeDto | undefined> {
+    const group = await this.groups.lockById(groupId, tx);
+    if (!group) return undefined;
+    const s = group.snapshot;
+    return { id: s.id, schoolId: s.schoolId, teacherId: s.teacherId, status: s.status };
+  }
+
   /** Module 18's unlink guard (`TeacherGroupDependencies`): the ACTIVE groups of the Teacher in the school (an ARCHIVED group no longer depends on the link). */
   countGroupsOfTeacherInSchool(teacherId: string, schoolId: string, tx: TransactionContext): Promise<number> {
     return this.groups.countActiveByTeacherInSchool(teacherId, schoolId, tx);
@@ -327,6 +346,7 @@ export class GroupService {
     if (group.setTeacher(teacherId, actorId, this.clock)) {
       await this.groups.update(group, t);
       await this.persistGroup(group, t);
+      await this.schedule?.onTeacherChanged(group.id, teacherId, t); // the group's schedule slots follow the Teacher (Module 23); they are not retired
     }
     return this.toDto(group, t);
   }
@@ -362,4 +382,4 @@ export class GroupService {
 }
 
 /** What downstream modules (Sessions 24, Attendance 26, Schedule 23...) should depend on (read-only). */
-export type GroupLookup = Pick<GroupService, 'findScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool'>;
+export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool'>;

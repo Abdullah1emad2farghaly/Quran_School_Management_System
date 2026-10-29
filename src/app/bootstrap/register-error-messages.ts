@@ -14,6 +14,7 @@ import { STUDENT_ERROR_MESSAGES } from '../../modules/19-students/public';
 import { GROUP_ERROR_MESSAGES } from '../../modules/20-groups/public';
 import { QURAN_ERROR_MESSAGES } from '../../modules/21-quran-structure/public';
 import { QURAN_RANGE_ERROR_MESSAGES } from '../../modules/22-quran-range-engine/public';
+import { SCHEDULE_ERROR_MESSAGES } from '../../modules/23-group-schedules/public';
 import { UNIFIED_ADDRESS_ERROR_MESSAGES } from '../../modules/15-unified-address/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
@@ -40,4 +41,5 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(GROUP_ERROR_MESSAGES);
   registerErrorMessages(QURAN_ERROR_MESSAGES);
   registerErrorMessages(QURAN_RANGE_ERROR_MESSAGES);
+  registerErrorMessages(SCHEDULE_ERROR_MESSAGES);
 }

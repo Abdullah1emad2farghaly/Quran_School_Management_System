@@ -4,6 +4,7 @@ import { getAuthorizationPolicyRegistry, getAuthorizationResolvers } from './aut
 import { getSequelize, getUnitOfWork } from './database';
 import { getEventHandlerRegistry, getOutboxService } from './outbox';
 import { getParentService } from './parents';
+import { getGroupScheduleService } from './schedules';
 import { getSchoolService } from './schools';
 import { getStudentService } from './students';
 import { getTeacherService } from './teachers';
@@ -25,6 +26,12 @@ export function getGroupService(): GroupService {
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
       clock: new SystemClock(),
+      // Module 23, reached lazily (it reads this service back): a Teacher change is validated against the group's slots, an archive retires them.
+      schedule: {
+        assertTeacherCanTeach: (group, teacherId, tx) => getGroupScheduleService().assertTeacherCanTeach(group, teacherId, tx),
+        onTeacherChanged: (groupId, teacherId, tx) => getGroupScheduleService().onTeacherChanged(groupId, teacherId, tx),
+        retireSlotsOfArchivedGroup: (groupId, actorId, tx) => getGroupScheduleService().retireSlotsOfArchivedGroup(groupId, actorId, tx),
+      },
     });
   }
   return service;

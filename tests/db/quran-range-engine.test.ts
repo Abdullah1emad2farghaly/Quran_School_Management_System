@@ -104,7 +104,9 @@ describe('QuranRangeEngine over the real database', () => {
       const baqarah = await engine.calculate({ unit: 'SURAHS', direction: 'FORWARD', amount: 1, start: { surah: 2, ayah: 255 } });
       expect(baqarah.segments).toEqual([{ surah: 2, firstAyah: 1, lastAyah: 286, ayahCount: 286, complete: true }]);
     });
-  });
+    // 400 sequential engine calls over MariaDB plus emptying and re-importing the dataset tables inside the transaction; on a database that
+    // already holds the real dataset this took ~15.2 s, just over the global 15 s limit (a timeout, not a wrong answer).
+  }, 120_000);
 
   it('passes QURAN_DATASET_NOT_IMPORTED through when no dataset is active', async () => {
     try {

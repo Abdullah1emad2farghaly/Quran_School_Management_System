@@ -59,10 +59,18 @@ The MANAGEMENT/`GROUP` resolver is **role-aware** and answers `true` only on pos
 - `group_history`: append-only, `seq` insertion order.
 - RESTRICT keys only from `group_students` and `group_history` to `school_groups`; **no foreign key to another module's table**.
 
+## Group Schedules (Module 23)
+The schedule of a group is owned by Module 23 (`docs/GROUP-SCHEDULES.md`). Module 20 knows it only through `GroupSchedulePort` (`GroupServiceDeps.schedule`, optional: without it nothing below applies):
+- **Assigning or replacing a Teacher** (`assignTeacher`) validates the group's existing schedule slots against the NEW Teacher's slots in their other ACTIVE groups (any school) after the Teacher passed the school-link checks and before the change is saved; a conflict is `409 TEACHER_SCHEDULE_CONFLICT` and nothing changes. The same Teacher is not re-checked.
+- **Removing or replacing a Teacher** never deletes or retires a slot.
+- **Archiving a group** retires its ACTIVE slots (reason `GROUP_ARCHIVED`) in the same transaction (history kept).
+- **Any change of the Teacher** (`saveTeacher`: assign, replace, remove) tells Module 23 (`onTeacherChanged`) so the group's slots follow the Teacher; nothing is retired.
+- New read method for Module 23: `lockScopeById` (a locking read of the group row, the same lock `assignTeacher` takes; also on `GroupLookup`).
+
 ## Tests
 Unit: `tests/unit/groups/*` (domain, service, authorization matrix including the Module 19 integration, boundaries). HTTP and API conformance: `tests/integration/groups.test.ts`, `tests/api-docs/conformance/groups.test.ts` (14 operations); `error-kinds` and `request-validation` extended. Real database: `tests/db/groups.test.ts`. The Parent and Teacher atomicity DB tests now compare row counts taken just before the failing operation (they no longer assume empty tables).
 
 ## Pending / for confirmation
 1. Record the approved decisions in `docs/MASTER-SPECIFICATION.md` (only you decide when the specification is amended).
 2. Technical defaults, easy to change: an `INACTIVE` student keeps the assignment; a Parent sees only the name and the Teacher's name; a Teacher listing of students is by `assignedAt`.
-3. Module 21 will link `startingSurah` to the Quran structure; Module 23 will add the schedule.
+3. Module 21 will link `startingSurah` to the Quran structure. The schedule is Module 23 (`docs/GROUP-SCHEDULES.md`).

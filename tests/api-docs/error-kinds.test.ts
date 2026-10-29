@@ -16,6 +16,7 @@ import { teacherError, TeacherErrorCodes } from '../../src/modules/18-teachers/d
 import { studentError, StudentErrorCodes } from '../../src/modules/19-students/domain/errors/student-errors';
 import { groupError, GroupErrorCodes } from '../../src/modules/20-groups/domain/errors/group-errors';
 import { quranError, QuranErrorCodes } from '../../src/modules/21-quran-structure/domain/errors/quran-errors';
+import { scheduleError, ScheduleErrorCodes } from '../../src/modules/23-group-schedules/public';
 import { operationsOf } from './support/lint';
 
 type Factory = (code: never) => { kind: keyof typeof HTTP_STATUS_BY_KIND };
@@ -33,6 +34,7 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [StudentErrorCodes, studentError as Factory],
   [GroupErrorCodes, groupError as Factory],
   [QuranErrorCodes, quranError as Factory],
+  [ScheduleErrorCodes, scheduleError as Factory],
 ];
 
 /** The status each module-owned code REALLY answers: taken from the module's own error factory, never retyped. */
