@@ -29,6 +29,20 @@ export interface OwnScheduleItemDto {
   readonly endTime: string;
 }
 
+/** An ACTIVE slot with its school and its group's current Teacher: what Module 24 (Sessions) reads to generate sessions. Local wall-clock `HH:MM` times. */
+export interface ActiveSlotDto {
+  readonly id: string;
+  readonly groupId: string;
+  readonly schoolId: string;
+  /** The group's current Teacher; null when the group has none. */
+  readonly teacherId: string | null;
+  readonly dayOfWeek: DayOfWeek;
+  readonly startTime: string;
+  readonly endTime: string;
+  /** When the slot became active (Module 24 creates a session only for an occurrence whose threshold the slot already existed for). */
+  readonly createdAt: Date;
+}
+
 export function toSlotDto(slot: GroupScheduleSlot): ScheduleSlotDto {
   const s = slot.snapshot;
   return {

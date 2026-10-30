@@ -27,4 +27,11 @@ export interface ScheduleRepository {
    * This is what makes the Teacher conflict check concurrency-safe: the check and the change of two requests for the same Teacher never interleave.
    */
   lockTeachers(teacherIds: readonly string[], tx: TransactionContext): Promise<void>;
+  /**
+   * Read-only (added for Module 24, Sessions): every ACTIVE slot of every group with the group's current Teacher (null = none).
+   * Plain read, no lock; it changes nothing and no existing rule depends on it.
+   */
+  listAllActive(tx?: TransactionContext): Promise<Array<{ readonly slot: GroupScheduleSlot; readonly teacherId: string | null }>>;
+  /** Read-only (added for Module 24): the slots, active or retired, with these ids. */
+  findByIds(ids: readonly string[], tx?: TransactionContext): Promise<GroupScheduleSlot[]>;
 }

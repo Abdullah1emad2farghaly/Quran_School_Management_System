@@ -61,6 +61,17 @@ export class InMemoryScheduleRepository implements ScheduleRepository {
   /** In memory the requests of a test run one after another: nothing to serialize. */
   async lockTeachers(_teacherIds: readonly string[], _tx: TransactionContext): Promise<void> {}
 
+  async listAllActive(_tx?: TransactionContext): Promise<Array<{ slot: GroupScheduleSlot; teacherId: string | null }>> {
+    return this.rows()
+      .filter((r) => r.retiredAt === null)
+      .map((r) => ({ slot: GroupScheduleSlot.rehydrate({ ...r }), teacherId: this.teachers.get(r.id) ?? null }));
+  }
+
+  async findByIds(ids: readonly string[], _tx?: TransactionContext): Promise<GroupScheduleSlot[]> {
+    const wanted = new Set(ids);
+    return this.rows().filter((r) => wanted.has(r.id)).map((r) => GroupScheduleSlot.rehydrate({ ...r }));
+  }
+
   private rows(): GroupScheduleSlotSnapshot[] {
     return this.order.map((id) => this.slots.get(id)!);
   }

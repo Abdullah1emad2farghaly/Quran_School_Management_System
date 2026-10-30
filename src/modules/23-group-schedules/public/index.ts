@@ -5,7 +5,7 @@
 // (`assertTeacherCanTeach`, `retireSlotsOfArchivedGroup`). Permissions go through the Authorization Engine (`registerScheduleAuthorization`).
 export { GroupScheduleService, type GroupScheduleServiceDeps, type SlotInput, type SlotChangeInput } from '../application/services/group-schedule-service';
 export type { ScheduleRepository } from '../application/ports/schedule-repository';
-export type { ScheduleSlotDto, OwnScheduleItemDto } from '../application/dto/schedule-dto';
+export type { ScheduleSlotDto, OwnScheduleItemDto, ActiveSlotDto } from '../application/dto/schedule-dto';
 export { SchedulePermissions, registerScheduleAuthorization, type ScheduleAuthorizationDeps } from '../application/services/schedule-authorization';
 export { SCHEDULE_ERROR_MESSAGES } from '../application/services/schedule-error-messages';
 export { GroupScheduleSlot, SLOT_RETIRE_REASONS, type GroupScheduleSlotSnapshot, type SlotRetireReason } from '../domain/entities/group-schedule-slot';

@@ -6,6 +6,7 @@ import { getParentService } from '../../config/parents';
 import { getTeacherService } from '../../config/teachers';
 import { getStudentService } from '../../config/students';
 import { getGroupService } from '../../config/groups';
+import { getClassSessionService } from '../../config/class-sessions';
 import { getGroupScheduleService } from '../../config/schedules';
 import { getQuranStructureService } from '../../config/quran';
 import { getPasswordRecoveryService } from '../../config/password-recovery';
@@ -17,6 +18,7 @@ import { createTeacherRouter } from '../../modules/18-teachers/public';
 import { createStudentRouter } from '../../modules/19-students/public';
 import { createGroupRouter } from '../../modules/20-groups/public';
 import { createScheduleRouter } from '../../modules/23-group-schedules/public';
+import { createSessionRouter } from '../../modules/24-sessions/public';
 import { createQuranRouter } from '../../modules/21-quran-structure/public';
 import { healthRouter } from './health.routes';
 
@@ -50,6 +52,7 @@ export function buildApiRouter(): Router {
   router.use('/students', createStudentRouter({ getService: getStudentService, requireAuthentication, requirePermission }));
   router.use('/groups', createGroupRouter({ getService: getGroupService, requireAuthentication, requirePermission }));
   router.use('/group-schedules', createScheduleRouter({ getService: getGroupScheduleService, requireAuthentication, requirePermission }));
+  router.use('/sessions', createSessionRouter({ getService: getClassSessionService, requireAuthentication, requirePermission }));
   router.use('/quran', createQuranRouter({ getService: getQuranStructureService, requireAuthentication, requirePermission }));
   router.use('/auth', createAuthRouter({ getService: getSessionService, requireAuthentication, requireAuthenticationAllowingPasswordChange }));
   return router;

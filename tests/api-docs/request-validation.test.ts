@@ -16,6 +16,7 @@ import { createStudentRouter } from '../../src/modules/19-students/public';
 import { createGroupRouter } from '../../src/modules/20-groups/public';
 import { createQuranRouter } from '../../src/modules/21-quran-structure/public';
 import { createScheduleRouter } from '../../src/modules/23-group-schedules/public';
+import { createSessionRouter } from '../../src/modules/24-sessions/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -54,6 +55,7 @@ function buildApp() {
   app.use('/groups', createGroupRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/group-schedules', createScheduleRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/sessions', createSessionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

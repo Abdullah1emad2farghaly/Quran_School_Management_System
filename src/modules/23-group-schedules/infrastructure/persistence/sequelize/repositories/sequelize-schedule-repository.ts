@@ -134,6 +134,22 @@ export class SequelizeScheduleRepository implements ScheduleRepository {
     return rows.map(toSlot);
   }
 
+  async listAllActive(tx?: TransactionContext): Promise<Array<{ slot: GroupScheduleSlot; teacherId: string | null }>> {
+    const rows = await this.db.query<SlotRow & { teacherId: string | null }>(
+      `SELECT id, group_id AS groupId, school_id AS schoolId, teacher_id AS teacherId, day_of_week AS dayOfWeek, start_minute AS startMinute, end_minute AS endMinute,
+              created_at AS createdAt, created_by AS createdBy, retired_at AS retiredAt, retired_by AS retiredBy, retire_reason AS retireReason, replaced_by_slot_id AS replacedBySlotId
+         FROM group_schedule_slots WHERE active = 1 ORDER BY seq ASC`,
+      { type: QueryTypes.SELECT, transaction: this.t(tx) },
+    );
+    return rows.map((row) => ({ slot: toSlot(row), teacherId: row.teacherId }));
+  }
+
+  async findByIds(ids: readonly string[], tx?: TransactionContext): Promise<GroupScheduleSlot[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db.query<SlotRow>(`${SLOT_SELECT} WHERE id IN (:ids) ORDER BY seq ASC`, { replacements: { ids: [...ids] }, type: QueryTypes.SELECT, transaction: this.t(tx) });
+    return rows.map(toSlot);
+  }
+
   /**
    * One row per Teacher, locked FOR UPDATE by an upsert (the first time it creates the row), always in sorted order so two requests never wait for each
    * other's locks in a different order. The row holds no data: it only serializes the schedule changes of one Teacher.

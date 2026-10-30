@@ -1,6 +1,7 @@
 import { closeDatabase } from '../config/database';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import { registerClassSessionEventHandlers, startClassSessionScheduler, stopClassSessionScheduler } from '../config/class-sessions';
 import { startOutbox, stopOutbox } from '../config/outbox';
 import { registerSessionEventHandlers } from '../config/sessions';
 import { createApp } from './bootstrap/create-app';
@@ -11,10 +12,13 @@ const server = app.listen(env.port, () => {
   if (env.apiDocs.enabled) logger.info('api documentation enabled', { swaggerUi: '/api-docs', openApi: '/api-docs.json' });
 });
 registerSessionEventHandlers();
+registerClassSessionEventHandlers();
 startOutbox();
+startClassSessionScheduler();
 
 async function shutdown(signal: string): Promise<void> {
   logger.info('shutting down', { signal });
+  await stopClassSessionScheduler();
   await stopOutbox();
   server.close(async () => {
     await closeDatabase();

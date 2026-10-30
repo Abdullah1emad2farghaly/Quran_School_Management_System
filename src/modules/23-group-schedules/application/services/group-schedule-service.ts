@@ -5,7 +5,7 @@ import type { TeacherLookup } from '../../../18-teachers/public';
 import { GroupScheduleSlot } from '../../domain/entities/group-schedule-slot';
 import { ScheduleErrorCodes, scheduleError } from '../../domain/errors/schedule-errors';
 import { assertValidRange, formatMinutes, parseDayOfWeek, parseMinutes, slotsOverlap, weekOrderOf, type DayOfWeek } from '../../domain/value-objects/schedule-time';
-import { toSlotDto, type OwnScheduleItemDto, type ScheduleSlotDto } from '../dto/schedule-dto';
+import { toSlotDto, type ActiveSlotDto, type OwnScheduleItemDto, type ScheduleSlotDto } from '../dto/schedule-dto';
 import type { ScheduleRepository } from '../ports/schedule-repository';
 
 /** The weekday and the two times of a slot, as the caller gives them (validated here: `HH:MM`, end after start). */
@@ -222,6 +222,22 @@ export class GroupScheduleService {
    * are held, so the plain reads that follow start a fresh snapshot, and no range-locking read is used (their gap locks would make unrelated groups'
    * inserts wait for each other and deadlock).
    */
+  /**
+   * Read-only, for Module 24 (Sessions): every ACTIVE slot of every group with its school and the group's current Teacher. Changes nothing; no Module 23
+   * rule depends on it. Retired slots are never returned, so a retired slot never produces a session.
+   */
+  async listActiveSlotsForSessions(tx?: TransactionContext): Promise<ActiveSlotDto[]> {
+    return (await this.slots.listAllActive(tx)).map(({ slot, teacherId }) => {
+      const s = slot.snapshot;
+      return { id: s.id, groupId: s.groupId, schoolId: s.schoolId, teacherId, dayOfWeek: s.dayOfWeek, startTime: formatMinutes(s.startMinute), endTime: formatMinutes(s.endMinute), createdAt: s.createdAt };
+    });
+  }
+
+  /** Read-only, for Module 24: the slots (ACTIVE or RETIRED, with the retirement reason and time) with these ids. */
+  async findSlotsByIds(ids: readonly string[], tx?: TransactionContext): Promise<ScheduleSlotDto[]> {
+    return (await this.slots.findByIds(ids, tx)).map(toSlotDto);
+  }
+
   private async lockGroupAndTeacher(groupId: string, t: TransactionContext): Promise<GroupScopeDto> {
     const group = await this.requireWritableGroup(groupId, t);
     if (group.teacherId) await this.slots.lockTeachers([group.teacherId], t);
