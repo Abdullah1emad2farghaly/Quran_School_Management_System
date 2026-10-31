@@ -64,7 +64,7 @@ Migration `20261029100000-create-class-sessions`: table `class_sessions` (no for
 1. `SCHEDULED` is in the specification's lifecycle, but sessions are created directly `OPEN`: keep the value unused, or drop it?
 2. What happens when a session reaches its end with teaching records missing? (not implemented)
 3. Confirm that no code depends on Module 22 for Module 24 (decision 5).
-4. Is cancelling a session a Smart Guard protected action (GPS, §50, Module 25)? Today it is not.
+4. ~~Is cancelling a session a Smart Guard protected action?~~ **Decided by the project owner (Module 25): NO.** Cancelling needs no GPS and never goes through Smart Guard; Module 24 keeps its own authorization and rules.
 5. Confirm or change the PROVISIONAL read permissions (`sessions.session.read`, `sessions.session.list-own`); may Parents see sessions?
 6. If the group's Teacher is replaced after a session was created: today the session keeps its original Teacher, only that Teacher may cancel it, and the authorization scope (the Teacher of the ACTIVE group) then refuses the former Teacher. Should the new Teacher be able to cancel?
 7. A group archived while a session is `IN_PROGRESS`: the session keeps running to `COMPLETED` and the Teacher can no longer cancel it (the group is not ACTIVE). Acceptable?
