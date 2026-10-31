@@ -2244,7 +2244,19 @@ V1:
 
 -   Exam reminder
 
+-   Session half-time teaching reminder (approved amendment)
+
 No competition notifications.
+
+Session half-time teaching reminder (approved amendment):
+
+-   A session may contain memorization, revision, both, or neither. Missing teaching records are NOT an error by themselves, and the system never creates teaching records or fabricates educational data when a session ends.
+
+-   If memorization and/or revision were SCHEDULED for the session and the assigned Teacher has not recorded the corresponding teaching data after half of the session's scheduled duration has elapsed, a reminder is sent to the assigned Teacher only.
+
+-   No reminder is sent for an activity that is not scheduled for that session, and none for a cancelled session.
+
+-   Notification delivery belongs to the Notifications modules (31-34). Modules before them only document this requirement and preserve the integration contract (docs/ATTENDANCE.md); no notification delivery or notification infrastructure is introduced earlier.
 
 * * *
 

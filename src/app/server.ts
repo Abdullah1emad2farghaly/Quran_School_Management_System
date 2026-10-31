@@ -1,6 +1,7 @@
 import { closeDatabase } from '../config/database';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import { registerAttendanceEventHandlers } from '../config/attendance';
 import { registerClassSessionEventHandlers, startClassSessionScheduler, stopClassSessionScheduler } from '../config/class-sessions';
 import { startOutbox, stopOutbox } from '../config/outbox';
 import { registerSessionEventHandlers } from '../config/sessions';
@@ -13,6 +14,7 @@ const server = app.listen(env.port, () => {
 });
 registerSessionEventHandlers();
 registerClassSessionEventHandlers();
+registerAttendanceEventHandlers();
 startOutbox();
 startClassSessionScheduler();
 
