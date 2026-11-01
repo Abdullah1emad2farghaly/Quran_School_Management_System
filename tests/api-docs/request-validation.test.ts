@@ -18,6 +18,8 @@ import { createQuranRouter } from '../../src/modules/21-quran-structure/public';
 import { createScheduleRouter } from '../../src/modules/23-group-schedules/public';
 import { createSessionRouter } from '../../src/modules/24-sessions/public';
 import { createAttendanceRouter } from '../../src/modules/26-attendance/public';
+import { createMemorizationRouter } from '../../src/modules/27-memorization/public';
+import { createRevisionRouter } from '../../src/modules/28-revision/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -57,6 +59,8 @@ function buildApp() {
   app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/group-schedules', createScheduleRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/attendance', createAttendanceRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/memorization', createMemorizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/revision', createRevisionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/sessions', createSessionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);

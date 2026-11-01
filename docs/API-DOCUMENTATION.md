@@ -87,6 +87,20 @@ The current API exposes the following **23 operations** under `/api/v1`. This li
 | Schools | PATCH | `/schools/{id}/gps` | Correct GPS while permitted | Bearer access token + permission/scope |
 | Schools | PUT | `/schools/{id}/manager` | Assign school manager | Bearer access token + permission/scope |
 | Schools | DELETE | `/schools/{id}/manager` | Revoke school manager assignment | Bearer access token + permission/scope |
+| Memorization | GET | `/memorization/students/{id}/records` | A student's memorization records | Bearer access token + permission/scope |
+| Memorization | GET | `/memorization/sessions/{id}` | A session's scheduled, defined and recorded memorization | Bearer access token + permission/scope |
+| Memorization | POST | `/memorization/sessions/{id}/assignments` | Define the next session's assignment (Teacher, session in progress) | Bearer access token + permission/scope |
+| Memorization | PUT | `/memorization/assignments/{id}` | Modify an assignment (Teacher, defining session in progress) | Bearer access token + permission/scope |
+| Memorization | POST | `/memorization/assignments/{id}/cancel` | Cancel an assignment (Teacher, defining session in progress) | Bearer access token + permission/scope |
+| Memorization | POST | `/memorization/sessions/{id}/records` | Record students' memorization (Teacher, Smart Guard) | Bearer access token + permission/scope |
+| Memorization | PUT | `/memorization/records/{id}` | Correct a record (Teacher, Smart Guard, same session) | Bearer access token + permission/scope |
+| Revision | GET | `/revision/students/{id}/records` | A student's revision records | Bearer access token + permission/scope |
+| Revision | GET | `/revision/sessions/{id}` | A session's scheduled, defined and recorded revision | Bearer access token + permission/scope |
+| Revision | POST | `/revision/sessions/{id}/assignments` | Define the next session's revision assignment (Teacher, session in progress) | Bearer access token + permission/scope |
+| Revision | PUT | `/revision/assignments/{id}` | Modify a revision assignment (Teacher, defining session in progress) | Bearer access token + permission/scope |
+| Revision | POST | `/revision/assignments/{id}/cancel` | Cancel a revision assignment (Teacher, defining session in progress) | Bearer access token + permission/scope |
+| Revision | POST | `/revision/sessions/{id}/records` | Record students' revision (Teacher, Smart Guard) | Bearer access token + permission/scope |
+| Revision | PUT | `/revision/records/{id}` | Correct a revision record (Teacher, Smart Guard, same session) | Bearer access token + permission/scope |
 
 Swagger UI documents these operations from the typed contracts registered in `src/app/openapi/api-documents.ts`. Do not add future or planned endpoints to the public contract until they are actually mounted and implemented.
 

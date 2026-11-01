@@ -20,6 +20,9 @@ import { scheduleError, ScheduleErrorCodes } from '../../src/modules/23-group-sc
 import { classSessionError, ClassSessionErrorCodes } from '../../src/modules/24-sessions/public';
 import { smartGuardError, SmartGuardErrorCodes } from '../../src/modules/25-smart-guard/public';
 import { attendanceError, AttendanceErrorCodes } from '../../src/modules/26-attendance/public';
+import { rangeError, QuranRangeErrorCodes } from '../../src/modules/22-quran-range-engine/public';
+import { memorizationError, MemorizationErrorCodes } from '../../src/modules/27-memorization/public';
+import { revisionError, RevisionErrorCodes } from '../../src/modules/28-revision/public';
 import { operationsOf } from './support/lint';
 
 type Factory = (code: never) => { kind: keyof typeof HTTP_STATUS_BY_KIND };
@@ -41,6 +44,9 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [ClassSessionErrorCodes, classSessionError as Factory],
   [SmartGuardErrorCodes, smartGuardError as Factory],
   [AttendanceErrorCodes, attendanceError as Factory],
+  [QuranRangeErrorCodes, rangeError as Factory],
+  [MemorizationErrorCodes, memorizationError as Factory],
+  [RevisionErrorCodes, revisionError as Factory],
 ];
 
 /** The status each module-owned code REALLY answers: taken from the module's own error factory, never retyped. */

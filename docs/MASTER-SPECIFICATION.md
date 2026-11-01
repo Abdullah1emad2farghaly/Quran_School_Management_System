@@ -1354,7 +1354,23 @@ Global teacher deactivation blocks teaching actions across schools but preserves
 -   Existing account: when the phone matches an existing User and the identity matches, the account is reused and receives the TEACHER role and the school relationship. The password is never reset and `mustChangePassword` is never set, cleared or otherwise modified by role assignment; the account's security state is preserved.
 -   Identity: the Teacher's personal name is exactly three parts and is the account's canonical stored name. A missing or different stored name is `TEACHER_IDENTITY_CONFLICT`; the existing name is never overwritten and accounts are never merged. A matching name is the approved matching criterion, not independent proof of identity.
 
-**Implementation assumptions pending the project owner's confirmation (provisional, NOT approved business rules):** SCHOOL_MANAGER registers, reads, lists and removes the school link of Teachers of their own school only; ORGANIZATION_MANAGER and MAIN_ADMIN have no Teacher permission from their role; a Teacher reads only their own profile; a Teacher account is reused only within the same organization (a Parent record of the same account must belong to that organization too); no personal data other than the three-part name and the phone is collected; a school link cannot be removed while the Teacher has groups in that school (guard supplied by Module 20); no global Teacher deactivation while decision D-3 is open. See `docs/TEACHERS.md`.
+**Approved amendment (Module 18, confirmed by the project owner on 2026-10-31), business rules:**
+
+-   SCHOOL_MANAGER manages the Teachers of their own school (register, list, read, remove the school link), within the approved permissions and school scope. ORGANIZATION_MANAGER and MAIN_ADMIN have no Teacher permission from their role. A Teacher reads only their own profile. No personal data other than the three-part name and the phone is collected.
+
+-   An existing Teacher added to another school of the SAME organization reuses the existing account (no duplicate account). A Parent record of the same account must belong to that organization too.
+
+-   Identity matching uses the phone number and the full name. A matching phone with a conflicting name is never merged automatically; it is an explicit identity conflict.
+
+-   Historical Teacher-to-Group assignments are preserved; reassignment follows the approved group rules. A school link cannot be removed while the Teacher has ACTIVE groups in that school.
+
+-   Hard deletion of a Teacher account is not allowed; the account lifecycle / deactivation mechanism is used and history is preserved.
+
+-   One account may be linked to several schools of the same organization; permissions and data access stay scoped to the relevant school.
+
+-   A deactivated Teacher cannot log in or perform new operations that need an active account. Historical records and completed sessions stay intact. Existing group assignments are handled without destroying historical relationships. (Approved behaviour; its implementation waits for decision D-3, see `docs/TEACHERS.md`.)
+
+-   The same person may hold both PARENT and TEACHER on one account and one phone number; role permissions stay separate and active-role selection follows the existing RBAC rules.
 
 * * *
 
@@ -1613,11 +1629,13 @@ Start Time
 End Time
 ```
 
-Multiple recurring schedule slots are allowed.
+Multiple recurring schedule slots are allowed, subject to the approved amendment below.
 
 No overlapping teacher schedules.
 
 Exact boundaries do not overlap.
+
+**Approved amendment (Module 23, final, confirmed by the project owner on 2026-10-31):** a Group may have at most ONE schedule slot per weekday, whatever the times (so at most one session per day); different weekdays may have different slots. This decision is final and is not reopened.
 
 * * *
 
@@ -1787,6 +1805,24 @@ A session may contain multiple valid memorization records.
 
 Historical context must remain unchanged.
 
+**Approved amendment (Module 27, confirmed by the project owner on 2026-10-31), business rules:**
+
+-   **Who records.** Only the Teacher assigned to the group/session may record students' memorization. Recording goes through Smart Guard with GPS validation (§50). A School Manager cannot record on behalf of a Teacher.
+
+-   **Scheduled assignment.** A memorization assignment is scheduled only when it was explicitly defined before the target session starts; no session is assumed to include memorization. The assigned group Teacher defines the assignment of the NEXT session DURING the current session, and may modify or cancel it only while the current session is still in progress. When the current session ends the assignment is final and immutable. The history of the changes made in the permitted period is preserved.
+
+-   **Group type (Module 20).** Collective group: ONE shared assignment for the whole group; no separate assignments for individual students; the Teacher may repeat the same assignment for the whole group or define a new shared one. Individual group: each student has an independent assignment and different students may receive different ranges, according to each student's recitation.
+
+-   **Assignment and performance.** A student is evaluated against the assignment defined for them or for their group; a different range cannot be recorded as fulfilment of the assignment. If a student does not memorize the complete assigned range, the ENTIRE original assignment is repeated for that student in the next session (never only the unfinished part). The scheduled assignment and the actual memorization record stay distinct.
+
+-   **Continuity.** The assignment stays available for the next actual session of the group. If the target session is cancelled the assignment is kept and carried forward; if it is rescheduled it is carried forward according to the updated group schedule; if the Teacher is absent from the target session it is carried forward unchanged to the next actual session. It is never discarded or reset because of cancellation, rescheduling or Teacher absence, and the assigned range is preserved.
+
+-   **Read permissions (strict school and relationship scope).** The assigned Teacher reads the records of their sessions; the School Manager reads the records within their own school; a Parent reads only the records of their own linked children; a Student has no direct read access in this module.
+
+-   **Overlap.** Overlapping memorization ranges are allowed, including ranges previously recorded for the same student; a student may memorize the same verses again in different sessions. Every record is independent and historical records are never overwritten or deleted because of an overlap.
+
+-   **Corrections.** The assigned Teacher may correct a memorization record only during the same session in which it was created; after that session ends the record is immutable. Records are never permanently deleted; the original record and the correction history are preserved and nothing is silently overwritten. A School Manager cannot correct on behalf of the Teacher.
+
 * * *
 
 # 49\. REVISION
@@ -1809,6 +1845,15 @@ to Surah Y
 Historical context must remain preserved.
 
 * * *
+
+**Approved amendment (Module 28, confirmed by the project owner on 2026-11-01), business rules:**
+
+-   **Same rules as Memorization.** Revision follows the approved Module 27 rules (§48 amendment): the assignment of the NEXT session defined by the session's Teacher during the current session and changeable only while it is in progress, then final with its history kept; carried forward unchanged when the target session is cancelled, rescheduled or the Teacher is absent; one shared assignment for a collective group and one assignment per student for an individual group; an incomplete revision repeats the ENTIRE original assigned range in the next applicable session; only the assigned Teacher records, through Smart Guard, and a School Manager cannot record on a Teacher's behalf; same recording, correction (same session only), immutability and audit-history rules; records are never permanently deleted; the same read permissions (assigned Teacher: their sessions; School Manager: their school; Parent: their own linked children only; Student: none); a revision record may exist even when no revision assignment was scheduled. Overlapping ranges are allowed.
+
+-   **Range selection, form A (Start + Unit + Amount).** The meaning of the start number depends on the unit: AYAHS: the ayah number within the selected surah (the surah is required); PAGES: the Mushaf page number; QUARTERS: the Quran quarter number; SURAHS: the surah number in Mushaf order. No separate surah is selected for pages, quarters and surahs. The amount determines the range according to the unit.
+
+-   **Range selection, form B (From Surah X to Surah Y).** Complete surahs, both the starting and the ending surah included; forward and backward are both supported; the number of surahs is inclusive of both ends. It is represented through the existing Quran Range Engine as start = the starting surah, unit = SURAHS, amount = the inclusive number of surahs. Module 22's behaviour is not changed for Module 28.
+
 
 # 50\. SMART GUARD
 
@@ -2255,6 +2300,12 @@ Session half-time teaching reminder (approved amendment):
 -   If memorization and/or revision were SCHEDULED for the session and the assigned Teacher has not recorded the corresponding teaching data after half of the session's scheduled duration has elapsed, a reminder is sent to the assigned Teacher only.
 
 -   No reminder is sent for an activity that is not scheduled for that session, and none for a cancelled session.
+
+-   "Scheduled" means explicitly defined for that session before it starts (for memorization: a specific memorization assignment, §48). A session without such a definition has no scheduled activity.
+
+-   Missing teaching records never justify fabricating educational records or creating them automatically.
+
+-   Modules 27 (Memorization) and 28 (Revision) must expose, through public read interfaces, which activities are scheduled for a session and which teaching records exist for it, so that the Notifications modules can decide whether a reminder is due.
 
 -   Notification delivery belongs to the Notifications modules (31-34). Modules before them only document this requirement and preserve the integration contract (docs/ATTENDANCE.md); no notification delivery or notification infrastructure is introduced earlier.
 

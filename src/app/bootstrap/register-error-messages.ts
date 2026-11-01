@@ -18,6 +18,8 @@ import { SCHEDULE_ERROR_MESSAGES } from '../../modules/23-group-schedules/public
 import { CLASS_SESSION_ERROR_MESSAGES } from '../../modules/24-sessions/public';
 import { SMART_GUARD_ERROR_MESSAGES } from '../../modules/25-smart-guard/public';
 import { ATTENDANCE_ERROR_MESSAGES } from '../../modules/26-attendance/public';
+import { MEMORIZATION_ERROR_MESSAGES } from '../../modules/27-memorization/public';
+import { REVISION_ERROR_MESSAGES } from '../../modules/28-revision/public';
 import { UNIFIED_ADDRESS_ERROR_MESSAGES } from '../../modules/15-unified-address/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
 
@@ -48,4 +50,6 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(CLASS_SESSION_ERROR_MESSAGES);
   registerErrorMessages(SMART_GUARD_ERROR_MESSAGES);
   registerErrorMessages(ATTENDANCE_ERROR_MESSAGES);
+  registerErrorMessages(MEMORIZATION_ERROR_MESSAGES);
+  registerErrorMessages(REVISION_ERROR_MESSAGES);
 }

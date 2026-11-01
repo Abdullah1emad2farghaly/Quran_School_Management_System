@@ -7,6 +7,8 @@ import { getTeacherService } from '../../config/teachers';
 import { getStudentService } from '../../config/students';
 import { getGroupService } from '../../config/groups';
 import { getAttendanceService } from '../../config/attendance';
+import { getMemorizationService } from '../../config/memorization';
+import { getRevisionService } from '../../config/revision';
 import { getClassSessionService } from '../../config/class-sessions';
 import { getGroupScheduleService } from '../../config/schedules';
 import { getQuranStructureService } from '../../config/quran';
@@ -21,6 +23,8 @@ import { createGroupRouter } from '../../modules/20-groups/public';
 import { createScheduleRouter } from '../../modules/23-group-schedules/public';
 import { createSessionRouter } from '../../modules/24-sessions/public';
 import { createAttendanceRouter } from '../../modules/26-attendance/public';
+import { createMemorizationRouter } from '../../modules/27-memorization/public';
+import { createRevisionRouter } from '../../modules/28-revision/public';
 import { createQuranRouter } from '../../modules/21-quran-structure/public';
 import { healthRouter } from './health.routes';
 
@@ -56,6 +60,8 @@ export function buildApiRouter(): Router {
   router.use('/group-schedules', createScheduleRouter({ getService: getGroupScheduleService, requireAuthentication, requirePermission }));
   router.use('/sessions', createSessionRouter({ getService: getClassSessionService, requireAuthentication, requirePermission }));
   router.use('/attendance', createAttendanceRouter({ getService: getAttendanceService, requireAuthentication, requirePermission }));
+  router.use('/memorization', createMemorizationRouter({ getService: getMemorizationService, requireAuthentication, requirePermission }));
+  router.use('/revision', createRevisionRouter({ getService: getRevisionService, requireAuthentication, requirePermission }));
   router.use('/quran', createQuranRouter({ getService: getQuranStructureService, requireAuthentication, requirePermission }));
   router.use('/auth', createAuthRouter({ getService: getSessionService, requireAuthentication, requireAuthenticationAllowingPasswordChange }));
   return router;

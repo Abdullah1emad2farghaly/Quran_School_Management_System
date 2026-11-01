@@ -1,5 +1,7 @@
 # Attendance (Module 26)
 
+**Status: TESTED (0.34.0 to 0.34.2).** **Verification (USER-REPORTED local test results, not executed by me):** on 2026-10-31 the project owner reported that all Module 26 tests pass in their local environment (migrations, typecheck, unit, integration, `api:verify`, `test:db`, full test run and build as listed in "Verify on your machine"). This is the owner's report; I did not execute those runs. What I executed myself is described under "What I executed myself" below. Marking the module COMPLETED is the owner's decision.
+
 Master Specification §51 and the approved Module 26 decisions of the project owner.
 
 ## What it records
@@ -58,7 +60,7 @@ The project owner approved this requirement and asked for it to be in the Master
 Contract the Notifications phase can build on (nothing to change in Module 26):
 - **When:** half of the duration is `scheduledStart + (scheduledEnd − scheduledStart) / 2`, from Module 24's public `ClassSessionService.getSession` (`scheduledStart`, `scheduledEnd`, `teacherId`, `status`) and its events `ClassSessionCreated / Started / Completed / Cancelled`. A cancelled session never triggers it.
 - **To whom:** `session.teacherId` (the assigned Teacher) only.
-- **Whether:** only for activities scheduled for that session that still have no record. **This needs something that does not exist yet:** a notion of "scheduled" memorization/revision activities for a session and the records of Modules 27/28. Modules 27/28 must expose that (e.g. a public read of "scheduled activities and their records for a session") before Modules 31–34 can implement the reminder. Attendance records are unrelated to the reminder.
+- **Whether:** only for activities scheduled for that session that still have no record. **Approved definition (project owner, 2026-10-31):** an activity is "scheduled" only when a specific assignment for it was explicitly defined for the session BEFORE it starts (§48, §63); a session has no scheduled activity unless one was defined, and missing records never justify creating records automatically. Modules 27 and 28 must expose, through public read interfaces, the scheduled activities of a session and the teaching records that exist for it, before Modules 31–34 can implement the reminder. Attendance records are unrelated to the reminder.
 
 ## Technical interpretations (not business rules; please confirm or change)
 0. **Timing at the very end of the session:** Smart Guard's window is inclusive of the scheduled end and the system marks the Teacher ABSENT when the session is COMPLETED at that same end. A check-in in the last instant that loses this race then needs a reason (it is a correction of the automatic ABSENT). Likewise a Teacher who checked in and then cancels becomes ABSENT (the approved rule is applied literally); a School Manager cannot undo it because the session is cancelled.
@@ -74,7 +76,7 @@ Contract the Notifications phase can build on (nothing to change in Module 26):
 - `tests/api-docs/conformance/attendance.test.ts`: every documented operation against real responses (in-memory, no MariaDB).
 - `tests/db/attendance.test.ts` (**needs your MariaDB/XAMPP**): schema, CHECKs, repository, the correction writing status and history together, and concurrency (racing first markings; racing corrections serialized by the row lock).
 
-**What I executed myself:** the 32 service and 12 boundary tests, in a restricted sandbox with a minimal vitest-compatible runner and stubbed libraries (44 passed, 0 failed), plus a partial `tsc` that showed no error other than missing-library ones. Not run by me: the integration, conformance and MariaDB tests, the migration, the real vitest, `typecheck`, `build`, `api:verify`.
+**What I executed myself (historical, before the owner's local run):** the 32 service and 12 boundary tests, in a restricted sandbox with a minimal vitest-compatible runner and stubbed libraries (44 passed, 0 failed), plus a partial `tsc` that showed no error other than missing-library ones. Not run by me: the integration, conformance and MariaDB tests, the migration, the real vitest, `typecheck`, `build`, `api:verify` (these are covered only by the owner's reported local results).
 
 ## Verify on your machine (PowerShell, project folder, MySQL started in XAMPP)
 ```

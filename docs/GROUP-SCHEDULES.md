@@ -1,6 +1,6 @@
 # Group Schedules (Module 23)
 
-**Status: TESTED (0.31.0).** The recurring weekly slots of a group (Master Specification §35 and §44, and the approved Module 23 decisions of 2026-10-28). Depends on Modules 18 (Teachers), 20 (Groups) and 12 (Authorization Engine). Module 20 reaches it through its own `GroupSchedulePort`; Module 24 (Sessions) will read the slots through `GroupScheduleService`.
+**Status: COMPLETED (approved by the project owner; 0.31.0). The one-slot-per-weekday rule is FINAL (confirmed 2026-10-31, recorded as an approved amendment of §44): a group has at most ONE slot per weekday whatever the times; different weekdays may differ.** The recurring weekly slots of a group (Master Specification §35 and §44, and the approved Module 23 decisions of 2026-10-28). Depends on Modules 18 (Teachers), 20 (Groups) and 12 (Authorization Engine). Module 20 reaches it through its own `GroupSchedulePort`; Module 24 (Sessions) will read the slots through `GroupScheduleService`.
 
 ## What a slot is
 A **weekday** with a **start** and an **end**: `{ dayOfWeek: 'MONDAY', startTime: '18:00', endTime: '19:00' }`.
