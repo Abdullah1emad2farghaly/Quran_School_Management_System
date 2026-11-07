@@ -2,6 +2,7 @@ import { SystemClock } from '../modules/00-shared-kernel/public';
 import { AttendanceService, SequelizeAttendanceRepository, createMarkTeacherAbsentOnSessionEndHandler, registerAttendanceAuthorization } from '../modules/26-attendance/public';
 import { getAuthorizationPolicyRegistry } from './authorization';
 import { getClassSessionService } from './class-sessions';
+import { getEvaluationService } from './evaluations';
 import { getSequelize, getUnitOfWork } from './database';
 import { getGroupService } from './groups';
 import { getEventHandlerRegistry, getOutboxService } from './outbox';
@@ -23,6 +24,9 @@ export function getAttendanceService(): AttendanceService {
       schools: getSchoolService(),
       unitOfWork: getUnitOfWork(),
       outbox: getOutboxService(),
+      // Approved Module 29 rule: a student who already has an evaluation for the session cannot be marked ABSENT. The veto is resolved LAZILY (at call time), because Module 29 itself
+      // depends on this service; Module 26 never imports Module 29.
+      evaluationGuard: { findEvaluatedStudents: (sessionId, studentIds, tx) => getEvaluationService().findEvaluatedStudents(sessionId, studentIds, tx) },
       clock: new SystemClock(),
     });
   }

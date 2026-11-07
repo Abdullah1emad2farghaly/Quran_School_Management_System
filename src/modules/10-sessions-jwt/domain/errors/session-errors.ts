@@ -11,6 +11,10 @@ export const SessionErrorCodes = {
   REFRESH_TOKEN_EXPIRED: 'REFRESH_TOKEN_EXPIRED',
   REFRESH_TOKEN_REUSED: 'REFRESH_TOKEN_REUSED',
   SESSION_CONCURRENT_MODIFICATION: 'SESSION_CONCURRENT_MODIFICATION',
+  /** The account already has the maximum number of active sessions (3); the user must log out of one device first. Nothing is revoked automatically. */
+  SESSION_LIMIT_REACHED: 'SESSION_LIMIT_REACHED',
+  /** "My devices": no active session of the caller's account has this id (unknown, another account's or already ended: all the same answer). */
+  SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
   /** The account still has an initial password that must be changed first: only the password change and logout are allowed. */
   PASSWORD_CHANGE_REQUIRED: 'PASSWORD_CHANGE_REQUIRED',
   /** The current password given to the password change is wrong. */
@@ -31,11 +35,13 @@ const KIND: Record<SessionErrorCode, ErrorKind> = {
   REFRESH_TOKEN_EXPIRED: 'UNAUTHENTICATED',
   REFRESH_TOKEN_REUSED: 'UNAUTHENTICATED',
   SESSION_CONCURRENT_MODIFICATION: 'CONFLICT',
+  SESSION_LIMIT_REACHED: 'BUSINESS_RULE',
+  SESSION_NOT_FOUND: 'NOT_FOUND',
   PASSWORD_CHANGE_REQUIRED: 'FORBIDDEN',
   CURRENT_PASSWORD_INCORRECT: 'VALIDATION',
   NEW_PASSWORD_SAME_AS_CURRENT: 'BUSINESS_RULE',
 };
 
-export function sessionError(code: SessionErrorCode): AppError {
-  return new AppError(code, KIND[code]);
+export function sessionError(code: SessionErrorCode, details?: unknown): AppError {
+  return new AppError(code, KIND[code], details);
 }

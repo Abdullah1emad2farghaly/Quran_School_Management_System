@@ -218,6 +218,16 @@ export class ClassSessionService {
     return toSessionDto(session);
   }
 
+  /**
+   * Locks the session row (`SELECT ... FOR UPDATE`) for the rest of the caller's transaction and returns its current state. Changes nothing. Used by modules whose
+   * rules must be serialized per session (Attendance's ABSENT marking and Evaluations' writes), so a rule that spans two modules holds under concurrent requests.
+   */
+  async lockSession(sessionId: string, tx: TransactionContext): Promise<ClassSessionDto> {
+    const session = await this.sessions.lockById(sessionId, tx);
+    if (!session) throw classSessionError('CLASS_SESSION_NOT_FOUND');
+    return toSessionDto(session);
+  }
+
   /** The group of a session (the route authorizes against it). */
   async findGroupIdOf(sessionId: string, tx?: TransactionContext): Promise<string> {
     return (await this.getSession(sessionId, tx)).groupId;

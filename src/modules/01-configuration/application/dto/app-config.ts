@@ -45,6 +45,16 @@ export interface AppConfig {
      */
     readonly enabled: boolean;
   };
+  readonly push: {
+    /** Web Push (Module 31). True only when ALL three VAPID settings are present and valid; otherwise push is disabled (in-app notifications still work). */
+    readonly enabled: boolean;
+    /** VAPID public key (safe to give to browsers). Empty when push is disabled. */
+    readonly vapidPublicKey: string;
+    /** VAPID private key. A SECRET: never logged, returned or documented with a real value. Empty when push is disabled. */
+    readonly vapidPrivateKey: string;
+    /** `mailto:` address or `https:` URL identifying the sender to push services (it is an identifier, not email delivery). Empty when push is disabled. */
+    readonly vapidSubject: string;
+  };
   readonly redis: {
     readonly host: string;
     readonly port: number;

@@ -40,6 +40,9 @@ Migration `20261029100000-create-class-sessions`: table `class_sessions` (no for
 ## Events (outbox, same transaction)
 `ClassSessionCreated`, `ClassSessionStarted`, `ClassSessionCompleted`, `ClassSessionCancelled` (with `cancelSource`, `actorId`, `reason`, `slotRetireReason`).
 
+## Session lock for cross-module rules (additive, Module 29)
+`ClassSessionService.lockSession(sessionId, tx)` locks the session row (`SELECT ... FOR UPDATE`) for the rest of the caller's transaction and returns its fresh state; it changes nothing. Module 26 (marking a student ABSENT) and Module 29 (evaluation writes) take it first so that the attendance/evaluation rule holds under concurrent requests (`docs/EVALUATIONS.md`).
+
 ## Module 23 (additive, read-only)
 `GroupScheduleService.listActiveSlotsForSessions()` and `findSlotsByIds()` (and the matching repository methods and `ActiveSlotDto`). No Module 23 rule, table or endpoint changed.
 

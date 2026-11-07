@@ -11,11 +11,12 @@ import { attendanceError } from '../../domain/errors/attendance-errors';
 import { MAX_BATCH_RECORDS, SYSTEM_ACTOR_ID, SYSTEM_CANCELLATION_REASON, isAttendanceStatus, type ActorRole, type AttendanceStatus, type SubjectType } from '../../domain/value-objects/attendance-status';
 import { toAttendanceDto, type AttendanceBatchResultDto, type AttendanceChangeResultDto, type AttendanceRecordDto, type SessionAttendanceDto } from '../dto/attendance-dto';
 import type { AttendanceRepository } from '../ports/attendance-repository';
+import type { StudentEvaluationGuard } from '../ports/student-evaluation-guard';
 
 export interface AttendanceServiceDeps {
   readonly attendance: AttendanceRepository;
   /** Module 24: the session (times, school, group, Teacher, status) and the group of a session. */
-  readonly sessions: Pick<ClassSessionService, 'getSession' | 'findGroupIdOf'>;
+  readonly sessions: Pick<ClassSessionService, 'getSession' | 'findGroupIdOf' | 'lockSession'>;
   /** Module 25: the protected Teacher actions go through it (GPS, time window, ownership, session not cancelled). */
   readonly smartGuard: Pick<SmartGuard, 'check'>;
   readonly teachers: Pick<TeacherLookup, 'findByUserId'>;
@@ -25,6 +26,11 @@ export interface AttendanceServiceDeps {
   readonly schools: Pick<SchoolLookup, 'isSchoolManager'>;
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
+  /**
+   * OPTIONAL veto (approved Module 29 rule): a student who already has an evaluation for the session cannot be marked ABSENT for it. Plugged in by the composition root
+   * (`src/config/attendance.ts`), never imported from Module 29.
+   */
+  readonly evaluationGuard?: StudentEvaluationGuard;
   readonly clock?: Clock;
 }
 
@@ -100,6 +106,7 @@ export class AttendanceService {
   private readonly schools: AttendanceServiceDeps['schools'];
   private readonly unitOfWork: UnitOfWork;
   private readonly outbox: OutboxService;
+  private readonly evaluationGuard: StudentEvaluationGuard | undefined;
   private readonly clock: Clock;
 
   constructor(deps: AttendanceServiceDeps) {
@@ -111,6 +118,7 @@ export class AttendanceService {
     this.schools = deps.schools;
     this.unitOfWork = deps.unitOfWork;
     this.outbox = deps.outbox;
+    this.evaluationGuard = deps.evaluationGuard;
     this.clock = deps.clock ?? new SystemClock();
   }
 
@@ -218,6 +226,21 @@ export class AttendanceService {
     return this.attendance.listCorrectionsOfSession(sessionId, tx);
   }
 
+  /**
+   * For Module 29 (Evaluations), INSIDE the caller's transaction: the status of each of these students for the session (students without a record are simply absent from
+   * the map: UNMARKED, never ABSENT). It reads with a LOCKING read (`FOR UPDATE`), so the caller sees the latest committed status and holds the rows until it ends.
+   */
+  async lockStudentStatuses(sessionId: string, studentIds: readonly string[], tx: TransactionContext): Promise<ReadonlyMap<string, AttendanceStatus>> {
+    const rows = await this.attendance.lockSubjects(sessionId, 'STUDENT', studentIds, tx);
+    return new Map(rows.map((r) => [r.snapshot.subjectId, r.snapshot.status]));
+  }
+
+  /** The statuses of the students that have a record for the session (a plain read, for reminders and reports; students without a record are UNMARKED). */
+  async listStudentStatuses(sessionId: string, tx?: TransactionContext): Promise<ReadonlyMap<string, AttendanceStatus>> {
+    const rows = await this.attendance.listBySession(sessionId, tx);
+    return new Map(rows.filter((r) => r.snapshot.subjectType === 'STUDENT').map((r) => [r.snapshot.subjectId, r.snapshot.status]));
+  }
+
   /** The group of a session (the routes authorize against it). Module 24's NOT_FOUND for an unknown session. */
   findGroupIdOfSession(sessionId: string): Promise<string> {
     return this.sessions.findGroupIdOf(sessionId);
@@ -264,9 +287,13 @@ export class AttendanceService {
   ): Promise<AttendanceBatchResultDto> {
     if (session.status === 'CANCELLED') throw attendanceError('ATTENDANCE_SESSION_CANCELLED');
     if (roster === 'ALL') await this.assertCurrentlyAssigned(session.groupId, changes.map((c) => c.subjectId));
+    // Approved Module 29 rule: a student who already has an evaluation cannot be marked ABSENT. Marking ABSENT first takes the SESSION row lock (the same lock Module 29's
+    // evaluation writes take first), so the two can never interleave; the veto below then reads with a locking read. Writing PRESENT needs neither.
+    const markingStudentAbsent = subjectType === 'STUDENT' && changes.some((c) => c.status === 'ABSENT');
     for (let attempt = 1; ; attempt += 1) {
       try {
         const results = await this.unitOfWork.run(async (tx) => {
+          if (markingStudentAbsent) await this.sessions.lockSession(session.id, tx);
           const existing = new Map((await this.attendance.lockSubjects(session.id, subjectType, changes.map((c) => c.subjectId), tx)).map((r) => [r.snapshot.subjectId, r]));
           if (roster === 'NEW_ONLY') await this.assertCurrentlyAssigned(session.groupId, changes.filter((c) => !existing.has(c.subjectId)).map((c) => c.subjectId));
 
@@ -283,6 +310,14 @@ export class AttendanceService {
             const correction = current.correct({ status: change.status, reason: change.reason, actorUserId: actor.userId, actorRole: actor.role, clock: this.clock });
             return { change, record: current, correction, isNew: false };
           });
+
+          if (markingStudentAbsent && this.evaluationGuard) {
+            const becomingAbsent = planned.filter((p) => p.change.status === 'ABSENT' && (p.isNew || p.correction !== undefined)).map((p) => p.change.subjectId);
+            if (becomingAbsent.length > 0) {
+              const evaluated = await this.evaluationGuard.findEvaluatedStudents(session.id, becomingAbsent, tx);
+              if (evaluated.length > 0) throw attendanceError('ATTENDANCE_STUDENT_ALREADY_EVALUATED', { studentIds: [...evaluated] });
+            }
+          }
 
           // Phase 2: write (one transaction).
           const out: AttendanceChangeResultDto[] = [];

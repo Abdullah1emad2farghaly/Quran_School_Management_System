@@ -13,4 +13,5 @@ export const ATTENDANCE_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
   { code: AttendanceErrorCodes.ATTENDANCE_STUDENT_NOT_IN_GROUP, message: { ar: 'بعض الطلاب غير مسجلين حاليًا في مجموعة هذه الجلسة.', en: 'Some students are not currently assigned to the group of this session.' } },
   { code: AttendanceErrorCodes.ATTENDANCE_READ_NOT_ALLOWED, message: { ar: 'لا يمكنك الاطلاع على حضور هذه الجلسة.', en: 'You cannot read the attendance of this session.' } },
   { code: AttendanceErrorCodes.ATTENDANCE_CONCURRENT_CHANGE, message: { ar: 'تم تغيير سجل الحضور في الوقت نفسه من طلب آخر. أعد المحاولة.', en: 'The attendance record was changed at the same time by another request. Try again.' } },
+  { code: AttendanceErrorCodes.ATTENDANCE_STUDENT_ALREADY_EVALUATED, message: { ar: 'لا يمكن تسجيل الطالب غائبًا لأن له تقييمًا مسجلًا في هذه الجلسة.', en: 'The student cannot be marked ABSENT because an evaluation is already recorded for this session.' } },
 ];

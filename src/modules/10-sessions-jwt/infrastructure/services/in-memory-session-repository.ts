@@ -1,17 +1,19 @@
 import type { TransactionContext } from '../../../00-shared-kernel/public';
-import type { SessionRepository } from '../../application/ports/session-repository';
+import type { ActiveSessionView, SessionRepository } from '../../application/ports/session-repository';
 import { AuthSession, type AuthSessionSnapshot } from '../../domain/entities/auth-session';
 import { RefreshTokenRecord, type RefreshTokenSnapshot } from '../../domain/entities/refresh-token-record';
 import { sessionError } from '../../domain/errors/session-errors';
+import { isValidSessionSlot } from '../../domain/value-objects/session-policy';
 
-/** In-memory SessionRepository with the same uniqueness and optimistic-lock behavior. For tests. */
+/** In-memory SessionRepository with the same uniqueness (one active session per slot, slots 1..3) and optimistic-lock behavior. For tests. */
 export class InMemorySessionRepository implements SessionRepository {
   readonly sessions = new Map<string, AuthSessionSnapshot>();
   readonly tokens = new Map<string, RefreshTokenSnapshot>();
 
   async insertSession(s: AuthSession, _tx: TransactionContext): Promise<void> {
+    if (!isValidSessionSlot(s.slot)) throw new RangeError('A session slot must be 1..3 (database CHECK).');
     for (const row of this.sessions.values()) {
-      if (row.userId === s.userId && row.revokedAt === null) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
+      if (row.userId === s.userId && row.revokedAt === null && row.slot === s.slot) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
     }
     this.sessions.set(s.id, this.sessionSnapshot(s, 1));
   }
@@ -22,8 +24,37 @@ export class InMemorySessionRepository implements SessionRepository {
     this.sessions.set(s.id, this.sessionSnapshot(s, s.version + 1));
   }
 
-  async lockActiveSessionByUser(userId: string, _tx: TransactionContext): Promise<AuthSession | undefined> {
-    for (const row of this.sessions.values()) if (row.userId === userId && row.revokedAt === null) return AuthSession.rehydrate(row);
+  async lockActiveSessionsByUser(userId: string, _tx: TransactionContext): Promise<AuthSession[]> {
+    return [...this.sessions.values()]
+      .filter((row) => row.userId === userId && row.revokedAt === null)
+      .sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))
+      .map((row) => AuthSession.rehydrate(row));
+  }
+
+  async listActiveSessionViews(userId: string, now: Date, _tx?: TransactionContext): Promise<ActiveSessionView[]> {
+    const views: ActiveSessionView[] = [];
+    for (const row of this.sessions.values()) {
+      if (row.userId !== userId || row.revokedAt !== null) continue;
+      const token = this.currentToken(row.id);
+      if (!token || token.expiresAt.getTime() <= now.getTime()) continue;
+      views.push({ session: AuthSession.rehydrate(row), lastActiveAt: token.issuedAt, expiresAt: token.expiresAt });
+    }
+    return views.sort((a, b) => a.session.createdAt.getTime() - b.session.createdAt.getTime() || (a.session.slot ?? 0) - (b.session.slot ?? 0));
+  }
+
+  async findExpiredActiveSessionIds(now: Date, limit: number, _tx?: TransactionContext): Promise<string[]> {
+    const ids: string[] = [];
+    for (const row of this.sessions.values()) {
+      if (row.revokedAt !== null) continue;
+      const token = this.currentToken(row.id);
+      if (!token || token.expiresAt.getTime() <= now.getTime()) ids.push(row.id);
+      if (ids.length >= limit) break;
+    }
+    return ids;
+  }
+
+  private currentToken(sessionId: string): RefreshTokenSnapshot | undefined {
+    for (const row of this.tokens.values()) if (row.sessionId === sessionId && row.revokedAt === null) return row;
     return undefined;
   }
 
@@ -66,7 +97,7 @@ export class InMemorySessionRepository implements SessionRepository {
   }
 
   private sessionSnapshot(s: AuthSession, version: number): AuthSessionSnapshot {
-    return { id: s.id, userId: s.userId, createdAt: s.createdAt, revokedAt: s.revokedAt, revokedReason: s.revokedReason, version };
+    return { id: s.id, userId: s.userId, createdAt: s.createdAt, revokedAt: s.revokedAt, revokedReason: s.revokedReason, slot: s.slot, deviceLabel: s.deviceLabel, version };
   }
 
   private tokenSnapshot(t: RefreshTokenRecord, version: number): RefreshTokenSnapshot {

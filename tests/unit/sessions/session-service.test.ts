@@ -81,8 +81,8 @@ describe('login', () => {
   });
 });
 
-describe('only one active session per user', () => {
-  it('a new login revokes the previous session and keeps its history', async () => {
+describe('independent sessions (three-session model)', () => {
+  it('a new login does NOT revoke the existing session: both stay valid and keep their own tokens', async () => {
     const h = createSessionHarness();
     const u = await h.createUser();
     const a = await h.service.login({ phone: u.phone, password: u.password });
@@ -90,20 +90,15 @@ describe('only one active session per user', () => {
     const b = await h.service.login({ phone: u.phone, password: u.password });
 
     const sessions = [...h.repository.sessions.values()];
-    expect(sessions).toHaveLength(2); // history preserved
-    expect(sessions.filter((s) => s.revokedAt === null)).toHaveLength(1);
-    expect(sessions.find((s) => s.revokedAt !== null)?.revokedReason).toBe('LOGIN_REPLACED');
-    expect([...h.repository.tokens.values()].filter((t) => t.revokedAt === null)).toHaveLength(1);
+    expect(sessions).toHaveLength(2);
+    expect(sessions.every((s) => s.revokedAt === null)).toBe(true);
+    expect(sessions.map((s) => s.slot).sort()).toEqual([1, 2]);
+    expect([...h.repository.tokens.values()].filter((t) => t.revokedAt === null)).toHaveLength(2);
 
-    expect(await codeOf(h.service.authenticate(a.accessToken))).toBe('SESSION_REVOKED');
-    expect(await codeOf(h.service.refresh(a.refreshToken))).toBe('SESSION_REVOKED'); // not "reuse": it was revoked with its session
+    expect(await h.service.authenticate(a.accessToken)).toMatchObject({ userId: u.id });
     expect(await h.service.authenticate(b.accessToken)).toMatchObject({ userId: u.id });
-
-    expect(h.sessionEvents().map((e) => [e.type, e.payload.reason])).toEqual([
-      ['AuthSessionStarted', undefined],
-      ['AuthSessionRevoked', 'LOGIN_REPLACED'],
-      ['AuthSessionStarted', undefined],
-    ]);
+    expect(h.sessionEvents().map((e) => e.type)).toEqual(['AuthSessionStarted', 'AuthSessionStarted']);
+    expect(h.sessionEvents().some((e) => e.payload.reason === 'LOGIN_REPLACED')).toBe(false);
   });
 
   it('sessions of different users do not affect each other', async () => {

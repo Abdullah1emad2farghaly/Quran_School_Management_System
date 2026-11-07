@@ -36,6 +36,12 @@ An unknown session is Module 24's `CLASS_SESSION_NOT_FOUND` (404), not a Smart G
 5. **Module 23 stays a documented dependency** (§81) **without a code import**: Module 24 already provides all the session-time information. The actual code dependencies are Module 16 (the school's official GPS and status, the GPS constants and distance function) and Module 24 (`getSession`). Module 12 (§81) is also not imported: permission and scope are checked by the protected module before it calls Smart Guard. A boundary test states the exact set: Modules 00, 03, 05, 16, 24.
 6. **Architecture:** a reusable service, no HTTP endpoints; it reuses Module 16's GPS utilities and constants (no second haversine).
 
+## The narrow Module 29 exception (approved 2026-11-02)
+`check({ teacherId, sessionId, gps, allowAfterEndMinutes })`: the OPTIONAL `allowAfterEndMinutes` (default 0; an integer 0-15, otherwise the call throws) keeps the time window open that many minutes after the scheduled end (inclusive). **Only Module 29 (Evaluations) passes it** (15), to let the assigned Teacher record MISSING evaluations after the session ended; Attendance, Memorization and Revision never do, so their window still closes at the scheduled end (a test scans the sources). Ownership, GPS, distance, accuracy and the cancelled-session check all still apply in those minutes, and the refusal still reports `opensAt` / `closesAt` (the extended closing time for that caller). Tests: `tests/unit/smart-guard/smart-guard-grace.test.ts`.
+
+## The exam-compatible entry point (approved 2026-11-02, Module 30)
+`checkProtectedAction({ teacherId, schoolId, gps, window })`: for a protected action that is not a class session. The protected module verifies ownership (Exams: the Teacher is a currently assigned examiner) and supplies the time window (`opensAt`, and `closesAt` or `null` for no upper bound; both ends inclusive); Smart Guard validates the window, the GPS reading, the distance (<= 50 m), the accuracy (<= 20 m) and that the school is ACTIVE, with the same `SMART_GUARD_*` codes and nothing returned. `check` for sessions is unchanged and no other module uses the new method (a test scans the sources). Tests: `tests/unit/smart-guard/smart-guard-protected-action.test.ts`.
+
 ## Technical choices (not business rules)
 - `SMART_GUARD_SCHOOL_NOT_ACTIVE` was added to the proposed code list for the "school is ACTIVE" business rule.
 - Missing GPS and invalid GPS are separate codes; "unavailable" and "denied" look like "missing" to the backend.

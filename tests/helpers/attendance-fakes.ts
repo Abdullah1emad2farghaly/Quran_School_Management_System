@@ -18,11 +18,11 @@ export const fakeSession = (over: Partial<FakeSessionDto> = {}): FakeSessionDto 
 });
 
 /** AttendanceService over in-memory pieces. Smart Guard is a recording fake (its own rules are tested in Module 25). `clock.set(...)` moves time. Events are collected in `events`. */
-export function createAttendanceFakes(opts: { session?: FakeSessionDto } = {}) {
+export function createAttendanceFakes(opts: { session?: FakeSessionDto; evaluationGuard?: { findEvaluatedStudents: (sessionId: string, studentIds: readonly string[], tx: TransactionContext) => Promise<readonly string[]> } } = {}) {
   const clock = new FixedClock(new Date('2026-11-02T16:30:00.000Z'));
   const repo = new InMemoryAttendanceRepository();
   const events: DomainEvent[] = [];
-  const state = { session: opts.session ?? fakeSession(), guardRejects: undefined as Error | undefined, guardCalls: [] as Array<{ teacherId: string; sessionId: string; gps: unknown }> };
+  const state = { session: opts.session ?? fakeSession(), guardRejects: undefined as Error | undefined, guardCalls: [] as Array<{ teacherId: string; sessionId: string; gps: unknown }>, lockedSessions: [] as string[] };
   /** studentId -> groups the student is CURRENTLY assigned to. */
   const assigned = new Map<string, string[]>(STUDENTS.map((s) => [s, ['group-1']]));
   const managers = new Set([`${MANAGER}:school-1`]);
@@ -33,6 +33,7 @@ export function createAttendanceFakes(opts: { session?: FakeSessionDto } = {}) {
     sessions: {
       getSession: async (id: string) => { if (id !== state.session.id) throw Object.assign(new Error('CLASS_SESSION_NOT_FOUND'), { code: 'CLASS_SESSION_NOT_FOUND' }); return state.session as never; },
       findGroupIdOf: async () => state.session.groupId,
+      lockSession: async (id: string) => { state.lockedSessions.push(id); return state.session as never; },
     },
     smartGuard: { check: async (input: { teacherId: string; sessionId: string; gps: unknown }) => { state.guardCalls.push(input); if (state.guardRejects) throw state.guardRejects; return { sessionId: input.sessionId, schoolId: 'school-1', groupId: 'group-1', teacherId: input.teacherId }; } },
     teachers: { findByUserId: async (userId: string) => [TEACHER, OTHER_TEACHER].filter((t) => t.userId === userId).map((t) => ({ id: t.teacherId }))[0] as never },
@@ -40,6 +41,7 @@ export function createAttendanceFakes(opts: { session?: FakeSessionDto } = {}) {
     schools: { isSchoolManager: async (userId: string, schoolId: string) => managers.has(`${userId}:${schoolId}`) },
     unitOfWork,
     outbox: outbox as never,
+    ...(opts.evaluationGuard ? { evaluationGuard: opts.evaluationGuard } : {}),
     clock,
   });
   const types = () => events.map((e) => e.eventType);

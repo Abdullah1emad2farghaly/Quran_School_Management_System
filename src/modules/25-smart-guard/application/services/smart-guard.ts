@@ -16,12 +16,34 @@ export interface SmartGuardDeps {
   readonly logger?: Logger;
 }
 
+/**
+ * The most a protected action may ask the window to stay open after the scheduled end. It exists ONLY for the approved post-completion grace period of Module 29
+ * (Evaluations): 15 minutes. A larger value is refused, so no module can widen the window further by mistake.
+ */
+export const MAX_AFTER_END_MINUTES = 15;
+
 export interface SmartGuardCheckInput {
   /** The caller's Teacher record id, resolved by the protected module from the verified token (never from the request). */
   readonly teacherId: string;
   readonly sessionId: string;
   /** The GPS reading sent with the action: `{ latitude, longitude, accuracyMeters }`. Anything else is refused. */
   readonly gps: unknown;
+  /**
+   * OPTIONAL, default 0. A NARROW, explicit exception (approved for Module 29 Evaluations only): keeps the time window open this many minutes after the scheduled end
+   * (inclusive). Only an action that the approved business rules allow after the session ends passes it; Attendance, Memorization and Revision never do. At most
+   * `MAX_AFTER_END_MINUTES`; anything else (negative, fractional, not a number, too large) is a programming error and throws.
+   */
+  readonly allowAfterEndMinutes?: number;
+}
+
+export interface SmartGuardProtectedActionInput {
+  /** The caller's Teacher record id. The protected module has ALREADY verified that this Teacher owns the action (for exams: is a currently assigned examiner of the exam). */
+  readonly teacherId: string;
+  /** The school whose official GPS the action is measured against (loaded by the protected module from its own server-side data, never from the request). */
+  readonly schoolId: string;
+  readonly gps: unknown;
+  /** The action's time window, supplied by the protected module (both ends inclusive). `closesAt: null` means the window has no upper bound. */
+  readonly window: { readonly opensAt: Date; readonly closesAt: Date | null };
 }
 
 /** What an ALLOWED check tells the protected module. It carries no coordinates. */
@@ -39,7 +61,7 @@ export interface SmartGuardAllowance {
  * `check` validates, in the order of §50, and throws an `AppError` with a `SMART_GUARD_*` code at the first failure (it returns only when the action is ALLOWED):
  *   ownership       the caller is the session's Teacher                         SMART_GUARD_NOT_SESSION_TEACHER
  *   correct time    session start - 15 min <= now <= session end (inclusive,    SMART_GUARD_OUTSIDE_SESSION_WINDOW
- *                   by the SCHEDULED times, not by the session status)
+ *                   by the SCHEDULED times, not by the session status). ONLY an action that passes `allowAfterEndMinutes` (Module 29, <= 15) keeps it open after the end.
  *   GPS reading     present and a valid fix                                     SMART_GUARD_GPS_REQUIRED / SMART_GUARD_GPS_INVALID
  *   distance        <= 50 m from the school's official GPS                      SMART_GUARD_OUTSIDE_SCHOOL_GEOFENCE
  *   GPS accuracy    <= 20 m                                                     SMART_GUARD_GPS_ACCURACY_TOO_LOW
@@ -72,14 +94,44 @@ export class SmartGuard {
     }
   }
 
+  /**
+   * The exam-compatible entry point (approved with Module 30; ADDITIVE, `check` is unchanged for every other module): the same §50 chain for a protected action that is NOT a
+   * class session. The protected module verifies ownership and supplies the time window; Smart Guard validates the time window, the GPS reading, the distance (<= 50 m), the
+   * accuracy (<= 20 m) and that the school is ACTIVE, with the same `SMART_GUARD_*` codes. It returns nothing: it either allows the action or throws.
+   */
+  async checkProtectedAction(input: SmartGuardProtectedActionInput): Promise<void> {
+    try {
+      const now = this.clock.now().getTime();
+      const { opensAt, closesAt } = input.window;
+      if (now < opensAt.getTime() || (closesAt !== null && now > closesAt.getTime())) {
+        throw smartGuardError('SMART_GUARD_OUTSIDE_SESSION_WINDOW', { opensAt: opensAt.toISOString(), closesAt: closesAt === null ? null : closesAt.toISOString() });
+      }
+      const gps = readGpsReading(input.gps);
+      const school = await this.schools.findById(input.schoolId);
+      if (!school) throw smartGuardError('SMART_GUARD_SCHOOL_NOT_ACTIVE');
+      if (!isWithinSchoolGeofence({ latitude: school.latitude, longitude: school.longitude }, gps)) {
+        throw smartGuardError('SMART_GUARD_OUTSIDE_SCHOOL_GEOFENCE', { maxMeters: SCHOOL_GEOFENCE_RADIUS_METERS }, { maxMeters: SCHOOL_GEOFENCE_RADIUS_METERS });
+      }
+      if (gps.accuracyMeters > GPS_MAX_ACCURACY_METERS) {
+        throw smartGuardError('SMART_GUARD_GPS_ACCURACY_TOO_LOW', { maxMeters: GPS_MAX_ACCURACY_METERS }, { maxMeters: GPS_MAX_ACCURACY_METERS });
+      }
+      if (school.status !== 'ACTIVE') throw smartGuardError('SMART_GUARD_SCHOOL_NOT_ACTIVE');
+    } catch (error) {
+      if (error instanceof AppError && error.code.startsWith('SMART_GUARD_')) this.logger?.info('smart guard rejected a protected action', { code: error.code, teacherId: input.teacherId });
+      throw error;
+    }
+  }
+
   private async evaluate(input: SmartGuardCheckInput): Promise<SmartGuardAllowance> {
     const session = await this.sessions.getSession(input.sessionId);
 
     // Ownership
     if (session.teacherId !== input.teacherId) throw smartGuardError('SMART_GUARD_NOT_SESSION_TEACHER');
 
-    // Correct time: by the scheduled times, both ends inclusive.
-    const window = protectedWindowOf(session.scheduledStart, session.scheduledEnd, SESSION_LEAD_MINUTES);
+    // Correct time: by the scheduled times, both ends inclusive. `allowAfterEndMinutes` is the Module 29 grace exception (default 0: the general window).
+    const afterEnd = input.allowAfterEndMinutes ?? 0;
+    if (!Number.isInteger(afterEnd) || afterEnd < 0 || afterEnd > MAX_AFTER_END_MINUTES) throw new Error(`allowAfterEndMinutes must be an integer from 0 to ${MAX_AFTER_END_MINUTES}`);
+    const window = protectedWindowOf(session.scheduledStart, session.scheduledEnd, SESSION_LEAD_MINUTES, afterEnd);
     if (!isInsideProtectedWindow(this.clock.now(), window)) {
       throw smartGuardError('SMART_GUARD_OUTSIDE_SESSION_WINDOW', { opensAt: window.opensAt.toISOString(), closesAt: window.closesAt.toISOString() });
     }

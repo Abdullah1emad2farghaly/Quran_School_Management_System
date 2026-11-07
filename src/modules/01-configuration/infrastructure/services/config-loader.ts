@@ -157,6 +157,19 @@ export function loadConfig(source: EnvSource): AppConfig {
   if (isProduction && otpSender === 'dev-file') issues.push('OTP_SENDER: "dev-file" is for development only and is not allowed in production');
   const otp = { hmacSecret: read('OTP_HMAC_SECRET') ?? '', sender: otpSender };
 
+  // Web Push (Module 31): all three VAPID settings together, or none (push disabled; in-app notifications are unaffected).
+  const vapidPublicKey = read('VAPID_PUBLIC_KEY') ?? '';
+  const vapidPrivateKey = read('VAPID_PRIVATE_KEY') ?? '';
+  const vapidSubject = read('VAPID_SUBJECT') ?? '';
+  const vapidGiven = [vapidPublicKey, vapidPrivateKey, vapidSubject].filter(Boolean).length;
+  if (vapidGiven > 0 && vapidGiven < 3) issues.push('VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT: set all three, or none (push stays disabled)');
+  if (vapidGiven === 3) {
+    if (!/^[A-Za-z0-9_-]{80,100}$/.test(vapidPublicKey)) issues.push('VAPID_PUBLIC_KEY: must be a base64url VAPID public key');
+    if (!/^[A-Za-z0-9_-]{40,50}$/.test(vapidPrivateKey)) issues.push('VAPID_PRIVATE_KEY: must be a base64url VAPID private key');
+    if (!/^(mailto:[^\s@]+@[^\s@]+|https:\/\/[^\s]+)$/.test(vapidSubject)) issues.push('VAPID_SUBJECT: must be a mailto: address or an https: URL');
+  }
+  const push = { enabled: vapidGiven === 3, vapidPublicKey, vapidPrivateKey, vapidSubject };
+
   // API documentation (Swagger UI + raw OpenAPI document): on outside production, off in production unless explicitly enabled.
   const rawApiDocs = read('API_DOCS_ENABLED');
   let apiDocsEnabled = !isProduction;
@@ -221,6 +234,7 @@ export function loadConfig(source: EnvSource): AppConfig {
     http,
     otp,
     apiDocs,
+    push,
     redis,
     files,
   });

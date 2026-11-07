@@ -47,16 +47,18 @@ describe('isDeadlockError', () => {
 describe('SequelizeSessionRepository deadlock handling', () => {
   it('reports a deadlock as the retryable SESSION_CONCURRENT_MODIFICATION', async () => {
     const repository = new SequelizeSessionRepository(failingDb(deadlock()));
-    const session = AuthSession.start({ userId: 'u1', clock: new SystemClock() });
+    const session = AuthSession.start({ userId: 'u1', slot: 1, clock: new SystemClock() });
 
     expect(await codeOf(repository.insertSession(session, undefined as never))).toBe('SESSION_CONCURRENT_MODIFICATION');
-    expect(await codeOf(repository.lockActiveSessionByUser('u1', undefined as never))).toBe('SESSION_CONCURRENT_MODIFICATION');
+    expect(await codeOf(repository.lockActiveSessionsByUser('u1', undefined as never))).toBe('SESSION_CONCURRENT_MODIFICATION');
     expect(await codeOf(repository.updateSession(session, undefined as never))).toBe('SESSION_CONCURRENT_MODIFICATION');
+    expect(await codeOf(repository.listActiveSessionViews('u1', new Date()))).toBe('SESSION_CONCURRENT_MODIFICATION');
+    expect(await codeOf(repository.findExpiredActiveSessionIds(new Date(), 10))).toBe('SESSION_CONCURRENT_MODIFICATION');
   });
 
   it('lets any other database error through unchanged', async () => {
     const boom = new Error('connection lost');
     const repository = new SequelizeSessionRepository(failingDb(boom));
-    await expect(repository.lockActiveSessionByUser('u1', undefined as never)).rejects.toBe(boom);
+    await expect(repository.lockActiveSessionsByUser('u1', undefined as never)).rejects.toBe(boom);
   });
 });

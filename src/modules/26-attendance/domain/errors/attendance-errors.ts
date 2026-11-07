@@ -17,6 +17,8 @@ export const AttendanceErrorCodes = {
   ATTENDANCE_READ_NOT_ALLOWED: 'ATTENDANCE_READ_NOT_ALLOWED',
   /** Another request changed the same record at the same time: retry. */
   ATTENDANCE_CONCURRENT_CHANGE: 'ATTENDANCE_CONCURRENT_CHANGE',
+  /** A student who already has an evaluation for the session cannot be marked ABSENT for it (approved Module 29 rule). */
+  ATTENDANCE_STUDENT_ALREADY_EVALUATED: 'ATTENDANCE_STUDENT_ALREADY_EVALUATED',
 } as const;
 export type AttendanceErrorCode = (typeof AttendanceErrorCodes)[keyof typeof AttendanceErrorCodes];
 
@@ -32,6 +34,7 @@ const KIND: Record<AttendanceErrorCode, ErrorKind> = {
   ATTENDANCE_STUDENT_NOT_IN_GROUP: 'BUSINESS_RULE',
   ATTENDANCE_READ_NOT_ALLOWED: 'FORBIDDEN',
   ATTENDANCE_CONCURRENT_CHANGE: 'CONFLICT',
+  ATTENDANCE_STUDENT_ALREADY_EVALUATED: 'BUSINESS_RULE',
 };
 
 export function attendanceError(code: AttendanceErrorCode, details?: unknown, params?: ErrorMessageParams): AppError {

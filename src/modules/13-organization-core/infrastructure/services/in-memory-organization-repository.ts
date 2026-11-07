@@ -78,4 +78,8 @@ export class InMemoryOrganizationAdminRepository implements OrganizationAdminRep
   async listActiveOrganizationIdsByUser(userId: string, _tx?: TransactionContext): Promise<string[]> {
     return [...this.rows.values()].filter((r) => r.userId === userId && r.revokedAt === null).map((r) => r.organizationId);
   }
+
+  async listActiveUserIdsByOrganization(organizationId: string, _tx?: TransactionContext): Promise<string[]> {
+    return [...this.rows.values()].filter((r) => r.organizationId === organizationId && r.revokedAt === null).sort((a, b) => a.assignedAt.getTime() - b.assignedAt.getTime()).map((r) => r.userId);
+  }
 }

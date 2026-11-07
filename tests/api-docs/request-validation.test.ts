@@ -20,6 +20,9 @@ import { createSessionRouter } from '../../src/modules/24-sessions/public';
 import { createAttendanceRouter } from '../../src/modules/26-attendance/public';
 import { createMemorizationRouter } from '../../src/modules/27-memorization/public';
 import { createRevisionRouter } from '../../src/modules/28-revision/public';
+import { createEvaluationRouter } from '../../src/modules/29-evaluations/public';
+import { createExamRouter } from '../../src/modules/30-exams/public';
+import { createNotificationRouter } from '../../src/modules/31-notifications-core/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -36,6 +39,19 @@ const stubService = new Proxy({}, {
     reached = true;
     throw new AppError('SCHOOL_NOT_FOUND', 'NOT_FOUND');
   },
+});
+/** The Web Push service has ONE synchronous method (`publicKey()`): the generic stub would hand back an un-awaited rejected promise for it. Everything else is asynchronous like the generic stub. */
+const pushStub = new Proxy({}, {
+  get: (_target, property) =>
+    property === 'publicKey'
+      ? () => {
+          reached = true;
+          throw new AppError('SCHOOL_NOT_FOUND', 'NOT_FOUND');
+        }
+      : async () => {
+          reached = true;
+          throw new AppError('SCHOOL_NOT_FOUND', 'NOT_FOUND');
+        },
 });
 const stubAuth: RequestHandler = (req, _res, next) => {
   req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1', mustChangePassword: false };
@@ -61,6 +77,9 @@ function buildApp() {
   app.use('/attendance', createAttendanceRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/memorization', createMemorizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/revision', createRevisionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/evaluations', createEvaluationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/exams', createExamRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/notifications', createNotificationRouter({ getNotifications: getService, getPush: (() => pushStub) as never, requireAuthentication: stubAuth } as never));
   app.use('/sessions', createSessionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);

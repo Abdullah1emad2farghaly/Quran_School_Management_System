@@ -1,9 +1,10 @@
 // Public contract of Module 10 (Sessions & JWT): authentication only (login, refresh with rotation, logout,
-// access-token verification). Authorization (roles, permissions, scope, ownership) is Module 12.
+// access-token verification, up to three concurrent sessions per account, "My devices", expired-session cleanup). Authorization (roles, permissions, scope, ownership) is Module 12.
 // Other modules' routes use `createRequireAuthentication` to protect endpoints and read `req.auth`.
 export { SessionService, type SessionServiceDeps } from '../application/services/session-service';
 export type { AuthResult, AuthPrincipal } from '../application/dto/auth-result';
-export type { SessionRepository } from '../application/ports/session-repository';
+export type { DeviceSessionDto, DeviceSessionListDto } from '../application/dto/device-session-dto';
+export type { SessionRepository, ActiveSessionView } from '../application/ports/session-repository';
 export type {
   AccessTokenService,
   AccessTokenClaims,
@@ -12,6 +13,8 @@ export type {
   RefreshTokenGenerator,
 } from '../application/ports/token-ports';
 export { ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from '../domain/value-objects/token-policy';
+export { MAX_ACTIVE_SESSIONS, SESSION_SLOTS, firstFreeSlot } from '../domain/value-objects/session-policy';
+export { deviceLabelFromUserAgent, normalizeDeviceLabel, MAX_DEVICE_LABEL_LENGTH, UNKNOWN_DEVICE_LABEL } from '../domain/services/device-label';
 export { SESSION_REVOKE_REASONS, type SessionRevokeReason } from '../domain/value-objects/session-revoke-reason';
 export { SessionErrorCodes, sessionError, type SessionErrorCode } from '../domain/errors/session-errors';
 export {
@@ -24,6 +27,7 @@ export { SESSION_ERROR_MESSAGES } from '../application/services/session-error-me
 export { createRevokeSessionsOnUserDeactivatedHandler } from '../application/handlers/revoke-sessions-on-user-deactivated';
 export { JwtAccessTokenService } from '../infrastructure/security/jwt-access-token-service';
 export { HmacRefreshTokenHasher, CryptoRefreshTokenGenerator } from '../infrastructure/security/refresh-token-crypto';
+export { SessionExpiryScheduler, type SessionExpiryJob, type SessionExpirySchedulerOptions } from '../infrastructure/jobs/session-expiry-scheduler';
 export { InMemorySessionRepository } from '../infrastructure/services/in-memory-session-repository';
 export { SequelizeSessionRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-session-repository';
 export { createRequireAuthentication, type RequireAuthenticationOptions } from '../presentation/http/authentication.middleware';

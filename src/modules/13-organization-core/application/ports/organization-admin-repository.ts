@@ -6,4 +6,6 @@ export interface OrganizationAdminRepository {
   insert(assignment: OrganizationAdminAssignment, tx: TransactionContext): Promise<void>;
   findActive(userId: string, organizationId: string, tx?: TransactionContext): Promise<OrganizationAdminAssignment | undefined>;
   listActiveOrganizationIdsByUser(userId: string, tx?: TransactionContext): Promise<string[]>;
+  /** The user ids of the ACTIVE administrators of an organization (Module 32 notifies them of a school request). Oldest link first. */
+  listActiveUserIdsByOrganization(organizationId: string, tx?: TransactionContext): Promise<string[]>;
 }

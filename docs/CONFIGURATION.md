@@ -15,6 +15,7 @@ On any invalid value the server refuses to start and prints **all** problems at 
 | DATABASE_HOST / PORT | 127.0.0.1 / 3306 | port 1–65535 |
 | DATABASE_NAME / USER / PASSWORD | empty | **required in production** |
 | JWT_ACCESS_SECRET / JWT_REFRESH_SECRET | empty | **required in production**, ≥ 32 chars, must differ |
+| VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT | empty | Web Push (Module 31): all three or none; none = push disabled, in-app notifications still work. Generate with `npx web-push generate-vapid-keys`. The private key is a secret (redacted in logs). Subject: `mailto:` or `https:` |
 | OTP_HMAC_SECRET | empty | **required in production**, ≥ 32 chars, must differ from both JWT secrets (dedicated key for OTP / reset-token hashing) |
 | OTP_SENDER | disabled | `disabled` or `dev-file` (development only; rejected in production) |
 | TRUSTED_PROXIES | empty (none trusted) | comma-separated IPs, CIDR ranges or `loopback`/`linklocal`/`uniquelocal`; `true`, hop counts, `*` and `/0` ranges are rejected |

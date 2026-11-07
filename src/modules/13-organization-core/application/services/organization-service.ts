@@ -139,6 +139,11 @@ export class OrganizationService {
     return this.requireAdmins().listActiveOrganizationIdsByUser(userId, tx);
   }
 
+  /** The user ids of the ACTIVE administrators (managers) of an organization. Read-only; used by the Notifications modules to tell them of a school request. */
+  listOrganizationAdminUserIds(organizationId: string, tx?: TransactionContext): Promise<string[]> {
+    return this.requireAdmins().listActiveUserIdsByOrganization(organizationId, tx);
+  }
+
   private requireAdmins(): OrganizationAdminRepository {
     if (!this.admins) throw new Error('OrganizationService: the administrator repository is not configured');
     return this.admins;
@@ -238,6 +243,7 @@ export type OrganizationLookup = Pick<
   | 'requireOrganizationCountryId'
   | 'isOrganizationAdmin'
   | 'listAdministeredOrganizationIds'
+  | 'listOrganizationAdminUserIds'
   | 'getMainOrganization'
   | 'requireMainOrganization'
   | 'requireMainOrganizationCountryId'

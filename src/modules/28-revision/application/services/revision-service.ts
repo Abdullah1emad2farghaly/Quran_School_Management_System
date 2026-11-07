@@ -277,6 +277,14 @@ export class RevisionService {
   findGroupIdOfSession(sessionId: string): Promise<string> {
     return this.sessions.findGroupIdOf(sessionId);
   }
+  /**
+   * One assignment by id, in its CURRENT state (a modified assignment shows its current range, a cancelled one keeps the range that was cancelled); undefined when it does not exist.
+   * A read-only lookup for the Notification Rules module (32), which needs the actual range to tell the parents; it authorizes nothing, so it is never exposed on an endpoint.
+   */
+  async findAssignmentById(assignmentId: string, tx?: TransactionContext): Promise<AssignmentDto | undefined> {
+    const a = await this.repo.findAssignment(assignmentId, tx);
+    return a ? toAssignmentDto(a) : undefined;
+  }
   async findGroupIdOfAssignment(assignmentId: string): Promise<string> {
     const a = await this.repo.findAssignment(assignmentId);
     if (!a) throw revisionError('REVISION_ASSIGNMENT_NOT_FOUND');

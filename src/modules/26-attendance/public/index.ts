@@ -6,6 +6,7 @@
 export { createMarkTeacherAbsentOnSessionEndHandler } from '../application/handlers/mark-teacher-absent-on-session-end';
 export { AttendanceService, type SessionEndFacts, type SystemAbsenceOutcome, type AttendanceServiceDeps, type StudentAttendanceInput, type TeacherCheckInInput, type ManagerAttendanceInput, type AttendanceListInput } from '../application/services/attendance-service';
 export type { AttendanceRepository } from '../application/ports/attendance-repository';
+export type { StudentEvaluationGuard } from '../application/ports/student-evaluation-guard';
 export type { AttendanceRecordDto, AttendanceBatchResultDto, AttendanceChangeResultDto, AttendanceOutcome, SessionAttendanceDto } from '../application/dto/attendance-dto';
 export { AttendancePermissions, registerAttendanceAuthorization, type AttendanceAuthorizationDeps } from '../application/services/attendance-authorization';
 export { ATTENDANCE_ERROR_MESSAGES } from '../application/services/attendance-error-messages';

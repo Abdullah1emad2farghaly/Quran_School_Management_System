@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import type { TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { SessionRepository } from '../../../../application/ports/session-repository';
+import type { ActiveSessionView, SessionRepository } from '../../../../application/ports/session-repository';
 import { AuthSession } from '../../../../domain/entities/auth-session';
 import { RefreshTokenRecord } from '../../../../domain/entities/refresh-token-record';
 import { sessionError } from '../../../../domain/errors/session-errors';
@@ -18,7 +18,13 @@ interface SessionRow {
   createdAt: DateLike;
   revokedAt: DateLike | null;
   revokedReason: SessionRevokeReason | null;
+  slot: number | string | null;
+  deviceLabel: string | null;
   version: number | string;
+}
+interface ActiveViewRow extends SessionRow {
+  lastActiveAt: DateLike;
+  tokenExpiresAt: DateLike;
 }
 interface TokenRow {
   id: string;
@@ -49,12 +55,25 @@ export function isDeadlockError(error: unknown): boolean {
 
 const SELECT_SESSION = `
   SELECT id, user_id AS userId, created_at AS createdAt, revoked_at AS revokedAt,
-         revoked_reason AS revokedReason, version
+         revoked_reason AS revokedReason, slot, device_label AS deviceLabel, version
     FROM auth_sessions`;
 const SELECT_TOKEN = `
   SELECT id, session_id AS sessionId, user_id AS userId, token_hash AS tokenHash, issued_at AS issuedAt,
          expires_at AS expiresAt, revoked_at AS revokedAt, replaced_by_id AS replacedById, version
     FROM refresh_tokens`;
+
+function toSession(r: SessionRow): AuthSession {
+  return AuthSession.rehydrate({
+    id: r.id,
+    userId: r.userId,
+    createdAt: asDate(r.createdAt),
+    revokedAt: asNullableDate(r.revokedAt),
+    revokedReason: r.revokedReason,
+    slot: r.slot === null ? null : Number(r.slot),
+    deviceLabel: r.deviceLabel,
+    version: Number(r.version),
+  });
+}
 
 export class SequelizeSessionRepository implements SessionRepository {
   constructor(private readonly db: Queryable) {}
@@ -62,12 +81,12 @@ export class SequelizeSessionRepository implements SessionRepository {
   async insertSession(s: AuthSession, tx: TransactionContext): Promise<void> {
     try {
       await this.db.query(
-        `INSERT INTO auth_sessions (id, user_id, revoked_at, revoked_reason, active, version, created_at, updated_at)
-         VALUES (:id, :userId, NULL, NULL, 1, 1, :createdAt, :createdAt)`,
-        { replacements: { id: s.id, userId: s.userId, createdAt: s.createdAt }, transaction: sequelizeTransactionOf(tx) ?? null },
+        `INSERT INTO auth_sessions (id, user_id, revoked_at, revoked_reason, active, slot, device_label, version, created_at, updated_at)
+         VALUES (:id, :userId, NULL, NULL, 1, :slot, :deviceLabel, 1, :createdAt, :createdAt)`,
+        { replacements: { id: s.id, userId: s.userId, slot: s.slot, deviceLabel: s.deviceLabel, createdAt: s.createdAt }, transaction: sequelizeTransactionOf(tx) ?? null },
       );
     } catch (error) {
-      // The unique (user_id, active) index is the final guard: only one active session per user.
+      // The unique (user_id, slot) index is the final guard of the three-session limit: two racing logins can never take the same slot.
       if (error instanceof UniqueConstraintError || isDeadlockError(error)) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
       throw error;
     }
@@ -77,7 +96,7 @@ export class SequelizeSessionRepository implements SessionRepository {
     const [, affected] = await this.guarded(() => this.db.query(
       `UPDATE auth_sessions
           SET revoked_at = :revokedAt, revoked_reason = :reason, active = IF(:revokedAt IS NULL, 1, NULL),
-              updated_at = :updatedAt, version = version + 1
+              slot = IF(:revokedAt IS NULL, :slot, NULL), updated_at = :updatedAt, version = version + 1
         WHERE id = :id AND version = :version`,
       {
         replacements: {
@@ -85,6 +104,7 @@ export class SequelizeSessionRepository implements SessionRepository {
           version: s.version,
           revokedAt: s.revokedAt,
           reason: s.revokedReason,
+          slot: s.slot,
           updatedAt: s.revokedAt ?? s.createdAt,
         },
         type: QueryTypes.UPDATE,
@@ -94,8 +114,45 @@ export class SequelizeSessionRepository implements SessionRepository {
     if (Number(affected) !== 1) throw sessionError('SESSION_CONCURRENT_MODIFICATION');
   }
 
-  lockActiveSessionByUser(userId: string, tx: TransactionContext): Promise<AuthSession | undefined> {
-    return this.oneSession(`${SELECT_SESSION} WHERE user_id = :v AND active = 1 FOR UPDATE`, userId, tx);
+  async lockActiveSessionsByUser(userId: string, tx: TransactionContext): Promise<AuthSession[]> {
+    const rows = await this.guarded(() =>
+      this.db.query<SessionRow>(`${SELECT_SESSION} WHERE user_id = :v AND active = 1 ORDER BY slot FOR UPDATE`, {
+        replacements: { v: userId },
+        type: QueryTypes.SELECT,
+        transaction: sequelizeTransactionOf(tx) ?? null,
+      }),
+    );
+    return rows.map(toSession);
+  }
+
+  async listActiveSessionViews(userId: string, now: Date, tx?: TransactionContext): Promise<ActiveSessionView[]> {
+    const rows = await this.guarded(() =>
+      this.db.query<ActiveViewRow>(
+        `SELECT s.id, s.user_id AS userId, s.created_at AS createdAt, s.revoked_at AS revokedAt, s.revoked_reason AS revokedReason,
+                s.slot, s.device_label AS deviceLabel, s.version, t.issued_at AS lastActiveAt, t.expires_at AS tokenExpiresAt
+           FROM auth_sessions s
+           JOIN refresh_tokens t ON t.session_id = s.id AND t.active = 1
+          WHERE s.user_id = :userId AND s.active = 1 AND t.expires_at > :now
+          ORDER BY s.created_at ASC, s.slot ASC`,
+        { replacements: { userId, now }, type: QueryTypes.SELECT, transaction: sequelizeTransactionOf(tx) ?? null },
+      ),
+    );
+    return rows.map((r) => ({ session: toSession(r), lastActiveAt: asDate(r.lastActiveAt), expiresAt: asDate(r.tokenExpiresAt) }));
+  }
+
+  async findExpiredActiveSessionIds(now: Date, limit: number, tx?: TransactionContext): Promise<string[]> {
+    const rows = await this.guarded(() =>
+      this.db.query<{ id: string }>(
+        `SELECT s.id
+           FROM auth_sessions s
+           LEFT JOIN refresh_tokens t ON t.session_id = s.id AND t.active = 1
+          WHERE s.active = 1 AND (t.id IS NULL OR t.expires_at <= :now)
+          ORDER BY s.created_at ASC
+          LIMIT :limit`,
+        { replacements: { now, limit: Math.max(1, Math.floor(limit)) }, type: QueryTypes.SELECT, transaction: sequelizeTransactionOf(tx) ?? null },
+      ),
+    );
+    return rows.map((r) => r.id);
   }
 
   lockSession(sessionId: string, tx: TransactionContext): Promise<AuthSession | undefined> {
@@ -183,15 +240,7 @@ export class SequelizeSessionRepository implements SessionRepository {
       }),
     );
     const r = rows[0];
-    if (!r) return undefined;
-    return AuthSession.rehydrate({
-      id: r.id,
-      userId: r.userId,
-      createdAt: asDate(r.createdAt),
-      revokedAt: asNullableDate(r.revokedAt),
-      revokedReason: r.revokedReason,
-      version: Number(r.version),
-    });
+    return r ? toSession(r) : undefined;
   }
 
   private async oneToken(sql: string, value: string, tx?: TransactionContext): Promise<RefreshTokenRecord | undefined> {

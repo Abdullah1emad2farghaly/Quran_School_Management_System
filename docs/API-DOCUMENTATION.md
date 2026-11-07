@@ -68,8 +68,20 @@ The current API exposes the following **23 operations** under `/api/v1`. This li
 | Health | GET | `/health/ready` | Database readiness probe | Public |
 | Authentication | POST | `/auth/login` | Log in with phone and password | Public |
 | Authentication | POST | `/auth/refresh` | Rotate access and refresh tokens | Refresh token |
-| Authentication | POST | `/auth/logout` | Revoke current session | Bearer access token |
+| Authentication | POST | `/auth/logout` | Revoke the current session only | Bearer access token |
 | Authentication | POST | `/auth/logout-all` | Revoke all sessions for current user | Bearer access token |
+| Authentication | POST | `/auth/change-password` | Change own password; revokes the account's other sessions | Bearer access token |
+| Notifications | GET | `/notifications` | List own notifications (paged, newest first) | Bearer access token |
+| Notifications | GET | `/notifications/unread-count` | Unread count | Bearer access token |
+| Notifications | POST | `/notifications/{id}/read` | Mark one read | Bearer access token |
+| Notifications | POST | `/notifications/read-all` | Mark all read | Bearer access token |
+| Notifications | DELETE | `/notifications/{id}` | Delete one (permanent) | Bearer access token |
+| Notifications | DELETE | `/notifications` | Clear all (permanent) | Bearer access token |
+| Notifications | GET | `/notifications/push/public-key` | VAPID public key | Bearer access token |
+| Notifications | GET / POST | `/notifications/push-subscriptions` | List / register this browser | Bearer access token |
+| Notifications | POST | `/notifications/push-subscriptions/unsubscribe` | Remove this browser | Bearer access token |
+| Authentication | GET | `/auth/sessions` | My devices: list own active sessions (max 3) | Bearer access token |
+| Authentication | DELETE | `/auth/sessions/{sessionId}` | My devices: revoke one own session | Bearer access token |
 | Password recovery | POST | `/auth/password-recovery/request` | Request recovery OTP | Public; rate-limited by service |
 | Password recovery | POST | `/auth/password-recovery/verify` | Verify OTP and obtain reset token | Public; OTP credential |
 | Password recovery | POST | `/auth/password-recovery/reset` | Set password using reset token | Public; reset-token credential |
@@ -99,6 +111,28 @@ The current API exposes the following **23 operations** under `/api/v1`. This li
 | Revision | POST | `/revision/sessions/{id}/assignments` | Define the next session's revision assignment (Teacher, session in progress) | Bearer access token + permission/scope |
 | Revision | PUT | `/revision/assignments/{id}` | Modify a revision assignment (Teacher, defining session in progress) | Bearer access token + permission/scope |
 | Revision | POST | `/revision/assignments/{id}/cancel` | Cancel a revision assignment (Teacher, defining session in progress) | Bearer access token + permission/scope |
+| Evaluations | POST | `/evaluations/sessions/{id}/records` | Record evaluations and modify scores (assigned Teacher, Smart Guard, one atomic batch) | Bearer access token + permission/scope |
+| Evaluations | GET | `/evaluations/sessions/{id}` | A session's evaluations | Bearer access token + permission/scope |
+| Evaluations | GET | `/evaluations/students/{id}` | A student's evaluations (grades and notes) | Bearer access token + permission/scope |
+| Exams | POST | `/exams` | Create an exam (DRAFT) | Bearer access token + permission/scope |
+| Exams | GET | `/exams/schools/{schoolId}` | The school's exams | Bearer access token + permission/scope |
+| Exams | GET | `/exams/schedule` | The exam schedule of my children's schools (Parent) | Bearer access token + permission/scope |
+| Exams | GET | `/exams/assigned` | The exams I am assigned to (examiner) | Bearer access token + permission/scope |
+| Exams | GET | `/exams/students/{id}` | A student's recorded results and absences | Bearer access token + permission/scope |
+| Exams | GET | `/exams/{id}` | An exam | Bearer access token + permission/scope |
+| Exams | PATCH | `/exams/{id}` | Edit an exam (DRAFT/SCHEDULED) | Bearer access token + permission/scope |
+| Exams | DELETE | `/exams/{id}` | Delete an exam (before it starts) | Bearer access token + permission/scope |
+| Exams | POST | `/exams/{id}/schedule` | Schedule | Bearer access token + permission/scope |
+| Exams | POST | `/exams/{id}/cancel` | Cancel (before it starts) | Bearer access token + permission/scope |
+| Exams | POST | `/exams/{id}/complete` | Complete an exam without an end time | Bearer access token + permission/scope |
+| Exams | POST | `/exams/{id}/end` | End (COMPLETED to ENDED, final) | Bearer access token + permission/scope |
+| Exams | PUT | `/exams/{id}/end-time` | Change the end time of a started exam | Bearer access token + permission/scope |
+| Exams | POST | `/exams/{id}/examiners` | Assign an examiner | Bearer access token + permission/scope |
+| Exams | DELETE | `/exams/{id}/examiners/{teacherId}` | Remove an examiner | Bearer access token + permission/scope |
+| Exams | GET | `/exams/{id}/results` | All recorded results and absent students (School Manager) | Bearer access token + permission/scope |
+| Exams | GET | `/exams/{id}/groups` | The groups with their pending counts | Bearer access token + permission/scope |
+| Exams | GET | `/exams/{id}/groups/{groupId}/students` | The pending students of one group | Bearer access token + permission/scope |
+| Exams | POST | `/exams/{id}/results` | Record one student's result (assigned examiner, Smart Guard) | Bearer access token + permission/scope |
 | Revision | POST | `/revision/sessions/{id}/records` | Record students' revision (Teacher, Smart Guard) | Bearer access token + permission/scope |
 | Revision | PUT | `/revision/records/{id}` | Correct a revision record (Teacher, Smart Guard, same session) | Bearer access token + permission/scope |
 
