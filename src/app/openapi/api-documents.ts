@@ -14,6 +14,7 @@ import { memorizationApiDoc } from '../../modules/27-memorization/public';
 import { evaluationApiDoc } from '../../modules/29-evaluations/public';
 import { examApiDoc } from '../../modules/30-exams/public';
 import { notificationApiDoc } from '../../modules/31-notifications-core/public';
+import { subscriptionApiDoc } from '../../modules/33-subscriptions/public';
 import { revisionApiDoc } from '../../modules/28-revision/public';
 import { quranApiDoc } from '../../modules/21-quran-structure/public';
 import { healthApiDoc } from '../routes/health.openapi';
@@ -26,7 +27,7 @@ export const API_VERSION = 'v1';
  * EVERY module that exposes HTTP endpoints registers its contract here. The route-inventory test fails when a mounted route is
  * missing from (or an operation here is missing in) the real router, so a module cannot be completed without its documentation.
  */
-export const API_MODULE_DOCS: readonly ModuleApiDoc[] = [healthApiDoc, authApiDoc, recoveryApiDoc, organizationApiDoc, schoolApiDoc, parentApiDoc, teacherApiDoc, studentApiDoc, groupApiDoc, quranApiDoc, scheduleApiDoc, classSessionApiDoc, attendanceApiDoc, memorizationApiDoc, revisionApiDoc, evaluationApiDoc, examApiDoc, notificationApiDoc];
+export const API_MODULE_DOCS: readonly ModuleApiDoc[] = [healthApiDoc, authApiDoc, recoveryApiDoc, organizationApiDoc, schoolApiDoc, parentApiDoc, teacherApiDoc, studentApiDoc, groupApiDoc, quranApiDoc, scheduleApiDoc, classSessionApiDoc, attendanceApiDoc, memorizationApiDoc, revisionApiDoc, evaluationApiDoc, examApiDoc, notificationApiDoc, subscriptionApiDoc];
 
 /** Assembles the served OpenAPI document. Error messages come from the real catalog (register the messages first). */
 export function buildApiDocument(messages: MessageLookup = defaultMessageCatalog): OpenApiDocument {

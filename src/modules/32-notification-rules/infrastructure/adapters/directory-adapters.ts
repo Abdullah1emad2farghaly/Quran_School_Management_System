@@ -4,6 +4,7 @@ import type { SchoolLookup } from '../../../16-schools/public';
 import type { TeacherLookup } from '../../../18-teachers/public';
 import type { StudentLookup } from '../../../19-students/public';
 import type { QuranStructureLookup } from '../../../21-quran-structure/public';
+import type { CollectorDirectory, SubscriptionLookup, SubscriptionDto } from '../../../33-subscriptions/public';
 import type { GroupService } from '../../../20-groups/public';
 import type { MemorizationService } from '../../../27-memorization/public';
 import type { RevisionService } from '../../../28-revision/public';
@@ -27,6 +28,8 @@ import type {
   SessionReads,
   StudentDirectory,
   StudentInfo,
+  SubscriptionDirectory,
+  SubscriptionInfo,
   TeacherDirectory,
 } from '../../application/ports/directories';
 import { spanOf } from '../../application/services/assignment-description';
@@ -209,5 +212,40 @@ export class PublicSessionReads implements SessionReads {
     const memorization = await textOf(m.assignments, studentId, this.deps.quran);
     const revision = await textOf(r.assignments, studentId, this.deps.quran);
     return { ...(memorization ? { memorization } : {}), ...(revision ? { revision } : {}) };
+  }
+}
+
+const toSubscriptionInfo = (s: SubscriptionDto): SubscriptionInfo => ({ id: s.id, studentId: s.studentId, schoolId: s.schoolId, month: s.month, status: s.status, createdAt: s.createdAt });
+
+/** Read-only adapter over the PUBLIC contracts of Module 33 (subscriptions, collectors) and Module 16 (the school's current manager). */
+export class PublicSubscriptionDirectory implements SubscriptionDirectory {
+  constructor(
+    private readonly deps: {
+      readonly subscriptions: Pick<SubscriptionLookup, 'findById' | 'findBatchById' | 'listOfBatch' | 'listUnpaidOfSchoolMonth'>;
+      readonly collectors: Pick<CollectorDirectory, 'listActiveCollectorUserIds'>;
+      readonly schools: Pick<SchoolLookup, 'getActiveManagerUserId'>;
+    },
+  ) {}
+
+  async find(subscriptionId: string): Promise<SubscriptionInfo | undefined> {
+    const s = await this.deps.subscriptions.findById(subscriptionId);
+    return s ? toSubscriptionInfo(s) : undefined;
+  }
+  async findBatch(batchId: string) {
+    const b = await this.deps.subscriptions.findBatchById(batchId);
+    return b ? { id: b.id, schoolId: b.schoolId, month: b.month } : undefined;
+  }
+  async listOfBatch(batchId: string): Promise<SubscriptionInfo[]> {
+    return (await this.deps.subscriptions.listOfBatch(batchId)).map(toSubscriptionInfo);
+  }
+  async listUnpaidOfSchoolMonth(schoolId: string, month: string): Promise<SubscriptionInfo[]> {
+    return (await this.deps.subscriptions.listUnpaidOfSchoolMonth(schoolId, month)).map(toSubscriptionInfo);
+  }
+  collectorUserIds(schoolId: string): Promise<string[]> {
+    return this.deps.collectors.listActiveCollectorUserIds(schoolId);
+  }
+  async schoolManagerUserIds(schoolId: string): Promise<string[]> {
+    const id = await this.deps.schools.getActiveManagerUserId(schoolId);
+    return id ? [id] : [];
   }
 }

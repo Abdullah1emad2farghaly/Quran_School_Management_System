@@ -1,0 +1,27 @@
+import type { ErrorMessageEntry } from '../../../03-error-localization/public';
+import { SubscriptionErrorCodes as C } from '../../domain/errors/subscription-errors';
+
+export const SUBSCRIPTION_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
+  { code: C.SUBSCRIPTION_NOT_FOUND, message: { ar: 'الاشتراك غير موجود.', en: 'The subscription was not found.' } },
+  { code: C.SUBSCRIPTIONS_ALREADY_CREATED_FOR_MONTH, message: { ar: 'تم إنشاء اشتراكات الشهر الحالي لهذه المدرسة بالفعل.', en: 'The subscriptions for the current month have already been created for this school.' } },
+  { code: C.SUBSCRIPTION_ALREADY_EXISTS, message: { ar: 'يوجد اشتراك لهذا الطالب في الشهر الحالي بالفعل.', en: 'This student already has a subscription for the current month.' } },
+  { code: C.SUBSCRIPTIONS_NOT_CREATED_FOR_MONTH, message: { ar: 'لم يتم إنشاء اشتراكات الشهر الحالي لهذه المدرسة بعد؛ أنشئ اشتراكات الشهر أولاً.', en: 'The subscriptions for the current month have not been created for this school yet; create the monthly subscriptions first.' } },
+  { code: C.SUBSCRIPTION_NO_ACTIVE_STUDENTS, message: { ar: 'لا يوجد طلاب نشطون في هذه المدرسة لإنشاء اشتراكات لهم.', en: 'This school has no active students to create subscriptions for.' } },
+  { code: C.SUBSCRIPTION_SCHOOL_NOT_ACTIVE, message: { ar: 'المدرسة غير موجودة أو غير نشطة.', en: 'The school does not exist or is not active.' } },
+  { code: C.SUBSCRIPTION_STUDENT_NOT_FOUND, message: { ar: 'الطالب غير موجود.', en: 'The student was not found.' } },
+  { code: C.SUBSCRIPTION_STUDENT_NOT_IN_SCHOOL, message: { ar: 'الطالب لا يتبع هذه المدرسة.', en: 'The student does not belong to this school.' } },
+  { code: C.SUBSCRIPTION_STUDENT_NOT_ACTIVE, message: { ar: 'الطالب غير نشط؛ لا يمكن إنشاء اشتراك له.', en: 'The student is not active; a subscription cannot be created for them.' } },
+  { code: C.SUBSCRIPTION_NOT_UNPAID, message: { ar: 'يمكن فقط تغيير حالة الاشتراك غير المدفوع.', en: 'Only an unpaid subscription can be changed.' } },
+  { code: C.SUBSCRIPTION_ALREADY_PAID, message: { ar: 'هذا الاشتراك مدفوع بالفعل.', en: 'This subscription is already paid.' } },
+  { code: C.OLDER_UNPAID_SUBSCRIPTIONS_EXIST, message: { ar: 'لا يمكن دفع شهر أحدث قبل أن تكون كل الأشهر الأقدم مدفوعة أو معفاة.', en: 'A newer month cannot be paid until every older month is paid or waived.' } },
+  { code: C.SUBSCRIPTION_CONCURRENT_MODIFICATION, message: { ar: 'تم تعديل الاشتراك بواسطة عملية أخرى؛ أعد المحاولة.', en: 'The subscription was changed by another operation; try again.' } },
+  { code: C.INVALID_SUBSCRIPTION_MONTH, message: { ar: 'الشهر غير صالح؛ الصيغة المطلوبة YYYY-MM.', en: 'The month is not valid; the required format is YYYY-MM.' } },
+  { code: C.INVALID_COLLECTOR_NAME, message: { ar: 'اسم المحصّل غير صالح: يجب أن يتكوّن من ثلاثة أجزاء بالضبط ولا يتجاوز 200 حرف.', en: 'The collector name is not valid: it must have exactly three parts and at most 200 characters.' } },
+  { code: C.COLLECTOR_IDENTITY_CONFLICT, message: { ar: 'رقم الهاتف مسجّل لحساب آخر ولا يمكن مطابقة الاسم؛ لم يتم دمج الحسابات.', en: 'This phone number belongs to an existing account whose name is missing or different; accounts are never merged automatically.' } },
+  { code: C.COLLECTOR_ORGANIZATION_CONFLICT, message: { ar: 'هذا الحساب مسجّل في مؤسسة أخرى ولا يمكن استخدامه عبر المؤسسات.', en: 'This account belongs to another organization and cannot be reused across organizations.' } },
+  { code: C.COLLECTOR_ACCOUNT_INACTIVE, message: { ar: 'الحساب المسجّل بهذا الرقم معطّل.', en: 'The account registered with this phone number is inactive.' } },
+  { code: C.COLLECTOR_SCHOOL_NOT_ACTIVE, message: { ar: 'المدرسة غير موجودة أو غير نشطة.', en: 'The school does not exist or is not active.' } },
+  { code: C.COLLECTOR_ALREADY_LINKED_TO_SCHOOL, message: { ar: 'المحصّل مرتبط بهذه المدرسة بالفعل.', en: 'The collector is already linked to this school.' } },
+  { code: C.COLLECTOR_SCHOOL_LINK_NOT_FOUND, message: { ar: 'المحصّل غير مرتبط بهذه المدرسة.', en: 'The collector is not linked to this school.' } },
+  { code: C.COLLECTOR_CONCURRENT_MODIFICATION, message: { ar: 'تم تعديل ارتباط المحصّل بواسطة عملية أخرى؛ أعد المحاولة.', en: 'The collector link was changed by another operation; try again.' } },
+];

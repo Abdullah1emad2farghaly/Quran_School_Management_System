@@ -8,6 +8,7 @@ export { createAssignmentChangeHandler } from '../application/handlers/assignmen
 export { createExamEventHandlers } from '../application/handlers/exam-event-handlers';
 export { createEvaluationHandler } from '../application/handlers/evaluation-handler';
 export { createSessionReminderHandlers } from '../application/handlers/session-reminder-handlers';
+export { createSubscriptionRuleHandlers } from '../application/handlers/subscription-handlers';
 export { ReminderProcessor, type ReminderPassResult } from '../application/services/reminder-processor';
 export { registerRuleTemplates, TEMPLATE_KEYS, RULE_TEMPLATES } from '../application/services/rule-templates';
 export type { RuleDeps } from '../application/services/rule-support';
@@ -29,10 +30,23 @@ export type {
   SessionReads,
   StudentDirectory,
   StudentInfo,
+  SubscriptionBatchInfo,
+  SubscriptionDirectory,
+  SubscriptionInfo,
   TeacherDirectory,
 } from '../application/ports/directories';
 export type { ReminderRecord, RuleStateRepository, ExamAudienceRole } from '../application/ports/rule-state-repository';
-export { REMINDER_KINDS, type ReminderKind, type ReminderState } from '../domain/value-objects/reminder-rules';
+export {
+  REMINDER_KINDS,
+  type ReminderKind,
+  type ReminderState,
+  daysInMonth,
+  firstUnpaidReminderDueAt,
+  monthEndReminderDueAt,
+  monthEndWindowStartDate,
+  MONTH_END_WINDOW_DAYS,
+  UNPAID_REMINDER_CALENDAR_DAYS,
+} from '../domain/value-objects/reminder-rules';
 export { ReminderScheduler } from '../infrastructure/jobs/reminder-scheduler';
 export { InMemoryRuleStateRepository } from '../infrastructure/services/in-memory-rule-state-repository';
 export { SequelizeRuleStateRepository } from '../infrastructure/persistence/sequelize/repositories/sequelize-rule-state-repository';
@@ -45,5 +59,6 @@ export {
   PublicSchoolDirectory,
   PublicSessionReads,
   PublicStudentDirectory,
+  PublicSubscriptionDirectory,
   PublicTeacherDirectory,
 } from '../infrastructure/adapters/directory-adapters';

@@ -1,3 +1,5 @@
+import { addDays, cairoWallClockToUtc } from '../../../24-sessions/public';
+
 /**
  * Time-driven reminder rules of Module 32 (Master Specification §57, §63 and the approved Module 32 decisions).
  * Pure functions only: nothing here reads a clock or another module.
@@ -9,6 +11,10 @@ export const REMINDER_KINDS = {
   SESSION_HALF_TIME: 'SESSION_HALF_TIME',
   /** Warning 15 minutes before the scheduled session end: present students with an assignment still lack an evaluation (assigned Teacher only). */
   SESSION_EVALUATION: 'SESSION_EVALUATION',
+  /** First unpaid-subscription reminder, 3 calendar days (Africa/Cairo) after the subscription was created (the student's Parent only). Subject = subscription id. */
+  SUBSCRIPTION_UNPAID_3D: 'SUBSCRIPTION_UNPAID_3D',
+  /** End-of-month unpaid reminder, once per school and month at the start of the final five calendar days (Parent, Collectors, School Manager). Subject = the bulk batch id. */
+  SUBSCRIPTION_UNPAID_MONTH_END: 'SUBSCRIPTION_UNPAID_MONTH_END',
 } as const;
 export type ReminderKind = (typeof REMINDER_KINDS)[keyof typeof REMINDER_KINDS];
 export const REMINDER_KIND_VALUES: readonly ReminderKind[] = Object.values(REMINDER_KINDS);
@@ -51,3 +57,32 @@ export function sessionPhaseOf(status: string): SessionPhase {
   if (status === 'SCHEDULED' || status === 'OPEN') return 'NOT_STARTED';
   return 'OVER'; // COMPLETED, CANCELLED (and anything unknown: never remind)
 }
+
+// ---------------------------------------------------------------------------------------------- unpaid subscription reminders (Module 33, approved decisions)
+
+/** The reminders are due at the START of their calendar day in Africa/Cairo (minute 0 of the day). Change this one constant to send later in the day. */
+export const SUBSCRIPTION_REMINDER_MINUTE_OF_DAY = 0;
+/** First reminder: this many CALENDAR days (not 72 elapsed hours) after the creation date in Africa/Cairo. */
+export const UNPAID_REMINDER_CALENDAR_DAYS = 3;
+/** End-of-month reminder: the window is the final five calendar days of the month. */
+export const MONTH_END_WINDOW_DAYS = 5;
+
+/** The number of calendar days of a `YYYY-MM` month (February by its real length, leap years included). */
+export function daysInMonth(month: string): number {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** A subscription created on Cairo date D is reminded on D + 3 calendar days (start of that day), whatever the time of day it was created. */
+export function firstUnpaidReminderDueAt(createdBusinessDate: string): Date {
+  return cairoWallClockToUtc(addDays(createdBusinessDate, UNPAID_REMINDER_CALENDAR_DAYS), SUBSCRIPTION_REMINDER_MINUTE_OF_DAY);
+}
+
+/** The first day of the final five calendar days of `month` (30 days -> the 26th, 31 -> the 27th, February by its real length). */
+export function monthEndWindowStartDate(month: string): string {
+  const day = daysInMonth(month) - (MONTH_END_WINDOW_DAYS - 1);
+  return `${month}-${String(day).padStart(2, '0')}`;
+}
+
+/** The instant the end-of-month reminder of `month` is due: the start of the first day of the final five calendar days, Africa/Cairo. */
+export const monthEndReminderDueAt = (month: string): Date => cairoWallClockToUtc(monthEndWindowStartDate(month), SUBSCRIPTION_REMINDER_MINUTE_OF_DAY);

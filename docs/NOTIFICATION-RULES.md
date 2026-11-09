@@ -85,5 +85,15 @@ Nothing is created for a record that predates the deployment. Reminders exist on
 4. A student is linked to ONE Parent record today; the port returns a list, so several linked Parents will all be notified without a code change.
 5. Surah names are Arabic (Module 21 stores only Arabic names), also inside English messages.
 
+## Subscription rules (added with Module 33, release 0.43.0)
+Approved 2026-11-07/08; details in `docs/SUBSCRIPTIONS.md`. Module 32 consumes Module 33's events and still creates notifications only through Module 31.
+- **A. `SubscriptionsCreated`** → the school's CURRENT Subscription Collectors. The same event schedules the reminders below.
+- **B. `SubscriptionPaid`** → the student's Parent ONLY (no Collector, no School Manager); cancels the pending 3-day reminder. `SubscriptionWaived` cancels it too.
+- **C. `SUBSCRIPTION_UNPAID_3D`** (one reminder row per subscription, subject = subscription id): due at 00:00 Africa/Cairo of (creation date + 3 calendar days). The CURRENT status is read when it fires; only UNPAID is reminded; the Parent only; once-only key per subscription.
+- **D. `SUBSCRIPTION_UNPAID_MONTH_END`** (one row per bulk batch = school and month): due at 00:00 Africa/Cairo of the first day of the final five calendar days of the month (30 days → 26th, 31 → 27th, February by its real length). Only UNPAID subscriptions at that moment; each Parent hears about their own child; the school's CURRENT Collectors and School Manager get one message listing the unpaid students (first 20 names, then "(+N)"); nothing is sent when none is unpaid; once per school and month. If the month is already over the reminder is suppressed; a bulk run made inside the window is sent at the next pass.
+- Templates: `subscription.monthly-created.collector`, `subscription.paid.parent`, `subscription.unpaid-reminder.parent`, `subscription.month-end.parent|collector|manager` (Arabic and English).
+- Migration `20261108110000-notification-reminders-subscription-kinds` widens the `notification_reminders.kind` CHECK (additive). Module 32 now depends on Module 33's public contract (events, read-only lookups); Module 33 never imports Module 32.
+- Tests: `tests/unit/notification-rules/subscription-rules.test.ts` (25 tests) and `tests/unit/subscriptions/subscription-time-rules.test.ts`.
+
 ## Tests
 `tests/unit/notification-rules` (129 tests: formatting and timing, templates, school, group, assignment details per unit, evaluation, exam, reminders, scheduler recovery, no backfill, concurrency, retry, boundaries), `tests/unit/organization/organization-admin-user-ids.test.ts`, `tests/unit/memorization/memorization-find-assignment.test.ts`, `tests/unit/revision/revision-find-assignment.test.ts`, real-database suite `tests/db/notification-rules.test.ts` (claim lock under concurrency, upsert re-arm, CHECK constraints, chunked audience). See `docs/PROJECT-CHANGELOG.md` (0.41.0) for what was actually executed.

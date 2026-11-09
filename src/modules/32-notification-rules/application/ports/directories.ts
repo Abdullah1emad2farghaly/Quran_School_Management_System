@@ -122,3 +122,31 @@ export interface QuranDirectory {
   surahName(surah: number): Promise<string>;
   ayahLocation(surah: number, ayah: number): Promise<AyahLocation | undefined>;
 }
+
+export interface SubscriptionInfo {
+  readonly id: string;
+  readonly studentId: string;
+  readonly schoolId: string;
+  /** `YYYY-MM` (Africa/Cairo). */
+  readonly month: string;
+  readonly status: string;
+  readonly createdAt: Date;
+}
+export interface SubscriptionBatchInfo {
+  readonly id: string;
+  readonly schoolId: string;
+  readonly month: string;
+}
+/** Read-only view of Module 33 (Subscriptions) and of the people who must hear about it (adapter over PUBLIC contracts only). */
+export interface SubscriptionDirectory {
+  find(subscriptionId: string): Promise<SubscriptionInfo | undefined>;
+  findBatch(batchId: string): Promise<SubscriptionBatchInfo | undefined>;
+  /** Every subscription of the bulk run (any status). */
+  listOfBatch(batchId: string): Promise<SubscriptionInfo[]>;
+  /** The subscriptions of the school and month that are UNPAID right now. */
+  listUnpaidOfSchoolMonth(schoolId: string, month: string): Promise<SubscriptionInfo[]>;
+  /** The accounts of the school's CURRENT Subscription Collectors (an ended assignment is not included). */
+  collectorUserIds(schoolId: string): Promise<string[]>;
+  /** The account of the school's CURRENT School Manager (empty when it has none). */
+  schoolManagerUserIds(schoolId: string): Promise<string[]>;
+}

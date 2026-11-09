@@ -9,6 +9,7 @@ import {
   createGroupChangeHandlers,
   createSchoolRequestHandlers,
   createSessionReminderHandlers,
+  createSubscriptionRuleHandlers,
   registerRuleTemplates,
   type AssignmentDirectory,
   type AssignmentKind,
@@ -28,6 +29,9 @@ import {
   type SessionReads,
   type StudentDirectory,
   type StudentInfo,
+  type SubscriptionBatchInfo,
+  type SubscriptionDirectory,
+  type SubscriptionInfo,
   type TeacherDirectory,
 } from '../../src/modules/32-notification-rules/public';
 import { createNotificationHarness } from './notification-harness';
@@ -91,6 +95,33 @@ export class FakeSchools implements SchoolDirectory {
   }
   async organizationManagerUserIds(orgId: string): Promise<string[]> {
     return [...(this.managers.get(orgId) ?? [])];
+  }
+}
+/** Mutable fake of the Module 33 read port: a test arranges subscriptions, batches, collectors and the school manager. */
+export class FakeSubscriptions implements SubscriptionDirectory {
+  readonly subscriptions = new Map<string, SubscriptionInfo>();
+  readonly batches = new Map<string, SubscriptionBatchInfo>();
+  /** subscription ids by batch id */
+  readonly batchMembers = new Map<string, string[]>();
+  readonly collectors = new Map<string, string[]>();
+  readonly managers = new Map<string, string[]>();
+  async find(id: string): Promise<SubscriptionInfo | undefined> {
+    return this.subscriptions.get(id);
+  }
+  async findBatch(id: string): Promise<SubscriptionBatchInfo | undefined> {
+    return this.batches.get(id);
+  }
+  async listOfBatch(batchId: string): Promise<SubscriptionInfo[]> {
+    return (this.batchMembers.get(batchId) ?? []).map((id) => this.subscriptions.get(id)!).filter(Boolean);
+  }
+  async listUnpaidOfSchoolMonth(schoolId: string, month: string): Promise<SubscriptionInfo[]> {
+    return [...this.subscriptions.values()].filter((s) => s.schoolId === schoolId && s.month === month && s.status === 'UNPAID');
+  }
+  async collectorUserIds(schoolId: string): Promise<string[]> {
+    return [...(this.collectors.get(schoolId) ?? [])];
+  }
+  async schoolManagerUserIds(schoolId: string): Promise<string[]> {
+    return [...(this.managers.get(schoolId) ?? [])];
   }
 }
 export class FakeExams implements ExamDirectory {
@@ -157,8 +188,9 @@ export function createRulesHarness(options: { language?: 'en' | 'default' } = {}
   const sessions = new FakeSessions();
   const assignments = new FakeAssignments();
   const quran = new FakeQuran();
+  const subscriptions = new FakeSubscriptions();
   const state = new InMemoryRuleStateRepository();
-  const deps: RuleDeps = { notifications: h.service, templates: h.templates, students, teachers, groups, schools, exams, sessions, assignments, quran, state, unitOfWork: h.unitOfWork, clock: h.clock };
+  const deps: RuleDeps = { notifications: h.service, templates: h.templates, students, teachers, groups, schools, exams, sessions, assignments, quran, subscriptions, state, unitOfWork: h.unitOfWork, clock: h.clock };
   const handlers: EventHandler[] = [
     ...createSchoolRequestHandlers(deps),
     ...createGroupChangeHandlers(deps),
@@ -166,6 +198,7 @@ export function createRulesHarness(options: { language?: 'en' | 'default' } = {}
     ...createExamEventHandlers(deps),
     createEvaluationHandler(deps),
     ...createSessionReminderHandlers(deps),
+    ...createSubscriptionRuleHandlers(deps),
   ];
   const processor = new ReminderProcessor(deps);
 
@@ -199,6 +232,6 @@ export function createRulesHarness(options: { language?: 'en' | 'default' } = {}
   groups.members.set(ids.group1, [ids.studentA, ids.studentA2, ids.studentB]);
   schools.managers.set(ids.org, [ids.manager1, ids.manager2]);
 
-  return { h, deps, students, teachers, groups, schools, exams, sessions, assignments, quran, state, processor, deliver, redeliver, makeEvent, notificationsOf, allNotifications };
+  return { h, deps, students, teachers, groups, schools, exams, sessions, assignments, quran, subscriptions, state, processor, deliver, redeliver, makeEvent, notificationsOf, allNotifications };
 }
 export type RulesHarness = ReturnType<typeof createRulesHarness>;

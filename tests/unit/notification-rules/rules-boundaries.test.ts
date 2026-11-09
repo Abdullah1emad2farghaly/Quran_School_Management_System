@@ -20,9 +20,13 @@ describe('Module 32 boundaries', () => {
     expect(all.filter(({ spec }) => /\/\d{2}-[a-z-]+\//.test(spec) && !/\/\d{2}-[a-z-]+\/public$/.test(spec))).toEqual([]);
   });
 
-  it('depends only on lower-numbered modules (no circular dependency)', () => {
+  it('depends only on lower-numbered modules, plus Module 33 (the subscription events it consumes), with no circular dependency', () => {
     const deps = new Set(all.flatMap(({ spec }) => { const m = /\/(\d{2})-[a-z-]+\/public$/.exec(spec); return m ? [Number(m[1])] : []; }));
-    expect([...deps].filter((n) => n >= 32)).toEqual([]);
+    // Module 33 (Subscriptions) is a PRODUCER whose events and read contracts Module 32 consumes; it must never import Module 32 back (that would be a cycle).
+    expect([...deps].filter((n) => n >= 32 && n !== 33)).toEqual([]);
+    const producer = path.resolve(__dirname, '../../../src/modules/33-subscriptions');
+    const back = sourceFiles(producer).flatMap((file) => importsOf(file)).filter((spec) => /\/32-notification-rules\//.test(spec));
+    expect(back).toEqual([]);
   });
 
   it('only the infrastructure adapters know the business modules; handlers and processors read them through ports', () => {

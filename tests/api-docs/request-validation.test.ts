@@ -12,6 +12,7 @@ import { createRecoveryRouter } from '../../src/modules/11-otp-password-recovery
 import { createOrganizationRouter, createSchoolRouter } from '../../src/modules/16-schools/public';
 import { createParentRouter } from '../../src/modules/17-parents/public';
 import { createTeacherRouter } from '../../src/modules/18-teachers/public';
+import { createSubscriptionRouter } from '../../src/modules/33-subscriptions/public';
 import { createStudentRouter } from '../../src/modules/19-students/public';
 import { createGroupRouter } from '../../src/modules/20-groups/public';
 import { createQuranRouter } from '../../src/modules/21-quran-structure/public';
@@ -70,6 +71,7 @@ function buildApp() {
   app.use('/schools', createSchoolRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
   app.use('/parents', createParentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/teachers', createTeacherRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getService, getCollectors: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/students', createStudentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/groups', createGroupRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));

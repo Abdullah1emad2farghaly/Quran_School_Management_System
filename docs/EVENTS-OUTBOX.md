@@ -43,3 +43,7 @@ Migration `20261007120000-create-outbox-messages.js` (run `npm run db:migrate`).
 
 ## Testing other modules
 Use `InMemoryOutboxStore` (same claim semantics) with `OutboxService`/`OutboxProcessor` and a `FixedClock`. Real-database checks: `npm run test:db` (after migrating).
+
+## Module 33 events (Subscriptions)
+`SubscriptionsCreated` (aggregate `SubscriptionBatch`; payload `batchId, schoolId, organizationId, month, count, actorId`), `SubscriptionCreated`, `SubscriptionPaid`, `SubscriptionWaived` (aggregate `Subscription`; payload `subscriptionId, studentId, schoolId, organizationId, month, actorId`), `CollectorSchoolLinked`, `CollectorSchoolLinkRemoved` (aggregate `CollectorSchoolLink`; payload `linkId, userId, schoolId, organizationId, actorId`). Identifiers only. Consumed by Module 32 (`notification-rules.subscriptions-created`, `…subscription-created-schedule`, `…subscription-paid`, `…subscription-waived`).
+

@@ -34,6 +34,12 @@ export const TEMPLATE_KEYS = {
   sessionHalfTimeRevision: 'session.half-time.revision',
   sessionHalfTimeBoth: 'session.half-time.both',
   sessionEvaluationWarning: 'session.evaluation-warning',
+  subscriptionsCreatedCollector: 'subscription.monthly-created.collector',
+  subscriptionPaidParent: 'subscription.paid.parent',
+  subscriptionUnpaidParent: 'subscription.unpaid-reminder.parent',
+  subscriptionMonthEndParent: 'subscription.month-end.parent',
+  subscriptionMonthEndCollector: 'subscription.month-end.collector',
+  subscriptionMonthEndManager: 'subscription.month-end.manager',
 } as const;
 
 export type { AssignmentKind };
@@ -192,6 +198,30 @@ export const RULE_TEMPLATES: readonly NotificationTemplate[] = [
   t(TEMPLATE_KEYS.sessionEvaluationWarning, 'SESSION_EVALUATION_WARNING', { ar: 'تنبيه: تقييمات ناقصة', en: 'Warning: evaluations missing' }, {
     ar: 'تبقّى 15 دقيقة على نهاية الحصة، وهناك طلاب حاضرون لم يتم تقييمهم بعد ({count}).',
     en: 'The session ends in 15 minutes and some present students have not been evaluated yet ({count}).',
+  }),
+  t(TEMPLATE_KEYS.subscriptionsCreatedCollector, 'SUBSCRIPTIONS_CREATED', { ar: 'تم إنشاء اشتراكات الشهر', en: 'Monthly subscriptions created' }, {
+    ar: 'تم إنشاء اشتراكات شهر {month} لمدرسة «{school}» ({count} اشتراكًا غير مدفوع).',
+    en: 'The subscriptions of {month} were created for the school “{school}” ({count} unpaid subscriptions).',
+  }),
+  t(TEMPLATE_KEYS.subscriptionPaidParent, 'SUBSCRIPTION_PAID', { ar: 'تم تسجيل دفع الاشتراك', en: 'Subscription payment recorded' }, {
+    ar: 'تم تسجيل دفع اشتراك شهر {month} للطالب {student}.',
+    en: 'The payment of the {month} subscription of {student} was recorded.',
+  }),
+  t(TEMPLATE_KEYS.subscriptionUnpaidParent, 'SUBSCRIPTION_UNPAID_REMINDER', { ar: 'تذكير باشتراك غير مدفوع', en: 'Unpaid subscription reminder' }, {
+    ar: 'اشتراك شهر {month} للطالب {student} لا يزال غير مدفوع.',
+    en: 'The {month} subscription of {student} is still unpaid.',
+  }),
+  t(TEMPLATE_KEYS.subscriptionMonthEndParent, 'SUBSCRIPTION_MONTH_END_REMINDER', { ar: 'تذكير بنهاية الشهر: اشتراك غير مدفوع', en: 'End-of-month reminder: unpaid subscription' }, {
+    ar: 'اقترب انتهاء شهر {month} واشتراك الطالب {student} لا يزال غير مدفوع.',
+    en: '{month} is ending and the subscription of {student} is still unpaid.',
+  }),
+  t(TEMPLATE_KEYS.subscriptionMonthEndCollector, 'SUBSCRIPTION_MONTH_END_REMINDER', { ar: 'طلاب لم يدفعوا اشتراك الشهر', en: 'Students with unpaid subscriptions' }, {
+    ar: 'اقترب انتهاء شهر {month}. لا يزال {count} طالبًا لم يدفعوا اشتراك مدرسة «{school}»: {students}',
+    en: '{month} is ending. {count} students of the school “{school}” still have an unpaid subscription: {students}',
+  }),
+  t(TEMPLATE_KEYS.subscriptionMonthEndManager, 'SUBSCRIPTION_MONTH_END_REMINDER', { ar: 'طلاب لم يدفعوا اشتراك الشهر', en: 'Students with unpaid subscriptions' }, {
+    ar: 'اقترب انتهاء شهر {month}. لا يزال {count} طالبًا لم يدفعوا اشتراك مدرسة «{school}»: {students}',
+    en: '{month} is ending. {count} students of the school “{school}” still have an unpaid subscription: {students}',
   }),
 ];
 

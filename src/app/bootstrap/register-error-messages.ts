@@ -22,6 +22,7 @@ import { MEMORIZATION_ERROR_MESSAGES } from '../../modules/27-memorization/publi
 import { EVALUATION_ERROR_MESSAGES } from '../../modules/29-evaluations/public';
 import { EXAM_ERROR_MESSAGES } from '../../modules/30-exams/public';
 import { NOTIFICATION_ERROR_MESSAGES } from '../../modules/31-notifications-core/public';
+import { SUBSCRIPTION_ERROR_MESSAGES } from '../../modules/33-subscriptions/public';
 import { REVISION_ERROR_MESSAGES } from '../../modules/28-revision/public';
 import { UNIFIED_ADDRESS_ERROR_MESSAGES } from '../../modules/15-unified-address/public';
 import { AUTHORIZATION_ERROR_MESSAGES } from '../../modules/12-authorization-engine/public';
@@ -58,4 +59,5 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(EXAM_ERROR_MESSAGES);
   registerErrorMessages(NOTIFICATION_ERROR_MESSAGES);
   registerErrorMessages(REVISION_ERROR_MESSAGES);
+  registerErrorMessages(SUBSCRIPTION_ERROR_MESSAGES);
 }

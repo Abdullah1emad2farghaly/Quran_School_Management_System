@@ -1,7 +1,7 @@
-import { newUuid } from '../../../00-shared-kernel/public';
+import { businessDateOf, newUuid } from '../../../00-shared-kernel/public';
 import { dedupKeys } from '../../domain/value-objects/dedup-keys';
 import { formatCairoDateTime } from '../../domain/value-objects/message-format';
-import { REMINDER_KINDS, REMINDER_LIMITS, examReminderDueAt, reminderRetryDelayMs, sessionPhaseOf } from '../../domain/value-objects/reminder-rules';
+import { MONTH_END_WINDOW_DAYS, REMINDER_KINDS, REMINDER_LIMITS, examReminderDueAt, monthEndReminderDueAt, reminderRetryDelayMs, sessionPhaseOf } from '../../domain/value-objects/reminder-rules';
 import type { ReminderRecord } from '../ports/rule-state-repository';
 import { TEMPLATE_KEYS } from './rule-templates';
 import { notifyParentsOf, notifyTeacher, type RuleDeps } from './rule-support';
@@ -73,9 +73,64 @@ export class ReminderProcessor {
         return this.halfTimeReminder(reminder.subjectId, now);
       case REMINDER_KINDS.SESSION_EVALUATION:
         return this.evaluationWarning(reminder.subjectId, now);
+      case REMINDER_KINDS.SUBSCRIPTION_UNPAID_3D:
+        return this.firstUnpaidReminder(reminder.subjectId);
+      case REMINDER_KINDS.SUBSCRIPTION_UNPAID_MONTH_END:
+        return this.monthEndReminder(reminder.subjectId, now);
       default:
         return Promise.resolve(SUPPRESSED);
     }
+  }
+
+  /**
+   * SUBSCRIPTION_UNPAID_3D (approved Module 33 decision): 3 calendar days after the subscription's creation date (Africa/Cairo) the CURRENT status is checked; only a subscription that is
+   * still UNPAID is reminded, and only the student's Parent. PAID, WAIVED or a subscription that no longer exists is suppressed. The once-only key is per subscription: never twice.
+   */
+  private async firstUnpaidReminder(subscriptionId: string): Promise<Outcome> {
+    const { subscriptions, students } = this.deps;
+    const subscription = await subscriptions.find(subscriptionId);
+    if (!subscription || subscription.status !== 'UNPAID') return SUPPRESSED;
+    const student = await students.find(subscription.studentId);
+    if (!student) return SUPPRESSED;
+    await notifyParentsOf(this.deps, student, TEMPLATE_KEYS.subscriptionUnpaidParent, { student: student.fullName, month: subscription.month }, { subscriptionId, studentId: student.id, month: subscription.month }, dedupKeys.subscriptionUnpaid3d(subscriptionId));
+    return SENT;
+  }
+
+  /**
+   * SUBSCRIPTION_UNPAID_MONTH_END (approved Module 33 decision): ONCE per school and month (the subject is the bulk batch), due at the start of the final five calendar days of the month.
+   * Only subscriptions that are UNPAID right now are included (PAID and WAIVED never are); with none, nothing is sent. Recipients: each unpaid student's Parent (about their own child only),
+   * the school's CURRENT Collectors and its CURRENT School Manager (the unpaid students of the school). If the scheduler was so late that the month is already over, the window has
+   * passed and the reminder is suppressed. A batch created inside the window is sent at the next pass (like an exam scheduled less than 24 hours before its start).
+   */
+  private async monthEndReminder(batchId: string, now: Date): Promise<Outcome> {
+    const { subscriptions, students, schools } = this.deps;
+    const batch = await subscriptions.findBatch(batchId);
+    if (!batch) return SUPPRESSED;
+    const dueAt = monthEndReminderDueAt(batch.month);
+    if (dueAt.getTime() > now.getTime()) return { kind: 'POSTPONE', dueAt };
+    if (businessDateOf(now).slice(0, 7) > batch.month) return SUPPRESSED; // the month is over: the final-five-days window has passed
+    const unpaid = await subscriptions.listUnpaidOfSchoolMonth(batch.schoolId, batch.month);
+    if (unpaid.length === 0) return SUPPRESSED;
+
+    const names: string[] = [];
+    for (const subscription of unpaid) {
+      const student = await students.find(subscription.studentId);
+      if (!student) continue;
+      names.push(student.fullName);
+      await notifyParentsOf(this.deps, student, TEMPLATE_KEYS.subscriptionMonthEndParent, { student: student.fullName, month: batch.month }, { subscriptionId: subscription.id, studentId: student.id, month: batch.month }, dedupKeys.subscriptionMonthEndParent(subscription.id));
+    }
+    const school = await schools.find(batch.schoolId);
+    const params = { school: school?.name ?? '—', month: batch.month, count: unpaid.length, students: listNames(names) };
+    const data = { schoolId: batch.schoolId, month: batch.month, batchId: batch.id, windowDays: MONTH_END_WINDOW_DAYS };
+    const collectors = await subscriptions.collectorUserIds(batch.schoolId);
+    if (collectors.length > 0) {
+      await this.deps.notifications.notify({ recipientUserIds: collectors, templateKey: TEMPLATE_KEYS.subscriptionMonthEndCollector, params, data, dedupKey: dedupKeys.subscriptionMonthEndCollector(batch.id) });
+    }
+    const managers = await subscriptions.schoolManagerUserIds(batch.schoolId);
+    if (managers.length > 0) {
+      await this.deps.notifications.notify({ recipientUserIds: managers, templateKey: TEMPLATE_KEYS.subscriptionMonthEndManager, params, data, dedupKey: dedupKeys.subscriptionMonthEndManager(batch.id) });
+    }
+    return SENT;
   }
 
   private async examReminder(examId: string, now: Date): Promise<Outcome> {
@@ -133,4 +188,11 @@ export class ReminderProcessor {
     await notifyTeacher(this.deps, view.teacherId, TEMPLATE_KEYS.sessionEvaluationWarning, { count: view.incompleteStudentIds.length }, { sessionId, groupId: view.groupId }, dedupKeys.sessionEvaluationWarning(sessionId));
     return SENT;
   }
+}
+
+const MAX_LISTED_NAMES = 20;
+/** The unpaid students as one text, the SAME for every recipient: the first names, then how many more (a notification body is limited). */
+function listNames(names: readonly string[]): string {
+  const shown = names.slice(0, MAX_LISTED_NAMES).join(', ');
+  return names.length > MAX_LISTED_NAMES ? `${shown} (+${names.length - MAX_LISTED_NAMES})` : shown;
 }

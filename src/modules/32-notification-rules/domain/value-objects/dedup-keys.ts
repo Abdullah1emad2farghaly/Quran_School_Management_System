@@ -17,4 +17,13 @@ export const dedupKeys = {
   examReminderExaminer: (examId: string, startAtMs: number, teacherId: string): string => `exam-reminder:${examId}:${startAtMs}:examiner:${teacherId}`,
   sessionHalfTime: (sessionId: string): string => `session-half-time:${sessionId}`,
   sessionEvaluationWarning: (sessionId: string): string => `session-evaluation-warning:${sessionId}`,
+  subscriptionsCreated: (eventId: string): string => `subscriptions-created:${eventId}`,
+  subscriptionPaid: (subscriptionId: string): string => `subscription-paid:${subscriptionId}`,
+  /** One per subscription, ever: the 3-day reminder can never reach the same parent twice for the same subscription. */
+  subscriptionUnpaid3d: (subscriptionId: string): string => `subscription-unpaid-3d:${subscriptionId}`,
+  /** One per subscription (a subscription belongs to exactly one school and month), so once per school and month for every parent. */
+  subscriptionMonthEndParent: (subscriptionId: string): string => `subscription-month-end:${subscriptionId}:parent`,
+  /** One per bulk batch (= school and month): once per school and month for the collectors and for the school manager (the once-only key is also per recipient). */
+  subscriptionMonthEndCollector: (batchId: string): string => `subscription-month-end:${batchId}:collector`,
+  subscriptionMonthEndManager: (batchId: string): string => `subscription-month-end:${batchId}:manager`,
 } as const;

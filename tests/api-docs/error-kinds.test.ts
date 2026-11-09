@@ -13,6 +13,7 @@ import { unifiedAddressError, UnifiedAddressErrorCodes } from '../../src/modules
 import { schoolError, SchoolErrorCodes } from '../../src/modules/16-schools/domain/errors/school-errors';
 import { parentError, ParentErrorCodes } from '../../src/modules/17-parents/domain/errors/parent-errors';
 import { teacherError, TeacherErrorCodes } from '../../src/modules/18-teachers/domain/errors/teacher-errors';
+import { subscriptionError, SubscriptionErrorCodes } from '../../src/modules/33-subscriptions/domain/errors/subscription-errors';
 import { studentError, StudentErrorCodes } from '../../src/modules/19-students/domain/errors/student-errors';
 import { groupError, GroupErrorCodes } from '../../src/modules/20-groups/domain/errors/group-errors';
 import { quranError, QuranErrorCodes } from '../../src/modules/21-quran-structure/domain/errors/quran-errors';
@@ -40,6 +41,7 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [SchoolErrorCodes, schoolError as Factory],
   [ParentErrorCodes, parentError as Factory],
   [TeacherErrorCodes, teacherError as Factory],
+  [SubscriptionErrorCodes, subscriptionError as Factory],
   [StudentErrorCodes, studentError as Factory],
   [GroupErrorCodes, groupError as Factory],
   [QuranErrorCodes, quranError as Factory],

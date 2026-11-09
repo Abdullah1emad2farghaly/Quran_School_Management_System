@@ -7,6 +7,7 @@ import {
   PublicSchoolDirectory,
   PublicSessionReads,
   PublicStudentDirectory,
+  PublicSubscriptionDirectory,
   PublicTeacherDirectory,
   ReminderProcessor,
   ReminderScheduler,
@@ -17,6 +18,7 @@ import {
   createGroupChangeHandlers,
   createSchoolRequestHandlers,
   createSessionReminderHandlers,
+  createSubscriptionRuleHandlers,
   registerRuleTemplates,
   type RuleDeps,
 } from '../modules/32-notification-rules/public';
@@ -30,6 +32,7 @@ import { getQuranStructureService } from './quran';
 import { getRevisionService } from './revision';
 import { getSchoolService } from './schools';
 import { getStudentService } from './students';
+import { getCollectorService, getSubscriptionService } from './subscriptions';
 import { getTeacherService } from './teachers';
 import { getNotificationService, notificationTemplates } from './notifications';
 import { getEventHandlerRegistry } from './outbox';
@@ -54,6 +57,7 @@ function getDeps(): RuleDeps {
     sessions: new PublicSessionReads({ evaluations: getEvaluationService(), memorization: getMemorizationService(), revision: getRevisionService(), quran }),
     assignments: new PublicAssignmentDirectory({ memorization: getMemorizationService(), revision: getRevisionService() }),
     quran,
+    subscriptions: new PublicSubscriptionDirectory({ subscriptions: getSubscriptionService(), collectors: getCollectorService(), schools: getSchoolService() }),
     state: new SequelizeRuleStateRepository(getSequelize()),
     unitOfWork: getUnitOfWork(),
     clock: new SystemClock(),
@@ -75,6 +79,7 @@ export function registerNotificationRuleHandlers(): void {
     ...createExamEventHandlers(d),
     createEvaluationHandler(d),
     ...createSessionReminderHandlers(d),
+    ...createSubscriptionRuleHandlers(d),
   ]) {
     registry.register(handler);
   }

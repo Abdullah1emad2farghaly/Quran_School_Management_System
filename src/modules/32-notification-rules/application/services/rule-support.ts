@@ -1,7 +1,7 @@
 import type { Clock, DomainEvent, UnitOfWork } from '../../../00-shared-kernel/public';
 import type { NotificationService, NotificationTemplateRegistry } from '../../../31-notifications-core/public';
 import { NO_VALUE } from '../../domain/value-objects/message-format';
-import type { AssignmentDirectory, ExamDirectory, GroupDirectory, QuranDirectory, SchoolDirectory, SessionReads, StudentDirectory, StudentInfo, TeacherDirectory } from '../ports/directories';
+import type { AssignmentDirectory, ExamDirectory, GroupDirectory, QuranDirectory, SchoolDirectory, SessionReads, StudentDirectory, StudentInfo, SubscriptionDirectory, TeacherDirectory } from '../ports/directories';
 import type { RuleStateRepository } from '../ports/rule-state-repository';
 
 /** Everything the rules need. Each directory is a narrow read port over another module's PUBLIC contract. */
@@ -16,6 +16,7 @@ export interface RuleDeps {
   readonly sessions: SessionReads;
   readonly assignments: AssignmentDirectory;
   readonly quran: QuranDirectory;
+  readonly subscriptions: SubscriptionDirectory;
   readonly state: RuleStateRepository;
   readonly unitOfWork: UnitOfWork;
   readonly clock: Clock;
