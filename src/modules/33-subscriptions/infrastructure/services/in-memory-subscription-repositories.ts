@@ -70,6 +70,10 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
     const start = (query.page.page - 1) * query.page.pageSize;
     return { items: all.slice(start, start + query.page.pageSize).map((r) => Subscription.rehydrate(r)), total: all.length };
   }
+  async listByStudentsMonth(studentIds: readonly string[], month: string, _tx?: TransactionContext): Promise<Subscription[]> {
+    const wanted = new Set(studentIds);
+    return [...this.rows.values()].filter((r) => r.month === month && wanted.has(r.studentId)).map((r) => Subscription.rehydrate(r));
+  }
   async listByBatch(batchId: string, _tx?: TransactionContext): Promise<Subscription[]> {
     return [...this.rows.values()].filter((r) => r.batchId === batchId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1)).map((r) => Subscription.rehydrate(r));
   }

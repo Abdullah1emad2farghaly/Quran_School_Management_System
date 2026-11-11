@@ -1,7 +1,7 @@
 // Public contract of Module 19 (Students): the Student entity (a business entity with exactly one Parent, no login), the three-part name rule,
 // the globally unique National ID, the ACTIVE / INACTIVE / ARCHIVED lifecycle with history, and the unlink guard Module 17 needs.
 // Other modules depend on `StudentLookup` (read-only). Student permissions are registered through the Module 12 engine.
-export { StudentService, type StudentLookup, type StudentServiceDeps, type RegisterStudentInput, type UpdateStudentInput, type ListStudentsInput } from '../application/services/student-service';
+export { StudentService, type StudentLookup, type StudentNationalIdLookup, type StudentServiceDeps, type RegisterStudentInput, type UpdateStudentInput, type ListStudentsInput } from '../application/services/student-service';
 export { StudentPermissions, STUDENT_TARGET_TYPE, registerStudentAuthorization, type StudentAuthorizationDeps } from '../application/services/student-authorization';
 export { STUDENT_ERROR_MESSAGES } from '../application/services/student-error-messages';
 export type { StudentDto, StudentHistoryDto, StudentScopeDto } from '../application/dto/student-dto';

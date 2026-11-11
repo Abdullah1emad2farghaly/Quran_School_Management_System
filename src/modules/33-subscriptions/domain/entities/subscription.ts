@@ -39,7 +39,7 @@ interface OpenInput {
 /**
  * A subscription is exactly Student + Month + Status (Master Specification §58, approved Module 33 decisions): no amount, no proration, no dates of enrollment.
  * A new subscription is always UNPAID. The Oldest-Unpaid Rule (§59) needs the student's other months, so the SERVICE checks it under a lock; this entity only guards its own
- * transitions: UNPAID -> PAID and UNPAID -> WAIVED (PAID and WAIVED are final in V1).
+ * transitions: UNPAID -> PAID, UNPAID -> WAIVED and, in the current month only, PAID -> UNPAID (WAIVED is final in V1).
  */
 export class Subscription extends AggregateRoot<string> {
   private constructor(private state: SubscriptionSnapshot) {
@@ -102,6 +102,22 @@ export class Subscription extends AggregateRoot<string> {
     this.record(SubscriptionEventTypes.SUBSCRIPTION_PAID, actorId, clock);
   }
 
+  /**
+   * PAID -> UNPAID, only during the subscription's own calendar month (`currentMonth`, Africa/Cairo, taken from the server clock by the caller). Checks in this order:
+   *  1. the month is not the current one (a past month, or an impossible future one) -> SUBSCRIPTION_MONTH_NOT_CURRENT, whatever the status;
+   *  2. already UNPAID -> SUBSCRIPTION_ALREADY_UNPAID (an unnecessary transition);
+   *  3. any other status (WAIVED) -> SUBSCRIPTION_NOT_PAID.
+   * The paid audit columns are cleared (the database CHECK requires an UNPAID row to have none); the history of who paid and who reverted lives in the outbox events
+   * `SubscriptionPaid` and `SubscriptionMarkedUnpaid`. This is a status correction, NOT the payment reversal workflow of Module 34, and it never publishes `SubscriptionPaid`.
+   */
+  markUnpaid(actorId: string, currentMonth: string, clock: Clock): void {
+    if (this.state.month !== currentMonth) throw subscriptionError('SUBSCRIPTION_MONTH_NOT_CURRENT');
+    if (this.state.status === 'UNPAID') throw subscriptionError('SUBSCRIPTION_ALREADY_UNPAID');
+    if (this.state.status !== 'PAID') throw subscriptionError('SUBSCRIPTION_NOT_PAID');
+    this.state = { ...this.state, status: 'UNPAID', paidAt: null, paidBy: null, updatedAt: clock.now() };
+    this.record(SubscriptionEventTypes.SUBSCRIPTION_MARKED_UNPAID, actorId, clock);
+  }
+
   /** UNPAID -> WAIVED. */
   waive(actorId: string, clock: Clock): void {
     if (this.state.status !== 'UNPAID') throw subscriptionError('SUBSCRIPTION_NOT_UNPAID');
@@ -110,7 +126,7 @@ export class Subscription extends AggregateRoot<string> {
     this.record(SubscriptionEventTypes.SUBSCRIPTION_WAIVED, actorId, clock);
   }
 
-  private record(eventType: typeof SubscriptionEventTypes.SUBSCRIPTION_CREATED | typeof SubscriptionEventTypes.SUBSCRIPTION_PAID | typeof SubscriptionEventTypes.SUBSCRIPTION_WAIVED, actorId: string, clock: Clock): void {
+  private record(eventType: typeof SubscriptionEventTypes.SUBSCRIPTION_CREATED | typeof SubscriptionEventTypes.SUBSCRIPTION_PAID | typeof SubscriptionEventTypes.SUBSCRIPTION_WAIVED | typeof SubscriptionEventTypes.SUBSCRIPTION_MARKED_UNPAID, actorId: string, clock: Clock): void {
     this.addDomainEvent(
       createDomainEvent<SubscriptionEventPayload>(
         {

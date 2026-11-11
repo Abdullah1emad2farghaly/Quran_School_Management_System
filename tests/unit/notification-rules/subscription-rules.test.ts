@@ -115,6 +115,37 @@ describe('B. payment recorded (SubscriptionPaid): the Parent only', () => {
   });
 });
 
+describe('B2. PAID -> UNPAID (SubscriptionMarkedUnpaid) and a second payment: existing behavior is preserved', () => {
+  it('SubscriptionMarkedUnpaid notifies nobody and changes no reminder', async () => {
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTIONS_CREATED, batchEvent());
+    const reminders = JSON.stringify([...w.state.reminders]);
+    w.h.repository.notifications.clear();
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_MARKED_UNPAID, paidEvent(1, ids.studentA));
+    expect(w.allNotifications()).toHaveLength(0);
+    expect(JSON.stringify([...w.state.reminders])).toBe(reminders);
+  });
+
+  it('pay, change back, pay again: the Parent (only) is told ONCE per subscription (the once-only key is per subscription), nobody else', async () => {
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_MARKED_UNPAID, paidEvent(1, ids.studentA));
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
+    expect(w.notificationsOf(ids.parentA)).toHaveLength(1);
+    for (const other of [ids.parentB, COLLECTOR_1, COLLECTOR_2, ids.manager1]) expect(w.notificationsOf(other)).toHaveLength(0);
+  });
+
+  it('the month-end reminder reads the CURRENT status: a subscription changed back to UNPAID is included again', async () => {
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTIONS_CREATED, batchEvent());
+    jumpTo(DAY3_DUE);
+    await w.processor.processDue();
+    w.h.repository.notifications.clear();
+    setStatus(subId(1), 'PAID');
+    setStatus(subId(1), 'UNPAID'); // paid, then changed back
+    jumpTo(MONTH_END_DUE);
+    await w.processor.processDue();
+    expect(w.notificationsOf(ids.manager1)[0]?.body).toContain('Ali Ahmed');
+  });
+});
+
 describe('C. first unpaid reminder: 3 calendar days after creation, the Parent only', () => {
   beforeEach(async () => {
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTIONS_CREATED, batchEvent());

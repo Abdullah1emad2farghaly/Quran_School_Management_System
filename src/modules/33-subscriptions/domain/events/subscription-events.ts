@@ -4,6 +4,7 @@
  *  - SubscriptionCreated:   ONE individual subscription created after the bulk creation (a student who joined later).
  *  - SubscriptionPaid:      a subscription moved UNPAID -> PAID through the `markPaid` contract.
  *  - SubscriptionWaived:    a subscription moved UNPAID -> WAIVED by the School Manager.
+ *  - SubscriptionMarkedUnpaid: a PAID subscription of the CURRENT month was changed back to UNPAID (history only: no module notifies anyone about it, and it is NOT `SubscriptionPaid`).
  *  - CollectorSchoolLinked / CollectorSchoolLinkRemoved: the Subscription Collector-to-School relationship (with history).
  */
 export const SubscriptionEventTypes = {
@@ -11,6 +12,7 @@ export const SubscriptionEventTypes = {
   SUBSCRIPTION_CREATED: 'SubscriptionCreated',
   SUBSCRIPTION_PAID: 'SubscriptionPaid',
   SUBSCRIPTION_WAIVED: 'SubscriptionWaived',
+  SUBSCRIPTION_MARKED_UNPAID: 'SubscriptionMarkedUnpaid',
   COLLECTOR_SCHOOL_LINKED: 'CollectorSchoolLinked',
   COLLECTOR_SCHOOL_LINK_REMOVED: 'CollectorSchoolLinkRemoved',
 } as const;

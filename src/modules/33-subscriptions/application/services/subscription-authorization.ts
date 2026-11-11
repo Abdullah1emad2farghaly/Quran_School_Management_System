@@ -10,6 +10,9 @@ export const SubscriptionPermissions = {
   LIST: 'subscriptions.subscription.list',
   READ: 'subscriptions.subscription.read',
   WAIVE: 'subscriptions.subscription.waive',
+  MARK_PAID: 'subscriptions.subscription.mark-paid',
+  MARK_UNPAID: 'subscriptions.subscription.mark-unpaid',
+  GROUP_LIST: 'subscriptions.group.list',
   COLLECTOR_ASSIGN: 'subscriptions.collector.assign',
   COLLECTOR_LIST: 'subscriptions.collector.list',
   COLLECTOR_REMOVE: 'subscriptions.collector.remove',
@@ -35,7 +38,9 @@ export interface SubscriptionAuthorizationDeps {
  *   - SUBSCRIPTION_COLLECTOR: create the monthly subscriptions and an individual one, list and read the subscriptions, ONLY for a school they are CURRENTLY linked to
  *     (an ended link grants nothing). A Collector can NOT waive (Master Specification §61) and cannot manage Collectors. They read their own assignments (`/collectors/me`).
  *   - PARENT, TEACHER, STUDENT, ORGANIZATION_MANAGER and MAIN_ADMIN: no subscription permission (deny by default).
- * There is NO permission to mark a subscription PAID: that is the `markPaid` application contract Module 34 will call, never an HTTP operation of this module.
+ * Approved enhancement: BOTH roles (the collection roles of §61, each only for their own school) may also read the group summaries / group students of that school (`subscriptions.group.list`),
+ * mark an UNPAID subscription PAID (`subscriptions.subscription.mark-paid`, the `markPaid` contract: Oldest-Unpaid Rule enforced there) and change a PAID subscription of the CURRENT month back to
+ * UNPAID (`subscriptions.subscription.mark-unpaid`). WAIVING stays School-Manager-only. No new role is introduced.
  * The scope resolvers load the school (for a subscription: its school) from the SERVER and answer `true` only on positive proof: the SCHOOL_MANAGER role with an active manager
  * link to that exact school, or the SUBSCRIPTION_COLLECTOR role with an ACTIVE collector link to that exact school. Call once per process.
  */
@@ -47,6 +52,9 @@ export function registerSubscriptionAuthorization(deps: SubscriptionAuthorizatio
   deps.policies.register({ code: SubscriptionPermissions.LIST, roles: both, scope: 'MANAGEMENT' });
   deps.policies.register({ code: SubscriptionPermissions.READ, roles: both, scope: 'MANAGEMENT' });
   deps.policies.register({ code: SubscriptionPermissions.WAIVE, roles: manager, scope: 'MANAGEMENT' });
+  deps.policies.register({ code: SubscriptionPermissions.MARK_PAID, roles: both, scope: 'MANAGEMENT' });
+  deps.policies.register({ code: SubscriptionPermissions.MARK_UNPAID, roles: both, scope: 'MANAGEMENT' });
+  deps.policies.register({ code: SubscriptionPermissions.GROUP_LIST, roles: both, scope: 'MANAGEMENT' });
   deps.policies.register({ code: SubscriptionPermissions.COLLECTOR_ASSIGN, roles: manager, scope: 'MANAGEMENT' });
   deps.policies.register({ code: SubscriptionPermissions.COLLECTOR_LIST, roles: manager, scope: 'MANAGEMENT' });
   deps.policies.register({ code: SubscriptionPermissions.COLLECTOR_REMOVE, roles: manager, scope: 'MANAGEMENT' });

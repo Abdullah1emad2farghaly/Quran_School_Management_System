@@ -5,12 +5,13 @@ import type { RequirePermission } from '../../../12-authorization-engine/public'
 import { SCHOOL_TARGET_TYPE } from '../../../16-schools/public';
 import { SUBSCRIPTION_SCHOOL_TARGET_TYPE, SUBSCRIPTION_TARGET_TYPE, SubscriptionPermissions } from '../../application/services/subscription-authorization';
 import { SUBSCRIPTION_STATUSES, type SubscriptionStatus } from '../../domain/value-objects/subscription-status';
-import { createSubscriptionHandlers, type CollectorHandlerService, type SubscriptionHandlerService } from './subscription-handlers';
+import { createSubscriptionHandlers, type CollectorHandlerService, type GroupHandlerService, type SubscriptionHandlerService } from './subscription-handlers';
 import { sessionAuthRequired } from './session-required';
 
 export interface SubscriptionRouterDeps {
   readonly getSubscriptions: () => SubscriptionHandlerService;
   readonly getCollectors: () => CollectorHandlerService;
+  readonly getGroups: () => GroupHandlerService;
   /** Authenticates the access token (Module 10 `requireAuthentication`). Blocks accounts that still must change their initial password. */
   readonly requireAuthentication: RequestHandler;
   /** Authorization Engine route guard (Module 12): roles -> permissions -> scope. */
@@ -37,6 +38,13 @@ export const SUBSCRIPTION_LIST_SPEC: ListQuerySpec = {
   },
 };
 
+/** Group summaries and group students: sorted by name (`sort=name` / `sort=-name`), `filter[month]=YYYY-MM` (default: the current Africa/Cairo month), standard pagination (default 20, maximum 100). */
+export const GROUP_LIST_SPEC: ListQuerySpec = {
+  sortable: { name: 'name' },
+  defaultSort: [{ key: 'name', direction: 'asc' }],
+  filters: { month: { type: 'string', maxLength: 7 } },
+};
+
 export const COLLECTOR_LIST_SPEC: ListQuerySpec = {
   sortable: { createdAt: 'createdAt' },
   defaultSort: [{ key: 'createdAt', direction: 'asc' }],
@@ -48,18 +56,22 @@ export const COLLECTOR_LIST_SPEC: ListQuerySpec = {
  *   POST   /subscriptions/schools/:schoolId/monthly                   subscriptions.monthly.create         SCHOOL_MANAGER | the school's Collector   bulk-create the CURRENT month (Africa/Cairo) for every ACTIVE student, once per school and month
  *   POST   /subscriptions/schools/:schoolId/students/:studentId       subscriptions.subscription.create    SCHOOL_MANAGER | the school's Collector   one subscription for a student who joined after the bulk run (current month)
  *   GET    /subscriptions/schools/:schoolId                           subscriptions.subscription.list      SCHOOL_MANAGER | the school's Collector   the school's subscriptions (paginated; filters month, status, studentId)
+ *   GET    /subscriptions/schools/:schoolId/groups                    subscriptions.group.list             SCHOOL_MANAGER | the school's Collector   the school's ACTIVE groups with paid / unpaid / waived / without-record / total counts for a month (paginated)
+ *   GET    /subscriptions/schools/:schoolId/groups/:groupId/students  subscriptions.group.list             SCHOOL_MANAGER | the school's Collector   every regular/active student of ONE group with their subscription status for a month (paginated, default 20, max 100)
  *   POST   /subscriptions/schools/:schoolId/collectors                subscriptions.collector.assign       SCHOOL_MANAGER of the school              register (or reuse) a Subscription Collector and link them to the school
  *   GET    /subscriptions/schools/:schoolId/collectors                subscriptions.collector.list         SCHOOL_MANAGER of the school              the school's current Collectors (paginated)
  *   DELETE /subscriptions/schools/:schoolId/collectors/:userId        subscriptions.collector.remove       SCHOOL_MANAGER of the school              end the Collector-to-School link (history kept)
  *   GET    /subscriptions/collectors/me                               subscriptions.collector.read-own     SUBSCRIPTION_COLLECTOR                    the caller's own profile and current schools (no id accepted)
  *   GET    /subscriptions/:id                                         subscriptions.subscription.read      SCHOOL_MANAGER | the school's Collector   one subscription
  *   POST   /subscriptions/:id/waive                                   subscriptions.subscription.waive     SCHOOL_MANAGER of the school ONLY         UNPAID -> WAIVED (a Collector cannot waive)
- * There is deliberately NO endpoint that marks a subscription PAID: Module 34 calls the `markPaid` application contract when a payment is recorded.
+ *   POST   /subscriptions/:id/mark-paid                               subscriptions.subscription.mark-paid     SCHOOL_MANAGER | the school's Collector   UNPAID -> PAID through the `markPaid` contract (Oldest-Unpaid Rule §59 enforced there)
+ *   POST   /subscriptions/:id/mark-unpaid                             subscriptions.subscription.mark-unpaid   SCHOOL_MANAGER | the school's Collector   PAID -> UNPAID, ONLY for the current Africa/Cairo month (a past month is never changed back)
+ * No endpoint collects a payment or stores an amount: payments and their reversal belong to Module 34.
  * The actor always comes from the verified token. ORGANIZATION_MANAGER, MAIN_ADMIN, PARENT, TEACHER have no subscription permission.
  */
 export function createSubscriptionRouter(deps: SubscriptionRouterDeps): Router {
   const router = Router();
-  const h = createSubscriptionHandlers(deps.getSubscriptions, deps.getCollectors);
+  const h = createSubscriptionHandlers(deps.getSubscriptions, deps.getCollectors, deps.getGroups);
   const auth = deps.requireAuthentication;
   const guard = deps.requirePermission;
   const onSubscriptionSchool = { target: (req: Request) => ({ type: SUBSCRIPTION_SCHOOL_TARGET_TYPE, id: req.params.schoolId as string }) };
@@ -107,6 +119,34 @@ export function createSubscriptionRouter(deps: SubscriptionRouterDeps): Router {
           page: query.page,
         }),
       );
+    }),
+  );
+
+  const groupIdParam = param('groupId').isUUID().withMessage('INVALID_VALUE');
+  const monthOf = (req: Request): string | undefined => {
+    const month = parseListQuery(req.query as Record<string, unknown>, GROUP_LIST_SPEC).filters.month;
+    return typeof month === 'string' ? month : undefined;
+  };
+
+  router.get(
+    '/schools/:schoolId/groups',
+    auth,
+    validate(schoolIdParam),
+    guard(SubscriptionPermissions.GROUP_LIST, onSubscriptionSchool),
+    handle(async (req, res) => {
+      const query = parseListQuery(req.query as Record<string, unknown>, GROUP_LIST_SPEC);
+      sendPaginated(res, await h.listGroups(req.params.schoolId as string, monthOf(req), query.sort[0]?.direction === 'desc' ? 'desc' : 'asc', query.page));
+    }),
+  );
+
+  router.get(
+    '/schools/:schoolId/groups/:groupId/students',
+    auth,
+    validate(schoolIdParam, groupIdParam),
+    guard(SubscriptionPermissions.GROUP_LIST, onSubscriptionSchool),
+    handle(async (req, res) => {
+      const query = parseListQuery(req.query as Record<string, unknown>, GROUP_LIST_SPEC);
+      sendPaginated(res, await h.listGroupStudents(req.params.schoolId as string, req.params.groupId as string, monthOf(req), query.sort[0]?.direction === 'desc' ? 'desc' : 'asc', query.page));
     }),
   );
 
@@ -159,6 +199,22 @@ export function createSubscriptionRouter(deps: SubscriptionRouterDeps): Router {
     validate(idParam),
     guard(SubscriptionPermissions.WAIVE, onSubscription),
     handle(async (req, res) => sendSuccess(res, await h.waive(req.params.id as string, sessionAuthRequired(req)))),
+  );
+
+  router.post(
+    '/:id/mark-paid',
+    auth,
+    validate(idParam),
+    guard(SubscriptionPermissions.MARK_PAID, onSubscription),
+    handle(async (req, res) => sendSuccess(res, await h.markPaid(req.params.id as string, sessionAuthRequired(req)))),
+  );
+
+  router.post(
+    '/:id/mark-unpaid',
+    auth,
+    validate(idParam),
+    guard(SubscriptionPermissions.MARK_UNPAID, onSubscription),
+    handle(async (req, res) => sendSuccess(res, await h.markUnpaid(req.params.id as string, sessionAuthRequired(req)))),
   );
 
   return router;

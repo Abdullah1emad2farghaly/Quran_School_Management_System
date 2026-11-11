@@ -143,16 +143,15 @@ describe('GET list / GET one / waive', () => {
     expect(again.body.error.code).toBe('SUBSCRIPTION_NOT_UNPAID');
   });
 
-  it('there is NO HTTP endpoint that marks a subscription PAID (Module 34 calls the markPaid contract)', async () => {
+  it('there is no payment-collection or free-form status endpoint: only mark-paid and mark-unpaid change the paid state', async () => {
     const { app, authA, schoolA } = await setup(1);
     await request(app).post(monthly(schoolA.id)).set(authA);
     const id = (await request(app).get(forSchool(schoolA.id)).set(authA)).body.data[0].id;
-    for (const [method, path] of [['post', `/${id}/pay`], ['post', `/${id}/paid`], ['post', `/${id}/mark-paid`], ['put', `/${id}`], ['patch', `/${id}`], ['delete', `/${id}`]] as const) {
-      const res = await request(app)[method](`${SUBSCRIPTIONS}${path}`).set(authA).send({ status: 'PAID' });
+    for (const [method, path] of [['post', `/${id}/pay`], ['post', `/${id}/paid`], ['post', `/${id}/payment`], ['post', `/${id}/reverse`], ['put', `/${id}`], ['patch', `/${id}`], ['delete', `/${id}`]] as const) {
+      const res = await request(app)[method](`${SUBSCRIPTIONS}${path}`).set(authA).send({ status: 'PAID', amount: 100 });
       expect([404, 405], `${method} ${path}`).toContain(res.status);
     }
-    const state = await request(app).get(`${SUBSCRIPTIONS}/${id}`).set(authA);
-    expect(state.body.data.status).toBe('UNPAID');
+    expect((await request(app).get(`${SUBSCRIPTIONS}/${id}`).set(authA)).body.data.status).toBe('UNPAID');
   });
 });
 

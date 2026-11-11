@@ -24,6 +24,7 @@ import { createRevisionRouter } from '../../src/modules/28-revision/public';
 import { createEvaluationRouter } from '../../src/modules/29-evaluations/public';
 import { createExamRouter } from '../../src/modules/30-exams/public';
 import { createNotificationRouter } from '../../src/modules/31-notifications-core/public';
+import { createExcelImportRouter } from '../../src/modules/36-excel-import/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -71,7 +72,7 @@ function buildApp() {
   app.use('/schools', createSchoolRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
   app.use('/parents', createParentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/teachers', createTeacherRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
-  app.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getService, getCollectors: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getService, getCollectors: getService, getGroups: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/students', createStudentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/groups', createGroupRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
@@ -82,6 +83,7 @@ function buildApp() {
   app.use('/evaluations', createEvaluationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/exams', createExamRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/notifications', createNotificationRouter({ getNotifications: getService, getPush: (() => pushStub) as never, requireAuthentication: stubAuth } as never));
+  app.use('/excel-imports', createExcelImportRouter({ getService, getSchools: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/sessions', createSessionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);
@@ -152,6 +154,8 @@ describe('documented requests agree with the real validators', () => {
       const params = (o.operation.parameters ?? []) as OpenAPIV3.ParameterObject[];
       const query = params.filter((p) => p.in === 'query' && p.example !== undefined).map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(String(p.example))}`).join('&');
       const url = `${pathWith(o)}${query ? `?${query}` : ''}`;
+      // A multipart file upload (Module 36) cannot be sent as JSON: its own conformance test exercises it with a real file.
+      if ((o.operation.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['multipart/form-data']) continue;
       const examples = Object.entries(((o.operation.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['application/json']?.examples ?? {}) as Record<string, OpenAPIV3.ExampleObject>);
       const bodies: Array<[string, unknown]> = examples.length > 0 ? examples.map(([name, e]) => [name, e.value]) : [['(no body)', undefined]];
       for (const [name, body] of bodies) {

@@ -290,6 +290,15 @@ export class GroupService {
 
   // ---------------------------------------------------------------------------------------------- contracts for other modules
 
+  /**
+   * Read-only: the ACTIVE group of the school with this name (the same normalized, case/space-insensitive name key as the uniqueness rule), or
+   * undefined. Module 36 (Excel Import) uses it to recognize an existing group; nothing is created or changed.
+   */
+  async findActiveByName(schoolId: string, name: unknown, tx?: TransactionContext): Promise<GroupDto | undefined> {
+    const group = await this.groups.findActiveByNameKey(schoolId, groupNameKey(normalizeGroupName(name)), tx);
+    return group ? this.toDto(group, tx) : undefined;
+  }
+
   async findScopeById(groupId: string, tx?: TransactionContext): Promise<GroupScopeDto | undefined> {
     const group = await this.groups.findById(groupId, tx);
     if (!group) return undefined;
@@ -383,3 +392,6 @@ export class GroupService {
 
 /** What downstream modules (Sessions 24, Attendance 26, Schedule 23...) should depend on (read-only). */
 export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool'>;
+
+/** Read-only name lookup for Module 36 (Excel Import). */
+export type GroupNameLookup = Pick<GroupService, 'findActiveByName' | 'listAssignmentHistoryOfStudent'>;

@@ -1,14 +1,17 @@
 import { SystemClock } from '../modules/00-shared-kernel/public';
 import {
   CollectorService,
+  PublicSchoolGroupRoster,
   PublicStudentRoster,
   SequelizeCollectorLinkRepository,
   SequelizeSubscriptionRepository,
+  SubscriptionGroupService,
   SubscriptionService,
   registerSubscriptionAuthorization,
 } from '../modules/33-subscriptions/public';
 import { getAuthorizationPolicyRegistry, getAuthorizationResolvers } from './authorization';
 import { getSequelize, getUnitOfWork } from './database';
+import { getGroupService } from './groups';
 import { getIdentityService } from './identity';
 import { getOutboxService } from './outbox';
 import { getParentService } from './parents';
@@ -19,6 +22,7 @@ import { getTeacherService } from './teachers';
 
 let collectors: CollectorService | undefined;
 let subscriptions: SubscriptionService | undefined;
+let groupSummaries: SubscriptionGroupService | undefined;
 
 /**
  * Inject into other modules read-only (`CollectorDirectory`). Collector accounts are created and matched with the same identity rules as Teachers
@@ -57,6 +61,20 @@ export function getSubscriptionService(): SubscriptionService {
     });
   }
   return subscriptions;
+}
+
+/** Read-only group-based subscription statistics (reads Module 20's groups through its public service; creates and stores no group data). */
+export function getSubscriptionGroupService(): SubscriptionGroupService {
+  if (!groupSummaries) {
+    groupSummaries = new SubscriptionGroupService({
+      subscriptions: new SequelizeSubscriptionRepository(getSequelize()),
+      groups: new PublicSchoolGroupRoster(getGroupService()),
+      schools: getSchoolService(),
+      unitOfWork: getUnitOfWork(),
+      clock: new SystemClock(),
+    });
+  }
+  return groupSummaries;
 }
 
 /** Subscription permissions and the two scope resolvers are registered ONCE, when this module is loaded, through the shared Authorization Engine. */

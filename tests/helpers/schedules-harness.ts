@@ -9,10 +9,10 @@ import { createStudentsHarness } from './students-harness';
  * (a Teacher change is validated, an archive retires the slots) and Module 23 reads Module 20 through its public service. The unit of work rolls the
  * Group store and the Schedule store back together with everything else when the work throws.
  */
-export async function createSchedulesHarness() {
+export async function createSchedulesHarness(options: { extraStores?: Parameters<typeof createStudentsHarness>[0] extends { extraStores?: infer E } | undefined ? E : never } = {}) {
   const groupRepo = new InMemoryGroupRepository();
   const slotRepo = new InMemoryScheduleRepository();
-  const t = await createStudentsHarness({ extraStores: [groupRepo, slotRepo] });
+  const t = await createStudentsHarness({ extraStores: [groupRepo, slotRepo, ...(options.extraStores ?? [])] });
 
   let schedules: GroupScheduleService | undefined;
   const lazy = () => {

@@ -1,8 +1,11 @@
+import { GroupService, InMemoryGroupRepository } from '../../src/modules/20-groups/public';
 import {
   CollectorService,
   InMemoryCollectorLinkRepository,
   InMemorySubscriptionRepository,
+  PublicSchoolGroupRoster,
   PublicStudentRoster,
+  SubscriptionGroupService,
   SubscriptionService,
   registerSubscriptionAuthorization,
 } from '../../src/modules/33-subscriptions/public';
@@ -20,7 +23,8 @@ export const COLLECTOR_NAME = 'محمود سعيد علي';
 export async function createSubscriptionsHarness() {
   const subscriptionRepo = new InMemorySubscriptionRepository();
   const collectorLinks = new InMemoryCollectorLinkRepository();
-  const t = await createStudentsHarness({ extraStores: [subscriptionRepo, collectorLinks] });
+  const groupRepo = new InMemoryGroupRepository();
+  const t = await createStudentsHarness({ extraStores: [subscriptionRepo, collectorLinks, groupRepo] });
 
   let current = new Date(DEFAULT_NOW);
   const clock = { now: () => current };
@@ -36,6 +40,18 @@ export async function createSubscriptionsHarness() {
     outbox: t.h.outbox,
     clock,
   });
+  // The REAL Module 20 groups (in-memory store): Module 33 reads them only through the public GroupService.
+  const groups = new GroupService({ groups: groupRepo, schools: t.service, teachers: t.teachers, students: t.students, unitOfWork: t.unitOfWork, outbox: t.h.outbox, clock: t.h.clock });
+  const groupSummaries = new SubscriptionGroupService({ subscriptions: subscriptionRepo, groups: new PublicSchoolGroupRoster(groups), schools: t.service, unitOfWork: t.unitOfWork, clock });
+  let groupCounter = 0;
+  /** A new ACTIVE group of the school (created by its manager). */
+  const newGroup = (schoolId: string, managerId: string, name = `حلقة ${++groupCounter}`) => groups.createGroup({ schoolId, name, learningMode: 'GROUP', progression: 'FORWARD', startingSurah: 78 } as never, managerId);
+  /** A new ACTIVE student of the school, assigned to `groupId` (the school manager does both). */
+  const newStudentInGroup = async (schoolId: string, managerId: string, groupId: string) => {
+    const student = await newStudentOf(schoolId, managerId);
+    await groups.assignStudent(groupId, student.id, managerId);
+    return student;
+  };
   const collectors = new CollectorService({
     links: collectorLinks,
     schools: t.service,
@@ -51,10 +67,11 @@ export async function createSubscriptionsHarness() {
 
   let phone = 5000;
   /** A fresh ACTIVE student of `schoolId` (with its own Parent), registered by `managerId`. */
-  const newStudent = async (schoolId: string, managerId: string) => {
+  const newStudentOf = async (schoolId: string, managerId: string) => {
     const parent = await t.newParent(schoolId, managerId);
     return t.registerStudent(schoolId, parent.id, managerId);
   };
+  const newStudent = newStudentOf;
   /** A Subscription Collector registered by the school's manager (a new account), with its login phone and initial password. */
   const newCollector = async (schoolId: string, managerId: string, name = COLLECTOR_NAME) => {
     phone += 1;
@@ -64,5 +81,5 @@ export async function createSubscriptionsHarness() {
   };
   const events = (type?: string) => t.h.store.messages.filter((m) => m.aggregateType.startsWith('Subscription') || m.aggregateType === 'CollectorSchoolLink').filter((m) => !type || m.eventType === type);
 
-  return { ...t, subscriptionRepo, collectorLinks, subscriptions, collectors, setNow, clock, newStudent, newCollector, events };
+  return { ...t, subscriptionRepo, collectorLinks, groupRepo, groups, groupSummaries, newGroup, newStudentInGroup, subscriptions, collectors, setNow, clock, newStudent, newCollector, events };
 }

@@ -48,6 +48,7 @@ const BATCH_SELECT = `SELECT b.id, b.school_id AS schoolId, b.organization_id AS
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 const asDateOrNull = (value: Date | string | null): Date | null => (value === null ? null : asDate(value));
 const CHUNK = 200;
+const IN_CHUNK = 500;
 
 export class SequelizeSubscriptionRepository implements SubscriptionRepository {
   constructor(private readonly db: Queryable) {}
@@ -159,6 +160,15 @@ export class SequelizeSubscriptionRepository implements SubscriptionRepository {
     const count = await this.db.query<{ n: number | string }>(`SELECT COUNT(*) AS n FROM subscriptions s WHERE ${clause}`, { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) });
     const items = await this.subs(`${SELECT} WHERE ${clause} ORDER BY s.month ${dir}, s.created_at ${dir}, s.id ${dir} LIMIT :limit OFFSET :offset`, { ...replacements, limit: query.page.pageSize, offset: (query.page.page - 1) * query.page.pageSize }, tx);
     return { items, total: Number(count[0]?.n ?? 0) };
+  }
+
+  async listByStudentsMonth(studentIds: readonly string[], month: string, tx?: TransactionContext): Promise<Subscription[]> {
+    const unique = [...new Set(studentIds)];
+    const found: Subscription[] = [];
+    for (let i = 0; i < unique.length; i += IN_CHUNK) {
+      found.push(...(await this.subs(`${SELECT} WHERE s.month = :month AND s.student_id IN (:ids) ORDER BY s.student_id`, { month, ids: unique.slice(i, i + IN_CHUNK) }, tx)));
+    }
+    return found;
   }
 
   listByBatch(batchId: string, tx?: TransactionContext): Promise<Subscription[]> {

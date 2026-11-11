@@ -27,6 +27,8 @@ import { revisionError, RevisionErrorCodes } from '../../src/modules/28-revision
 import { evaluationError, EvaluationErrorCodes } from '../../src/modules/29-evaluations/public';
 import { examError, ExamErrorCodes } from '../../src/modules/30-exams/public';
 import { notificationError, NotificationErrorCodes } from '../../src/modules/31-notifications-core/public';
+import { FileErrorCodes, fileError } from '../../src/modules/07-file-infrastructure/public';
+import { ImportErrorCodes, importError } from '../../src/modules/36-excel-import/public';
 import { operationsOf } from './support/lint';
 
 type Factory = (code: never) => { kind: keyof typeof HTTP_STATUS_BY_KIND };
@@ -55,6 +57,8 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [EvaluationErrorCodes, evaluationError as Factory],
   [ExamErrorCodes, examError as Factory],
   [NotificationErrorCodes, notificationError as Factory],
+  [FileErrorCodes, ((code: never) => fileError(code)) as Factory],
+  [ImportErrorCodes, ((code: never) => importError(code)) as Factory],
 ];
 
 /** The status each module-owned code REALLY answers: taken from the module's own error factory, never retyped. */

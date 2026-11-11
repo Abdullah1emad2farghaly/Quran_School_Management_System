@@ -101,8 +101,35 @@ describe('subscription permissions (deny by default)', () => {
     expect(await allowed(managerId, P.READ, onSub('00000000-0000-4000-8000-000000000000'))).toBe(false);
   });
 
-  it('there is NO permission to mark a subscription PAID (markPaid is not an HTTP operation)', async () => {
+  it('the approved status endpoints and group reads are granted to BOTH collection roles for their own school only (never to anyone else), and waiving stays School-Manager-only', async () => {
+    const { t, schoolA, schoolB, managerA, managerB, subA, collector, allowed, onSchool, onSub } = await setup();
+    const id = collector.collector.userId;
+    for (const perm of [P.MARK_PAID, P.MARK_UNPAID]) {
+      expect(await allowed(managerA.id, perm, onSub(subA.id)), `${perm} manager`).toBe(true);
+      expect(await allowed(id, perm, onSub(subA.id)), `${perm} linked collector`).toBe(true);
+      expect(await allowed(managerB.id, perm, onSub(subA.id)), `${perm} other school's manager`).toBe(false);
+    }
+    expect(await allowed(managerA.id, P.GROUP_LIST, onSchool(schoolA))).toBe(true);
+    expect(await allowed(id, P.GROUP_LIST, onSchool(schoolA))).toBe(true);
+    expect(await allowed(id, P.GROUP_LIST, onSchool(schoolB))).toBe(false);
+    expect(await allowed(managerB.id, P.GROUP_LIST, onSchool(schoolA))).toBe(false);
+    // ending the link removes the new permissions at once, like every other collector access
+    await t.collectors.removeSchoolLink(id, schoolA.id, managerA.id);
+    for (const perm of [P.MARK_PAID, P.MARK_UNPAID]) expect(await allowed(id, perm, onSub(subA.id)), `${perm} after unassignment`).toBe(false);
+    expect(await allowed(id, P.GROUP_LIST, onSchool(schoolA))).toBe(false);
+    // nobody else gets them
+    const mainAdmin = await t.h.createUser({ role: 'MAIN_ADMIN' });
+    const parent = await t.h.createUser({ role: 'PARENT' });
+    const teacher = await t.h.createUser({ role: 'TEACHER' });
+    for (const user of [t.orgAdmin, mainAdmin, parent, teacher]) {
+      for (const perm of [P.MARK_PAID, P.MARK_UNPAID]) expect(await allowed(user.id, perm, onSub(subA.id)), perm).toBe(false);
+      expect(await allowed(user.id, P.GROUP_LIST, onSchool(schoolA))).toBe(false);
+    }
+  });
+
+  it('no permission collects a payment or stores an amount (Module 34): only the approved status transitions exist', () => {
     const codes = Object.values(P);
-    expect(codes.filter((c) => /paid|pay/i.test(c))).toEqual([]);
+    expect(codes.filter((c) => /payment|collect(?!or)|charge|amount|reversal|refund/i.test(c))).toEqual([]);
+    expect(codes.filter((c) => /paid/i.test(c)).sort()).toEqual(['subscriptions.subscription.mark-paid', 'subscriptions.subscription.mark-unpaid']);
   });
 });

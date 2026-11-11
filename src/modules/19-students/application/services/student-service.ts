@@ -228,6 +228,15 @@ export class StudentService {
   }
 
   /**
+   * Read-only lookup by the globally unique National ID (Module 36 uses it to recognize an existing Student; nothing is created, moved or changed).
+   * The input is normalized like a registration (Arabic-Indic digits accepted); an invalid National ID throws INVALID_STUDENT_NATIONAL_ID.
+   */
+  async findByNationalId(nationalId: unknown, tx?: TransactionContext): Promise<StudentDto | undefined> {
+    const student = await this.students.findByNationalId(normalizeNationalId(nationalId), tx);
+    return student ? this.toDto(student, tx) : undefined;
+  }
+
+  /**
    * Module 17's unlink guard (`ParentStudentDependencies`): how many students of `parentId` exist in `schoolId`, in EVERY status. An ARCHIVED
    * student still anchors the Parent-to-School relationship (the Parent of a student never changes in V1), so it blocks the unlink too.
    */
@@ -271,3 +280,6 @@ export class StudentService {
 
 /** What downstream modules (Groups 20, Attendance 26, Subscriptions 33...) should depend on (read-only). */
 export type StudentLookup = Pick<StudentService, 'findById' | 'findScopeById'>;
+
+/** Read-only National ID lookup for Module 36 (Excel Import). */
+export type StudentNationalIdLookup = Pick<StudentService, 'findByNationalId'>;

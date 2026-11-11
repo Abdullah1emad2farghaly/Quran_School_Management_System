@@ -5,12 +5,13 @@ import { getOrganizationRegistrationService, getSchoolService, PUBLIC_SUBMISSION
 import { getParentService } from '../../config/parents';
 import { getTeacherService } from '../../config/teachers';
 import { getStudentService } from '../../config/students';
+import { getExcelImportService } from '../../config/excel-import';
 import { getGroupService } from '../../config/groups';
 import { getAttendanceService } from '../../config/attendance';
 import { getEvaluationService } from '../../config/evaluations';
 import { getExamService } from '../../config/exams';
 import { getNotificationService, getPushSubscriptionService } from '../../config/notifications';
-import { getCollectorService, getSubscriptionService } from '../../config/subscriptions';
+import { getCollectorService, getSubscriptionGroupService, getSubscriptionService } from '../../config/subscriptions';
 import { getMemorizationService } from '../../config/memorization';
 import { getRevisionService } from '../../config/revision';
 import { getClassSessionService } from '../../config/class-sessions';
@@ -23,6 +24,7 @@ import { createOrganizationRouter, createPublicSubmissionRateLimiter, createScho
 import { createParentRouter } from '../../modules/17-parents/public';
 import { createTeacherRouter } from '../../modules/18-teachers/public';
 import { createStudentRouter } from '../../modules/19-students/public';
+import { createExcelImportRouter } from '../../modules/36-excel-import/public';
 import { createGroupRouter } from '../../modules/20-groups/public';
 import { createScheduleRouter } from '../../modules/23-group-schedules/public';
 import { createSessionRouter } from '../../modules/24-sessions/public';
@@ -72,8 +74,9 @@ export function buildApiRouter(): Router {
   router.use('/revision', createRevisionRouter({ getService: getRevisionService, requireAuthentication, requirePermission }));
   router.use('/evaluations', createEvaluationRouter({ getService: getEvaluationService, requireAuthentication, requirePermission }));
   router.use('/exams', createExamRouter({ getService: getExamService, requireAuthentication, requirePermission }));
-  router.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getSubscriptionService, getCollectors: getCollectorService, requireAuthentication, requirePermission }));
+  router.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getSubscriptionService, getCollectors: getCollectorService, getGroups: getSubscriptionGroupService, requireAuthentication, requirePermission }));
   router.use('/notifications', createNotificationRouter({ getNotifications: getNotificationService, getPush: getPushSubscriptionService, requireAuthentication }));
+  router.use('/excel-imports', createExcelImportRouter({ getService: getExcelImportService, getSchools: getSchoolService, requireAuthentication, requirePermission }));
   router.use('/quran', createQuranRouter({ getService: getQuranStructureService, requireAuthentication, requirePermission }));
   router.use('/auth', createAuthRouter({ getService: getSessionService, requireAuthentication, requireAuthenticationAllowingPasswordChange }));
   return router;

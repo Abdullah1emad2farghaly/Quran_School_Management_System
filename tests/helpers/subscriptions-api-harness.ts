@@ -18,7 +18,7 @@ export async function createSubscriptionsApi() {
   const app = express();
   app.use(requestContextMiddleware);
   app.use(express.json());
-  app.use(SUBSCRIPTIONS, createSubscriptionRouter({ getSubscriptions: () => t.subscriptions, getCollectors: () => t.collectors, requireAuthentication, requirePermission: t.requirePermission }));
+  app.use(SUBSCRIPTIONS, createSubscriptionRouter({ getSubscriptions: () => t.subscriptions, getCollectors: () => t.collectors, getGroups: () => t.groupSummaries, requireAuthentication, requirePermission: t.requirePermission }));
   app.use(
     AUTH,
     createAuthRouter({

@@ -84,3 +84,33 @@ export function toCollectorLinkDto(link: CollectorSchoolLink): CollectorSchoolLi
   const s = link.snapshot;
   return { id: s.id, userId: s.userId, schoolId: s.schoolId, linkedAt: s.linkedAt, linkedBy: s.linkedBy, unlinkedAt: s.unlinkedAt, unlinkedBy: s.unlinkedBy, isActive: link.isActive };
 }
+
+/**
+ * The subscription statistics of ONE existing educational group for ONE month (Module 33 group summary). The counts are over the group's regular/active students:
+ *   totalStudents = paidStudents + unpaidStudents + waivedStudents + withoutSubscription
+ * WAIVED students are in `totalStudents` (and in `waivedStudents`) but in neither `paidStudents` nor `unpaidStudents`. A student with NO subscription record for the month
+ * is never counted as paid or unpaid: they are in `totalStudents` and in `withoutSubscription` only.
+ */
+export interface GroupSubscriptionSummaryDto {
+  readonly groupId: string;
+  readonly groupName: string;
+  /** `YYYY-MM`: the month the statistics are for. */
+  readonly month: string;
+  /** True when the monthly BULK creation of this school and month was done (when false, `withoutSubscription` is expected to equal `totalStudents`). */
+  readonly subscriptionsCreated: boolean;
+  readonly paidStudents: number;
+  readonly unpaidStudents: number;
+  readonly waivedStudents: number;
+  readonly withoutSubscription: number;
+  readonly totalStudents: number;
+}
+
+/** One regular/active student of a group with the status of their subscription for the month (`status` and `subscriptionId` are null when there is no record). */
+export interface GroupStudentSubscriptionDto {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly month: string;
+  readonly subscriptionId: string | null;
+  readonly status: SubscriptionStatus | null;
+  readonly hasSubscription: boolean;
+}

@@ -4,6 +4,7 @@ import { COLLECTOR_NAME, createSubscriptionsHarness } from '../../helpers/subscr
 
 const codeOf = (p: Promise<unknown>) => p.then(() => 'NO_ERROR', (e: unknown) => (e instanceof AppError ? e.code : `NOT_APP_ERROR:${String(e)}`));
 const PHONE = '01001234569';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const E164 = '+201001234569';
 
 async function setup() {
@@ -33,7 +34,11 @@ describe('registering a NEW Subscription Collector', () => {
     const { t, register } = await setup();
     const result = await register();
     expect(JSON.stringify(result)).not.toMatch(/password|hash/i);
-    expect(t.h.store.messages.map((m) => m.payload).join('')).not.toMatch(/password|hash|4569/i);
+    // Key names are inspected (a random UUID can contain any four digits by chance): no event payload has a password or hash field, and no payload value is a phone-like or name-like text.
+    for (const message of t.h.store.messages) {
+      const payload = JSON.parse(message.payload) as Record<string, unknown>;
+      expect(Object.keys(payload).filter((k) => /password|hash|secret|token/i.test(k))).toEqual([]);
+    }
     const user = (await t.h.identity.findByPhone(PHONE))!;
     expect(t.h.users.rows.get(user.id)!.passwordHash).toMatch(/^\$2[aby]\$/);
   });
@@ -43,7 +48,9 @@ describe('registering a NEW Subscription Collector', () => {
     await register();
     const events = t.events('CollectorSchoolLinked');
     expect(events).toHaveLength(1);
-    expect(events[0]!.payload).not.toMatch(/محمود|0100|\+20/);
+    const payload = JSON.parse(events[0]!.payload) as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(['actorId', 'linkId', 'organizationId', 'schoolId', 'userId']); // identifiers only: no name, no phone, no password
+    for (const value of Object.values(payload)) expect(String(value)).toMatch(UUID_RE);
   });
 
   it('validates the three-part name, the phone and the ACTIVE school, and creates nothing on failure', async () => {

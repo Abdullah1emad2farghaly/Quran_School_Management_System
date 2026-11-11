@@ -1,4 +1,4 @@
-import type { BulkCreationResultDto, CollectorDto, CollectorSchoolLinkDto, SubscriptionDto, SubscriptionViewDto } from '../../application/dto/subscription-dto';
+import type { BulkCreationResultDto, CollectorDto, CollectorSchoolLinkDto, GroupStudentSubscriptionDto, GroupSubscriptionSummaryDto, SubscriptionDto, SubscriptionViewDto } from '../../application/dto/subscription-dto';
 
 const iso = (d: Date): string => d.toISOString();
 
@@ -30,4 +30,25 @@ export const serializeCollectorLink = (l: CollectorSchoolLinkDto) => ({
   unlinkedAt: l.unlinkedAt ? iso(l.unlinkedAt) : null,
   unlinkedBy: l.unlinkedBy,
   isActive: l.isActive,
+});
+
+export const serializeGroupSummary = (g: GroupSubscriptionSummaryDto) => ({
+  groupId: g.groupId,
+  groupName: g.groupName,
+  month: g.month,
+  subscriptionsCreated: g.subscriptionsCreated,
+  paidStudents: g.paidStudents,
+  unpaidStudents: g.unpaidStudents,
+  waivedStudents: g.waivedStudents,
+  withoutSubscription: g.withoutSubscription,
+  totalStudents: g.totalStudents,
+});
+
+export const serializeGroupStudent = (s: GroupStudentSubscriptionDto) => ({
+  studentId: s.studentId,
+  studentName: s.studentName,
+  month: s.month,
+  subscriptionId: s.subscriptionId,
+  status: s.status,
+  hasSubscription: s.hasSubscription,
 });

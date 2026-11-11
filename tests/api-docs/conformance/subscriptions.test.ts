@@ -62,6 +62,42 @@ describe('Module 33 endpoints conform to their OpenAPI documentation (real respo
     api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${id}/waive`).set(authB)); // 403
     api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${id}/waive`)); // 401
 
+
+    // ---- group-based statistics and group students (approved enhancement)
+    const group = await t.newGroup(schoolA.id, managerA.id, 'حلقة الفجر');
+    const inGroup = [await t.newStudentInGroup(schoolA.id, managerA.id, group.id), await t.newStudentInGroup(schoolA.id, managerA.id, group.id)];
+    const groupB = await t.newGroup(schoolB.id, managerB.id, 'حلقة ب');
+    const groups = api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups?page=1&pageSize=5&sort=name&filter[month]=2026-11`).set(authA));
+    expect(groups.status).toBe(200);
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups?filter[month]=2026-13`).set(authA)); // 400
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups`).set(authB)); // 403
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups`)); // 401
+    const members = api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups/${group.id}/students?page=1&pageSize=10`).set(authA));
+    expect(members.status).toBe(200);
+    expect(members.body.data).toHaveLength(2);
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups/${groupB.id}/students`).set(authA)); // 404 another school's group
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups/${group.id}/students?filter[month]=bad`).set(authA)); // 400
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups/${group.id}/students`).set(authB)); // 403
+    api.conforms(await request(app).get(`${onSchool(schoolA.id)}/groups/not-a-uuid/students`).set(authA)); // 400
+
+    // ---- mark-paid and mark-unpaid
+    await request(app).post(`${onSchool(schoolA.id)}/students/${inGroup[0]!.id}`).set(authA); // already in the bulk run? it was created after it, so this adds its subscription
+    const pay = (await t.subscriptionRepo.findByStudentMonth(inGroup[0]!.id, '2026-11'))?.id ?? (await request(app).get(`${onSchool(schoolA.id)}?filter[studentId]=${inGroup[0]!.id}`).set(authA)).body.data[0]?.id;
+    expect(api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-paid`).set(authA)).status).toBe(200);
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-paid`).set(authA)); // 409 already paid
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-paid`).set(authB)); // 403
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-paid`)); // 401
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${UNKNOWN}/mark-paid`).set(authA)); // 403
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/not-a-uuid/mark-paid`).set(authA)); // 400
+    expect(api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-unpaid`).set(authA)).status).toBe(200);
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-unpaid`).set(authA)); // 409 already unpaid
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-unpaid`).set(authB)); // 403
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${pay}/mark-unpaid`)); // 401
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/not-a-uuid/mark-unpaid`).set(authA)); // 400
+    const waivedFirst = (await request(app).get(`${onSchool(schoolA.id)}?filter[status]=WAIVED`).set(authA)).body.data[0].id as string;
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${waivedFirst}/mark-paid`).set(authA)); // 422 waived
+    api.conforms(await request(app).post(`${SUBSCRIPTIONS}/${waivedFirst}/mark-unpaid`).set(authA)); // 422 waived -> unpaid
+
     // ---- Collector management
     const url = `${onSchool(schoolA.id)}/collectors`;
     const registered = api.conforms(await request(app).post(url).set(authA).send({ name: NAME, phone: PHONE }));
@@ -91,7 +127,7 @@ describe('Module 33 endpoints conform to their OpenAPI documentation (real respo
   });
 
   it('exercised every documented operation of Module 33', () => {
-    expect(api.operationCount('33')).toBe(9);
+    expect(api.operationCount('33')).toBe(13);
     api.assertAllExercised('33');
   });
 });

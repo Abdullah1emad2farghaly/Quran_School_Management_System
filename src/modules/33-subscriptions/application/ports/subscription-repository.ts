@@ -40,6 +40,8 @@ export interface SubscriptionRepository {
   findByStudentMonth(studentId: string, month: string, tx?: TransactionContext): Promise<Subscription | undefined>;
 
   list(query: SubscriptionListQuery, tx?: TransactionContext): Promise<{ items: Subscription[]; total: number }>;
+  /** The subscriptions of the given students for ONE month (students without a record simply have no row; nothing is inferred). Any number of ids. */
+  listByStudentsMonth(studentIds: readonly string[], month: string, tx?: TransactionContext): Promise<Subscription[]>;
   listByBatch(batchId: string, tx?: TransactionContext): Promise<Subscription[]>;
   listUnpaidOfSchoolMonth(schoolId: string, month: string, tx?: TransactionContext): Promise<Subscription[]>;
 }

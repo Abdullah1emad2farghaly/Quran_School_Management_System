@@ -38,12 +38,26 @@ describe('Module 33 boundaries', () => {
     expect(inner.filter(({ spec }) => ['express', 'sequelize', 'jsonwebtoken', 'web-push', 'bcryptjs'].includes(spec))).toEqual([]);
   });
 
-  it('exposes NO HTTP operation that marks a subscription PAID or collects a payment', () => {
+  it('exposes ONLY the approved status operations over HTTP (mark-paid through the markPaid contract, mark-unpaid) and no payment collection', () => {
     const routes = readFileSync(path.join(root, 'presentation/http/subscription-routes.ts'), 'utf8');
     const verbs = [...routes.matchAll(/router\.(get|post|put|patch|delete)\(\s*'([^']+)'/g)].map((m) => `${m[1]} ${m[2]}`);
-    expect(verbs.length).toBeGreaterThan(5);
-    expect(verbs.filter((v) => /paid|\bpay|payment|charge|amount/i.test(v))).toEqual([]);
-    expect(verbs).not.toContain('post /:id/pay');
+    expect(verbs.length).toBeGreaterThan(8);
+    expect(verbs).toContain('post /:id/mark-paid');
+    expect(verbs).toContain('post /:id/mark-unpaid');
+    // nothing else mentions paying, collecting or amounts, and a subscription is never edited, replaced or deleted over HTTP
+    expect(verbs.filter((v) => /paid|\bpay|payment|collect(?!ors)|charge|amount|reversal|refund/i.test(v) && !/mark-(un)?paid/.test(v))).toEqual([]);
+    expect(verbs.filter((v) => /^(put|patch|delete) \/:id/.test(v))).toEqual([]);
+    // the handler reuses the application contract instead of changing a status itself
+    const handlers = readFileSync(path.join(root, 'presentation/http/subscription-handlers.ts'), 'utf8');
+    expect(handlers).toMatch(/getSubscriptions\(\)\.markPaid\(/);
+    expect(handlers).toMatch(/getSubscriptions\(\)\.markUnpaid\(/);
+  });
+
+  it('the group reads are read-only: they call no repository write and publish nothing', () => {
+    const service = readFileSync(path.join(root, 'application/services/subscription-group-service.ts'), 'utf8');
+    expect(service).not.toMatch(/\.(insert|insertMany|insertBatch|update|lockById|lockAllOfStudent)\(|publishFrom|outbox/);
+    const roster = readFileSync(path.join(root, 'infrastructure/services/public-school-group-roster.ts'), 'utf8');
+    expect(roster).not.toMatch(/sequelize|QueryTypes|\bSELECT\b|\bINSERT\b/i); // groups are read through Module 20's public service only
   });
 
   it('has no fee, proration, amount or enrollment-date logic (a subscription is Student + Month + Status)', () => {

@@ -179,6 +179,13 @@ function successResponse(op: OperationDoc): OpenAPIV3.ResponseObject {
   const s = op.success;
   const headers = { ...BASE_HEADERS, ...(s.noStore ? { 'Cache-Control': { $ref: '#/components/headers/CacheControl' } } : {}) };
   if (s.status === 204) return { description: s.description, headers };
+  if (s.binary) {
+    return {
+      description: s.description,
+      headers: { ...headers, 'Content-Disposition': { description: 'attachment; the suggested file name.', schema: { type: 'string' } } },
+      content: { [s.binary.contentType]: { schema: { type: 'string', format: 'binary' } } },
+    };
+  }
   const dataSchema: SchemaOrRef = s.paginated ? { type: 'array', items: s.data as SchemaOrRef } : (s.data as SchemaOrRef);
   const schema: OpenAPIV3.SchemaObject = {
     type: 'object',
@@ -265,7 +272,7 @@ function buildOperation(mod: ModuleApiDoc, op: OperationDoc, fullPath: string, m
     security: securityOf(op),
     parameters,
     ...(op.request
-      ? { requestBody: { required: true, description: op.request.description, content: { [JSON_TYPE]: { schema: op.request.schema, examples: { ...op.request.examples } } } } }
+      ? { requestBody: { required: true, description: op.request.description, content: { [op.request.contentType ?? JSON_TYPE]: { schema: op.request.schema, examples: { ...op.request.examples } } } } }
       : {}),
     responses,
     ...({ 'x-module': mod.moduleId, 'x-full-path': fullPath, 'x-authorization': op.authorization } as Record<string, unknown>),
@@ -280,8 +287,12 @@ function checkOperation(mod: ModuleApiDoc, op: OperationDoc, messages: MessageLo
   for (const name of inPath) if (!declared.includes(name)) problems.push(`${where}: path parameter "${name}" is not documented in pathParams`);
   for (const name of declared) if (!inPath.includes(name)) problems.push(`${where}: pathParams documents "${name}" but the path has no such parameter`);
   if (op.summary.trim() === '' || op.description.trim() === '') problems.push(`${where}: summary and description are required`);
-  if (op.success.status === 204 ? op.success.data !== undefined : op.success.data === undefined) problems.push(`${where}: ${op.success.status === 204 ? '204 must not declare data' : 'success.data is required'}`);
-  if (op.success.status !== 204 && op.success.example === undefined) problems.push(`${where}: success.example is required`);
+  if (op.success.binary) {
+    if (op.success.status !== 200 || op.success.data !== undefined || op.success.example !== undefined) problems.push(`${where}: a binary download answers 200 and declares neither data nor example`);
+  } else {
+    if (op.success.status === 204 ? op.success.data !== undefined : op.success.data === undefined) problems.push(`${where}: ${op.success.status === 204 ? '204 must not declare data' : 'success.data is required'}`);
+    if (op.success.status !== 204 && op.success.example === undefined) problems.push(`${where}: success.example is required`);
+  }
   if (op.request && Object.keys(op.request.examples).length === 0) problems.push(`${where}: at least one request example is required`);
   if (op.authorization.authentication === 'none' && op.authorization.roles.length > 0) problems.push(`${where}: a public operation cannot require roles`);
   for (const error of allErrors(op)) {

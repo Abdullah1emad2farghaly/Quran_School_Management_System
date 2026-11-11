@@ -140,6 +140,31 @@ export class SubscriptionService {
     });
   }
 
+  /**
+   * PAID -> UNPAID (approved enhancement), ONLY for the subscription's own calendar month: the current Africa/Cairo month is taken from the server clock INSIDE the transaction, and a subscription of
+   * any other month is refused whatever its status (SUBSCRIPTION_MONTH_NOT_CURRENT). Then: already UNPAID -> SUBSCRIPTION_ALREADY_UNPAID; WAIVED -> SUBSCRIPTION_NOT_PAID.
+   *
+   * THE OLDEST-UNPAID RULE (§59, "a newer month cannot be paid until all older months are PAID or WAIVED") IS PRESERVED: the student's subscriptions are locked exactly like `markPaid`, so the
+   * two are serialized; the changed month is by construction the NEWEST month the student can have (months are only ever created for the current Africa/Cairo month), so no newer PAID month can be
+   * left behind an unpaid one. This is also enforced, not merely assumed: if any NEWER month of the student is PAID the change is refused (NEWER_PAID_SUBSCRIPTIONS_EXIST).
+   * It publishes `SubscriptionMarkedUnpaid` (never `SubscriptionPaid`) in the same transaction. It is a status correction, not the payment reversal workflow that belongs to Module 34.
+   */
+  markUnpaid(subscriptionId: string, actorId: string, tx?: TransactionContext): Promise<SubscriptionDto> {
+    return this.inTransaction(tx, async (t) => {
+      const probe = await this.subscriptions.findById(subscriptionId, t);
+      if (!probe) throw subscriptionError('SUBSCRIPTION_NOT_FOUND');
+      const all = await this.subscriptions.lockAllOfStudent(probe.snapshot.studentId, t);
+      const target = all.find((s) => s.id === subscriptionId);
+      if (!target) throw subscriptionError('SUBSCRIPTION_NOT_FOUND');
+      const currentMonth = currentBillingMonth(this.clock.now());
+      target.markUnpaid(actorId, currentMonth, this.clock); // month, then status, checks (the entity refuses before anything changes)
+      if (all.some((other) => other.month > target.month && other.status === 'PAID')) throw subscriptionError('NEWER_PAID_SUBSCRIPTIONS_EXIST');
+      await this.subscriptions.update(target, t);
+      await this.outbox.publishFrom(target, t);
+      return toSubscriptionDto(target);
+    });
+  }
+
   // ---------------------------------------------------------------------------------------------- reads
 
   async getSubscription(subscriptionId: string, tx?: TransactionContext): Promise<SubscriptionViewDto> {

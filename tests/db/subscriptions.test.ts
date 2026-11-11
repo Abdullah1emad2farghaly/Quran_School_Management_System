@@ -19,7 +19,9 @@ import {
   SequelizeSubscriptionRepository,
   Subscription,
   SubscriptionBatch,
+  SubscriptionGroupService,
   SubscriptionService,
+  type SchoolGroupRoster,
   type StudentRoster,
 } from '../../src/modules/33-subscriptions/public';
 
@@ -328,6 +330,76 @@ describe('Module 33 SQL repositories and the real service (inside a rolled-back 
   });
 });
 
+describe('Module 33 group summary, mark-unpaid and the new repository read (real MariaDB, rolled-back transaction)', () => {
+  it('listByStudentsMonth returns only the requested month and students, handles more ids than one query chunk, and invents nothing for students without a record', async () => {
+    await inRolledBackTransaction(async (tx, _q, _f, savepointUow) => {
+      const w = world(620); // more than the 500-id chunk
+      const actor = randomUUID();
+      await w.service('2026-10-10T09:00:00Z', savepointUow).createMonthlySubscriptions(w.schoolId, actor, tx);
+      await w.service('2026-11-10T09:00:00Z', savepointUow).createMonthlySubscriptions(w.schoolId, actor, tx);
+      const stranger = randomUUID();
+      const nov = await subRepo.listByStudentsMonth([...w.studentIds, stranger, ...w.studentIds.slice(0, 5)], '2026-11', tx);
+      expect(nov).toHaveLength(620); // each student once, the stranger and duplicated ids add nothing
+      expect(new Set(nov.map((s) => s.snapshot.studentId)).size).toBe(620);
+      expect(nov.every((s) => s.snapshot.month === '2026-11')).toBe(true);
+      expect(await subRepo.listByStudentsMonth([stranger], '2026-11', tx)).toEqual([]);
+      expect(await subRepo.listByStudentsMonth([], '2026-11', tx)).toEqual([]);
+      expect(await subRepo.listByStudentsMonth(w.studentIds.slice(0, 3), '2026-09', tx)).toEqual([]);
+    });
+  });
+
+  it('the group summary counts PAID / UNPAID / WAIVED / no record from the real rows, waived in the total only', async () => {
+    await inRolledBackTransaction(async (tx, _q, _f, savepointUow) => {
+      const w = world(6);
+      const actor = randomUUID();
+      const service = w.service('2026-11-10T09:00:00Z', savepointUow);
+      await service.createMonthlySubscriptions(w.schoolId, actor, tx);
+      const row = async (i: number) => (await subRepo.findByStudentMonth(w.studentIds[i]!, '2026-11', tx))!.id;
+      await service.markPaid(await row(0), actor, tx);
+      await service.markPaid(await row(1), actor, tx);
+      await service.waiveSubscription(await row(2), actor, tx);
+      const lateStudent = randomUUID(); // a regular/active student with no record
+      created.students.add(lateStudent);
+      const group = { id: randomUUID(), schoolId: w.schoolId, organizationId: w.organizationId, name: 'حلقة' };
+      const members = [...w.studentIds, lateStudent].map((studentId) => ({ studentId, fullName: `S ${studentId.slice(0, 4)}` }));
+      const roster: SchoolGroupRoster = { listActiveGroups: async () => [group], findActiveGroup: async (id) => (id === group.id ? group : undefined), listActiveStudentsOfGroup: async () => [...members, members[0]!] };
+      const groups = new SubscriptionGroupService({ subscriptions: subRepo, groups: roster, schools: { findById: async (id: string) => ({ id, organizationId: w.organizationId, status: 'ACTIVE' }) } as never, unitOfWork: uow, clock: clock('2026-11-10T09:00:00Z') });
+      const [summary] = (await groups.listGroupSummaries(w.schoolId, { page: { page: 1, pageSize: 20 } }, tx)).items;
+      expect(summary).toMatchObject({ month: '2026-11', subscriptionsCreated: true, paidStudents: 2, unpaidStudents: 3, waivedStudents: 1, withoutSubscription: 1, totalStudents: 7 });
+      const list = await groups.listGroupStudents(w.schoolId, group.id, { page: { page: 1, pageSize: 100 } }, tx);
+      expect(list.total).toBe(7);
+      expect(list.items.filter((i) => i.status === null)).toHaveLength(1);
+      expect(list.items.find((i) => i.studentId === lateStudent)).toMatchObject({ status: null, hasSubscription: false, subscriptionId: null });
+      expect(new Set(list.items.map((i) => i.studentId)).size).toBe(7); // the duplicate member was counted once
+    });
+  });
+
+  it('PAID -> UNPAID in SQL clears the paid audit columns (the CHECK holds), can be paid again, and a past month is refused', async () => {
+    await inRolledBackTransaction(async (tx, q, _f, savepointUow) => {
+      const w = world(1);
+      const actor = randomUUID();
+      const student = w.studentIds[0]!;
+      await w.service('2026-10-10T09:00:00Z', savepointUow).createMonthlySubscriptions(w.schoolId, actor, tx);
+      await w.service('2026-11-10T09:00:00Z', savepointUow).createMonthlySubscriptions(w.schoolId, actor, tx);
+      const service = w.service('2026-11-12T09:00:00Z', savepointUow);
+      const oct = (await subRepo.findByStudentMonth(student, '2026-10', tx))!.id;
+      const nov = (await subRepo.findByStudentMonth(student, '2026-11', tx))!.id;
+      await service.markPaid(oct, actor, tx);
+      await service.markPaid(nov, actor, tx);
+
+      expect(await codeOf(service.markUnpaid(oct, actor, tx))).toBe('SUBSCRIPTION_MONTH_NOT_CURRENT');
+      expect((await service.markUnpaid(nov, actor, tx)).status).toBe('UNPAID');
+      const [row] = await q<{ status: string; paid_at: Date | null; paid_by: string | null }>('SELECT status, paid_at, paid_by FROM subscriptions WHERE id = :id', { id: nov });
+      expect(row).toMatchObject({ status: 'UNPAID', paid_at: null, paid_by: null });
+      expect(await codeOf(service.markUnpaid(nov, actor, tx))).toBe('SUBSCRIPTION_ALREADY_UNPAID');
+      expect((await service.markPaid(nov, actor, tx)).status).toBe('PAID'); // Oldest-Unpaid still satisfied (October is PAID)
+      await service.waiveSubscription(oct, actor, tx).catch(() => undefined); // PAID cannot be waived: unchanged
+      const rows = await q<{ month: string; status: string }>('SELECT month, status FROM subscriptions WHERE student_id = :s ORDER BY month', { s: student });
+      expect(rows.map((r) => r.status)).toEqual(['PAID', 'PAID']);
+    });
+  });
+});
+
 describe('Module 33 concurrency (real parallel connections; committed data is deleted afterwards)', () => {
   afterAll(async () => {
     const schools = [...created.schools];
@@ -427,6 +499,59 @@ describe('Module 33 concurrency (real parallel connections; committed data is de
       expect(rows.find((r) => r.month === '2026-09')!.status).toBe('WAIVED');
       const octStatus = rows.find((r) => r.month === '2026-10')!.status;
       expect(octStatus === 'PAID' ? octResult === 'NO_ERROR' : octResult === 'OLDER_UNPAID_SUBSCRIPTIONS_EXIST').toBe(true);
+    }
+  });
+  it('PAID -> UNPAID under concurrency: simultaneous requests change it exactly once', async () => {
+    for (let round = 0; round < 6; round += 1) {
+      const w = world(1);
+      const service = w.service('2026-11-10T09:00:00Z');
+      await service.createMonthlySubscriptions(w.schoolId, randomUUID());
+      const sub = (await subRepo.findByStudentMonth(w.studentIds[0]!, '2026-11'))!;
+      await service.markPaid(sub.id, randomUUID());
+      const outcomes = await Promise.all([1, 2, 3, 4].map(() => codeOf(service.markUnpaid(sub.id, randomUUID()))));
+      expect(outcomes.filter((o) => o === 'NO_ERROR')).toHaveLength(1);
+      expect(outcomes.filter((o) => o === 'SUBSCRIPTION_ALREADY_UNPAID')).toHaveLength(3);
+      expect((await subRepo.findById(sub.id))!.status).toBe('UNPAID');
+    }
+  });
+
+  it('paying and changing back at the same time are serialized: every outcome is consistent with the final status, never a half state', async () => {
+    for (let round = 0; round < 10; round += 1) {
+      const w = world(1);
+      const service = w.service('2026-11-10T09:00:00Z');
+      await service.createMonthlySubscriptions(w.schoolId, randomUUID());
+      const sub = (await subRepo.findByStudentMonth(w.studentIds[0]!, '2026-11'))!;
+      // start UNPAID: [pay, revert] -> pay-then-revert gives UNPAID (both succeed); revert-first (ALREADY_UNPAID) then pay gives PAID
+      const [payResult, revertResult] = await Promise.all([codeOf(service.markPaid(sub.id, randomUUID())), codeOf(service.markUnpaid(sub.id, randomUUID()))]);
+      const final = (await subRepo.findById(sub.id))!.snapshot;
+      expect(payResult).toBe('NO_ERROR'); // an UNPAID subscription can always be paid by exactly this call
+      if (revertResult === 'NO_ERROR') {
+        expect(final.status).toBe('UNPAID'); // paid first, then changed back
+        expect(final.paidAt).toBeNull();
+      } else {
+        expect(revertResult).toBe('SUBSCRIPTION_ALREADY_UNPAID'); // changed-back attempted first, found it UNPAID
+        expect(final.status).toBe('PAID');
+        expect(final.paidAt).not.toBeNull();
+      }
+    }
+  });
+
+  it('OLDEST-UNPAID with the new transition: reverting the current month while the next month is paid being attempted never leaves a newer PAID behind an unpaid month', async () => {
+    for (let round = 0; round < 6; round += 1) {
+      const w = world(1);
+      const student = w.studentIds[0]!;
+      await w.service('2026-10-10T09:00:00Z').createMonthlySubscriptions(w.schoolId, randomUUID());
+      const oct = (await subRepo.findByStudentMonth(student, '2026-10'))!;
+      await w.service('2026-10-20T09:00:00Z').markPaid(oct.id, randomUUID());
+      // the month turns: November's subscription is created; October (PAID) can no longer be changed back, November can be paid
+      await w.service('2026-11-01T09:00:00Z').createMonthlySubscriptions(w.schoolId, randomUUID());
+      const nov = (await subRepo.findByStudentMonth(student, '2026-11'))!;
+      const service = w.service('2026-11-02T09:00:00Z');
+      const [revertOct, payNov] = await Promise.all([codeOf(service.markUnpaid(oct.id, randomUUID())), codeOf(service.markPaid(nov.id, randomUUID()))]);
+      expect(revertOct).toBe('SUBSCRIPTION_MONTH_NOT_CURRENT');
+      expect(payNov).toBe('NO_ERROR');
+      const rows = await sequelize.query<{ month: string; status: string }>('SELECT month, status FROM subscriptions WHERE student_id = :s ORDER BY month', { replacements: { s: student }, type: QueryTypes.SELECT });
+      expect(rows.map((r) => r.status)).toEqual(['PAID', 'PAID']);
     }
   });
 });

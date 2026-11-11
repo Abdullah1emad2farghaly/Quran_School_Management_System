@@ -98,7 +98,7 @@ describe('monthly BULK creation', () => {
     const [event] = t.events('SubscriptionsCreated');
     expect(event).toBeDefined();
     expect(JSON.parse(event!.payload)).toEqual({ batchId: result.batchId, schoolId: school.id, organizationId: t.org.id, month: '2026-11', count: 2, actorId: manager.id });
-    expect(event!.payload).not.toMatch(/خالد|أحمد|0100/);
+    expect(Object.keys(JSON.parse(event!.payload)).sort()).toEqual(['actorId', 'batchId', 'count', 'month', 'organizationId', 'schoolId']); // identifiers only: no student name, phone or amount
   });
 });
 

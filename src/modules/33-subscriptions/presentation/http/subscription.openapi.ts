@@ -1,6 +1,6 @@
 import { listQueryParameters, ref, schema as s, type AuthorizationDoc, type ErrorDoc, type ModuleApiDoc } from '../../../04-validation-api/public';
 import { SubscriptionPermissions } from '../../application/services/subscription-authorization';
-import { COLLECTOR_LIST_SPEC, SUBSCRIPTION_LIST_SPEC } from './subscription-routes';
+import { COLLECTOR_LIST_SPEC, GROUP_LIST_SPEC, SUBSCRIPTION_LIST_SPEC } from './subscription-routes';
 
 const SUBSCRIPTION_ID = '5d1c8e07-3a92-4b64-9f10-7e2a6c4b8d13';
 const STUDENT_ID = '8b3e5f19-4c70-4d26-a1e8-2f9d6b0c7a45';
@@ -52,6 +52,34 @@ const linkSchema = s.object(
   ['id', 'userId', 'schoolId', 'linkedAt', 'linkedBy', 'unlinkedAt', 'unlinkedBy', 'isActive'],
 );
 
+const GROUP_ID = '2c8d4f61-7a93-4e05-b1d8-6e0f9a3c5b27';
+const groupSummarySchema = s.object(
+  {
+    groupId: s.uuid(),
+    groupName: s.string({ example: 'حلقة الفجر' }),
+    month: s.string({ example: '2026-11', description: 'The month the statistics are for (`YYYY-MM`, Africa/Cairo).' }),
+    subscriptionsCreated: s.boolean({ description: 'Whether the monthly bulk creation of this school and month was done.' }),
+    paidStudents: s.integer({ description: 'Students of the group whose subscription for the month is PAID.' }),
+    unpaidStudents: s.integer({ description: 'Students of the group whose subscription for the month is UNPAID.' }),
+    waivedStudents: s.integer({ description: 'Students whose subscription is WAIVED: counted in `totalStudents` only, never in paid or unpaid.' }),
+    withoutSubscription: s.integer({ description: 'Regular/active students with NO subscription record for the month (for example a student who joined after the bulk creation): counted in `totalStudents` only; never treated as paid or unpaid.' }),
+    totalStudents: s.integer({ description: 'All regular/active students currently in the group: paid + unpaid + waived + withoutSubscription.' }),
+  },
+  ['groupId', 'groupName', 'month', 'subscriptionsCreated', 'paidStudents', 'unpaidStudents', 'waivedStudents', 'withoutSubscription', 'totalStudents'],
+);
+const groupStudentSchema = s.object(
+  {
+    studentId: s.uuid(),
+    studentName: s.string({ example: 'عمر أحمد محمد' }),
+    month: s.string({ example: '2026-11' }),
+    subscriptionId: s.uuid({ nullable: true, description: 'The subscription of the month, or null when the student has none (use it for the mark-paid / mark-unpaid / waive calls).' }),
+    // In OpenAPI 3.0 a nullable enum must list `null` itself, which the `s.string` helper cannot express, so this property is written out (as in Module 24).
+    status: { type: 'string', nullable: true, enum: ['PAID', 'UNPAID', 'WAIVED', null], description: 'The subscription status for the month; null when there is no record (never inferred as UNPAID).' },
+    hasSubscription: s.boolean(),
+  },
+  ['studentId', 'studentName', 'month', 'subscriptionId', 'status', 'hasSubscription'],
+);
+const groupIdParam = { groupId: { description: 'The group id (it must belong to the school in the path).', example: GROUP_ID, schema: s.uuid() } };
 const subscriptionExample = (o: Record<string, unknown> = {}): Record<string, unknown> => ({
   id: SUBSCRIPTION_ID, studentId: STUDENT_ID, studentName: 'عمر أحمد محمد', schoolId: SCHOOL_ID, month: '2026-11', status: 'UNPAID',
   createdAt: '2026-11-08T09:00:00.000Z', paidAt: null, waivedAt: null, updatedAt: '2026-11-08T09:00:00.000Z', ...o,
@@ -69,7 +97,7 @@ export const subscriptionApiDoc: ModuleApiDoc = {
   mountPath: '/subscriptions',
   tag: {
     name: 'Subscriptions',
-    description: 'Monthly subscriptions (Student + Month + Status: PAID / UNPAID / WAIVED), the manual bulk creation for the current Africa/Cairo month, the Oldest-Unpaid Rule (enforced by the `markPaid` contract that Module 34 will call; there is no HTTP endpoint that marks a subscription PAID), waiving by the School Manager, and the Subscription Collector-to-School assignment.',
+    description: 'Monthly subscriptions (Student + Month + Status: PAID / UNPAID / WAIVED), the manual bulk creation for the current Africa/Cairo month, the Oldest-Unpaid Rule (enforced by the `markPaid` contract, exposed by `mark-paid` and also meant for Module 34), a PAID -> UNPAID status correction for the current month only, waiving by the School Manager, the group-based subscription statistics, and the Subscription Collector-to-School assignment. No payment is collected and no amount is stored here (Module 34).',
   },
   operations: [
     {
@@ -116,6 +144,37 @@ export const subscriptionApiDoc: ModuleApiDoc = {
       query: listQueryParameters(SUBSCRIPTION_LIST_SPEC),
       success: { status: 200, description: 'A page of subscriptions.', paginated: true, data: ref('Subscription'), example: subscriptionExample() },
       errors: [{ status: 400, codes: ['INVALID_SUBSCRIPTION_MONTH'], description: 'The month filter is not `YYYY-MM`.' }, NOT_ALLOWED],
+    },
+    {
+      method: 'get',
+      path: '/schools/:schoolId/groups',
+      operationId: 'listSchoolGroupSubscriptionSummaries',
+      summary: 'The school\'s groups with their subscription statistics for a month',
+      description:
+        'Returns the school\'s existing ACTIVE educational groups (Module 20) with, for `filter[month]` (default: the current Africa/Cairo month), the number of PAID students, UNPAID students and the total of regular/active students currently in the group. WAIVED students are in the total only. A regular/active student with NO subscription record for the month is reported explicitly (`withoutSubscription`) and is never counted as paid or unpaid. A student is counted once (a student is in at most one group at a time). Sorted by group name (`sort=-name` reverses), paginated (default 20, maximum 100). A malformed month is `400 INVALID_SUBSCRIPTION_MONTH`.',
+      authorization: managerOrCollector(SubscriptionPermissions.GROUP_LIST, 'The school in the path.'),
+      pathParams: schoolIdParam,
+      query: listQueryParameters(GROUP_LIST_SPEC),
+      success: { status: 200, description: 'A page of group summaries.', paginated: true, data: ref('GroupSubscriptionSummary'), example: { groupId: GROUP_ID, groupName: 'حلقة الفجر', month: '2026-11', subscriptionsCreated: true, paidStudents: 12, unpaidStudents: 6, waivedStudents: 1, withoutSubscription: 1, totalStudents: 20 } },
+      errors: [{ status: 400, codes: ['INVALID_SUBSCRIPTION_MONTH'], description: 'The month filter is not `YYYY-MM`.' }, NOT_ALLOWED, { status: 422, codes: ['SUBSCRIPTION_SCHOOL_NOT_ACTIVE'], description: 'The school does not exist or is not ACTIVE.' }],
+    },
+    {
+      method: 'get',
+      path: '/schools/:schoolId/groups/:groupId/students',
+      operationId: 'listGroupStudentSubscriptions',
+      summary: 'The students of one group with their subscription status for a month',
+      description:
+        'Every regular/active student currently in the group (Module 20 membership), each once, with the status of their subscription for `filter[month]` (default: the current Africa/Cairo month): PAID, UNPAID, WAIVED, or `null` when there is no record. WAIVED students are included. Sorted by student name (`sort=-name` reverses) and paginated with the standard rules (default 20, maximum 100): walk `page` until `totalPages` to retrieve the whole group. The group must be an ACTIVE group of the school in the path, otherwise `404 SUBSCRIPTION_GROUP_NOT_FOUND` (the same answer for a group of another school or organization: existence is never revealed).',
+      authorization: managerOrCollector(SubscriptionPermissions.GROUP_LIST, 'The school in the path; the group must belong to that school.'),
+      pathParams: { ...schoolIdParam, ...groupIdParam },
+      query: listQueryParameters(GROUP_LIST_SPEC),
+      success: { status: 200, description: 'A page of the group\'s students.', paginated: true, data: ref('GroupStudentSubscription'), example: { studentId: STUDENT_ID, studentName: 'عمر أحمد محمد', month: '2026-11', subscriptionId: SUBSCRIPTION_ID, status: 'UNPAID', hasSubscription: true } },
+      errors: [
+        { status: 400, codes: ['INVALID_SUBSCRIPTION_MONTH'], description: 'The month filter is not `YYYY-MM`.' },
+        NOT_ALLOWED,
+        { status: 404, codes: ['SUBSCRIPTION_GROUP_NOT_FOUND'], description: 'The group does not exist, is not ACTIVE, or does not belong to this school.' },
+        { status: 422, codes: ['SUBSCRIPTION_SCHOOL_NOT_ACTIVE'], description: 'The school does not exist or is not ACTIVE.' },
+      ],
     },
     {
       method: 'post',
@@ -199,9 +258,45 @@ export const subscriptionApiDoc: ModuleApiDoc = {
         { status: 422, codes: ['SUBSCRIPTION_NOT_UNPAID'], description: 'Only an UNPAID subscription can be waived.' },
       ],
     },
+    {
+      method: 'post',
+      path: '/:id/mark-paid',
+      operationId: 'markSubscriptionPaid',
+      summary: 'Mark an UNPAID subscription as PAID',
+      description:
+        'Exposes the `markPaid` application contract. UNPAID -> PAID only, applying the Oldest-Unpaid Rule (Master Specification §59) exactly: a newer month cannot be paid until every older month of the same student is PAID or WAIVED (`422 OLDER_UNPAID_SUBSCRIPTIONS_EXIST`). A WAIVED subscription is `422 SUBSCRIPTION_NOT_UNPAID`; an already PAID one is `409 SUBSCRIPTION_ALREADY_PAID`. The student\'s subscriptions are locked, so concurrent calls are safe: exactly one wins. Publishes `SubscriptionPaid` exactly once in the same transaction; the student\'s Parent (only) is notified through Modules 31/32. No amount is stored and no payment is collected here (Module 34).',
+      authorization: managerOrCollector(SubscriptionPermissions.MARK_PAID, 'The subscription\'s school (loaded server-side).'),
+      pathParams: subscriptionIdParam,
+      success: { status: 200, description: 'The paid subscription.', data: ref('Subscription'), example: subscriptionExample({ status: 'PAID', paidAt: '2026-11-09T08:00:00.000Z' }) },
+      errors: [
+        NOT_ALLOWED,
+        { status: 404, codes: ['SUBSCRIPTION_NOT_FOUND'], description: 'The subscription does not exist.' },
+        { status: 409, codes: ['SUBSCRIPTION_ALREADY_PAID', 'SUBSCRIPTION_CONCURRENT_MODIFICATION'], description: 'Already PAID (one successful payment per subscription), or a concurrent update could not be resolved; retry.' },
+        { status: 422, codes: ['SUBSCRIPTION_NOT_UNPAID', 'OLDER_UNPAID_SUBSCRIPTIONS_EXIST'], description: 'The subscription is WAIVED, or an older month of the student is neither PAID nor WAIVED.' },
+      ],
+    },
+    {
+      method: 'post',
+      path: '/:id/mark-unpaid',
+      operationId: 'markSubscriptionUnpaid',
+      summary: 'Change a PAID subscription of the CURRENT month back to UNPAID',
+      description:
+        'PAID -> UNPAID only, and ONLY for a subscription whose month is the current calendar month in Africa/Cairo (the server clock decides; the client cannot). A subscription of any other month (a past month, however it is stored) is `422 SUBSCRIPTION_MONTH_NOT_CURRENT`, checked first regardless of status. Already UNPAID is `409 SUBSCRIPTION_ALREADY_UNPAID`; WAIVED is `422 SUBSCRIPTION_NOT_PAID`. The Oldest-Unpaid Rule (§59) is preserved: the changed month is the newest month a student can have, the student\'s subscriptions are locked like in mark-paid, and a newer PAID month would refuse the change (`422 NEWER_PAID_SUBSCRIPTIONS_EXIST`). Publishes `SubscriptionMarkedUnpaid` (never `SubscriptionPaid`) in the same transaction; nobody is notified. This is a status correction, not the payment reversal workflow of Module 34 (no reason is recorded).',
+      authorization: managerOrCollector(SubscriptionPermissions.MARK_UNPAID, 'The subscription\'s school (loaded server-side).'),
+      pathParams: subscriptionIdParam,
+      success: { status: 200, description: 'The subscription, now UNPAID.', data: ref('Subscription'), example: subscriptionExample() },
+      errors: [
+        NOT_ALLOWED,
+        { status: 404, codes: ['SUBSCRIPTION_NOT_FOUND'], description: 'The subscription does not exist.' },
+        { status: 409, codes: ['SUBSCRIPTION_ALREADY_UNPAID', 'SUBSCRIPTION_CONCURRENT_MODIFICATION'], description: 'Already UNPAID, or a concurrent update could not be resolved; retry.' },
+        { status: 422, codes: ['SUBSCRIPTION_MONTH_NOT_CURRENT', 'SUBSCRIPTION_NOT_PAID', 'NEWER_PAID_SUBSCRIPTIONS_EXIST'], description: 'The subscription is not of the current Africa/Cairo month, it is WAIVED, or a newer month of the student is PAID.' },
+      ],
+    },
   ],
   schemas: {
     Subscription: subscriptionSchema,
+    GroupSubscriptionSummary: groupSummarySchema,
+    GroupStudentSubscription: groupStudentSchema,
     Collector: collectorSchema,
     CollectorSchoolLink: linkSchema,
     BulkCreationResult: s.object(

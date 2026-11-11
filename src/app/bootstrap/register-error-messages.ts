@@ -11,6 +11,7 @@ import { SCHOOL_ERROR_MESSAGES } from '../../modules/16-schools/public';
 import { PARENT_ERROR_MESSAGES } from '../../modules/17-parents/public';
 import { TEACHER_ERROR_MESSAGES } from '../../modules/18-teachers/public';
 import { STUDENT_ERROR_MESSAGES } from '../../modules/19-students/public';
+import { IMPORT_ERROR_MESSAGES } from '../../modules/36-excel-import/public';
 import { GROUP_ERROR_MESSAGES } from '../../modules/20-groups/public';
 import { QURAN_ERROR_MESSAGES } from '../../modules/21-quran-structure/public';
 import { QURAN_RANGE_ERROR_MESSAGES } from '../../modules/22-quran-range-engine/public';
@@ -47,6 +48,7 @@ export function registerAllErrorMessages(): void {
   registerErrorMessages(PARENT_ERROR_MESSAGES);
   registerErrorMessages(TEACHER_ERROR_MESSAGES);
   registerErrorMessages(STUDENT_ERROR_MESSAGES);
+  registerErrorMessages(IMPORT_ERROR_MESSAGES);
   registerErrorMessages(GROUP_ERROR_MESSAGES);
   registerErrorMessages(QURAN_ERROR_MESSAGES);
   registerErrorMessages(QURAN_RANGE_ERROR_MESSAGES);
