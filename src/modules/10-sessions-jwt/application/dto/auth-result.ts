@@ -11,6 +11,8 @@ export interface AuthResult {
   readonly mustChangePassword: boolean;
   /** Informational (for the client UI). Authorization is always decided on the backend. */
   readonly roles: readonly RoleCode[];
+  /** The school the user works in as School Manager (active manager link), or null for every other account. Informational, for the client UI. */
+  readonly schoolId: string | null;
 }
 
 /** Who is making an authenticated request. */

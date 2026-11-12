@@ -17,6 +17,7 @@ import { getIdentityService } from './identity';
 import { logger } from './logger';
 import { getEventHandlerRegistry, getOutboxService } from './outbox';
 import { getRoleService } from './roles';
+import { getSchoolService } from './schools';
 
 let service: SessionService | undefined;
 
@@ -30,6 +31,8 @@ export function getSessionService(): SessionService {
       repository: new SequelizeSessionRepository(getSequelize()),
       identity: getIdentityService(),
       roles: getRoleService(),
+      // The school the user manages (Module 16 public contract); the first active link when a user manages several.
+      managedSchools: { findManagedSchoolId: async (userId) => (await getSchoolService().listManagedSchoolIds(userId))[0] ?? null },
       accessTokens: new JwtAccessTokenService(accessSecret),
       refreshTokenHasher: new HmacRefreshTokenHasher(refreshSecret),
       refreshTokenGenerator: new CryptoRefreshTokenGenerator(),

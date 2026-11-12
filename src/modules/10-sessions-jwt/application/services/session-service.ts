@@ -9,6 +9,7 @@ import { MAX_ACTIVE_SESSIONS, firstFreeSlot } from '../../domain/value-objects/s
 import type { SessionRevokeReason } from '../../domain/value-objects/session-revoke-reason';
 import type { AuthPrincipal, AuthResult } from '../dto/auth-result';
 import type { DeviceSessionListDto } from '../dto/device-session-dto';
+import type { ManagedSchoolResolver } from '../ports/managed-school-resolver';
 import type { SessionRepository } from '../ports/session-repository';
 import type { AccessTokenService, RefreshTokenGenerator, RefreshTokenHasher } from '../ports/token-ports';
 
@@ -16,6 +17,8 @@ export interface SessionServiceDeps {
   readonly repository: SessionRepository;
   readonly identity: Pick<IdentityService, 'findByPhone' | 'findById' | 'verifyPassword' | 'changePassword'>;
   readonly roles: Pick<RoleService, 'listActiveRoles'>;
+  /** Optional: supplies `schoolId` in the login/refresh answer. Without it `schoolId` is always null. */
+  readonly managedSchools?: ManagedSchoolResolver;
   readonly accessTokens: AccessTokenService;
   readonly refreshTokenHasher: RefreshTokenHasher;
   readonly refreshTokenGenerator: RefreshTokenGenerator;
@@ -55,6 +58,7 @@ export class SessionService {
   private readonly repository: SessionRepository;
   private readonly identity: SessionServiceDeps['identity'];
   private readonly roles: SessionServiceDeps['roles'];
+  private readonly managedSchools: ManagedSchoolResolver | undefined;
   private readonly accessTokens: AccessTokenService;
   private readonly hasher: RefreshTokenHasher;
   private readonly generator: RefreshTokenGenerator;
@@ -68,6 +72,7 @@ export class SessionService {
     this.repository = deps.repository;
     this.identity = deps.identity;
     this.roles = deps.roles;
+    this.managedSchools = deps.managedSchools;
     this.accessTokens = deps.accessTokens;
     this.hasher = deps.refreshTokenHasher;
     this.generator = deps.refreshTokenGenerator;
@@ -368,6 +373,7 @@ export class SessionService {
       user: { id: user.userId, phone: user.phone },
       mustChangePassword: user.mustChangePassword,
       roles: await this.roles.listActiveRoles(user.userId),
+      schoolId: (await this.managedSchools?.findManagedSchoolId(user.userId)) ?? null,
     };
   }
 

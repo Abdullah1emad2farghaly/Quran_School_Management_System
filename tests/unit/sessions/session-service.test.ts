@@ -31,6 +31,25 @@ describe('login', () => {
     expect(await h.service.authenticate(result.accessToken)).toMatchObject({ userId: u.id });
   });
 
+  it('returns schoolId: the school the user manages as School Manager, and null for everyone else', async () => {
+    const managed = new Map<string, string>();
+    const h = createSessionHarness({ managedSchools: { findManagedSchoolId: async (userId) => managed.get(userId) ?? null } });
+    const manager = await h.createUser({ role: 'SCHOOL_MANAGER' });
+    const teacher = await h.createUser({ role: 'TEACHER' });
+    managed.set(manager.id, '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10');
+
+    const login = await h.service.login({ phone: manager.phone, password: manager.password });
+    expect(login.schoolId).toBe('3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10');
+    expect((await h.service.refresh(login.refreshToken)).schoolId).toBe('3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10');
+    expect((await h.service.login({ phone: teacher.phone, password: teacher.password })).schoolId).toBeNull();
+  });
+
+  it('returns schoolId null when no school resolver is wired', async () => {
+    const h = createSessionHarness();
+    const u = await h.createUser({ role: 'SCHOOL_MANAGER' });
+    expect((await h.service.login({ phone: u.phone, password: u.password })).schoolId).toBeNull();
+  });
+
   it('accepts the phone in any supported format', async () => {
     const h = createSessionHarness();
     const u = await h.createUser();

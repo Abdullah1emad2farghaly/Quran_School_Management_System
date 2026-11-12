@@ -14,8 +14,9 @@ const authTokens = s.object(
     user: s.object({ id: s.uuid(), phone: s.string({ description: 'The normalized phone number (the login identifier).' }) }, ['id', 'phone']),
     mustChangePassword: s.boolean({ description: 'True while the account still has an initial password that must be changed. The backend then answers every protected request except `POST /auth/change-password`, `POST /auth/logout` and `POST /auth/logout-all` with 403 `PASSWORD_CHANGE_REQUIRED`.', example: false }),
     roles: s.array(s.string({ enum: ROLE_CODES }), { description: 'Informational, for the client UI. Authorization is always decided by the backend.' }),
+    schoolId: s.uuid({ nullable: true, description: 'The school the user works in as School Manager (their active manager link). Null for every other account. Informational, for the client UI; authorization is always decided by the backend.' }),
   },
-  ['tokenType', 'accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'user', 'mustChangePassword', 'roles'],
+  ['tokenType', 'accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'user', 'mustChangePassword', 'roles', 'schoolId'],
 );
 
 const deviceSession = s.object(
@@ -54,6 +55,7 @@ const tokensExample = {
   user: { id: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', phone: '+201001234567' },
   mustChangePassword: false,
   roles: ['MAIN_ADMIN'],
+  schoolId: null,
 };
 
 /** OpenAPI contract of `/auth` (`auth.routes.ts`). Module 10: sessions and JWT. */

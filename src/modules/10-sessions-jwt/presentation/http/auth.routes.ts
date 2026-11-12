@@ -40,6 +40,7 @@ function serialize(result: AuthResult) {
     user: result.user,
     mustChangePassword: result.mustChangePassword,
     roles: result.roles,
+    schoolId: result.schoolId,
   };
 }
 
