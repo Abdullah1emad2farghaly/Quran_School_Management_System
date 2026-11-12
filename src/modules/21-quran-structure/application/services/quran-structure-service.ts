@@ -24,6 +24,8 @@ export interface QuranStructureLookup {
   getAyah(surah: number, ayah: number): Promise<AyahDto | undefined>;
   getAyahByGlobalPosition(globalPosition: number): Promise<AyahDto | undefined>;
   listAyahsOfSurah(surah: number, request: PageRequest, direction?: SortDirection): Promise<PageResult<AyahDto>>;
+  /** One page of ALL the ayahs of the approved edition (canonical order by global position, `desc` reverses it); the same `AyahDto` as everywhere else. */
+  listAyahs(request: PageRequest, direction?: SortDirection): Promise<PageResult<AyahDto>>;
   getPage(page: number): Promise<PageDto | undefined>;
   getLineByGlobalIndex(globalLine: number): Promise<LineDto | undefined>;
   listJuzs(): Promise<JuzDto[]>;
@@ -89,6 +91,12 @@ export class QuranStructureService implements QuranStructureLookup {
     await this.ensureImported();
     const a = await this.repository.findAyahByGlobal(globalPosition);
     return a ? toAyah(a) : undefined;
+  }
+
+  async listAyahs(request: PageRequest, direction: SortDirection = 'asc'): Promise<PageResult<AyahDto>> {
+    await this.ensureImported();
+    const { items, total } = await this.repository.listAyahs(request, direction);
+    return buildPageResult(items.map(toAyah), total, request);
   }
 
   async listAyahsOfSurah(surah: number, request: PageRequest, direction: SortDirection = 'asc'): Promise<PageResult<AyahDto>> {

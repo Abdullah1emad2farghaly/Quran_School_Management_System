@@ -4,6 +4,9 @@ import type { AuthorizationPolicyRegistry } from '../../../12-authorization-engi
 /** The only permission of Module 21: reading the Quran structure. There is deliberately NO write permission (the data is immutable through the API). */
 export const QuranPermissions = { READ: 'quran.structure.read' } as const;
 
+/** The roles that hold `quran.structure.read` (every assignable role). Exposed so that API contracts of other modules that reuse the permission document the same roles. */
+export const QURAN_READ_ROLES: readonly string[] = ASSIGNABLE_ROLE_CODES;
+
 /**
  * Approved decision: ALL authenticated users may read the Quran structure. It is global reference data (no organization, school or
  * ownership), so the policy is UNSCOPED and granted to every role that can be assigned to an account (the Student role is a business entity

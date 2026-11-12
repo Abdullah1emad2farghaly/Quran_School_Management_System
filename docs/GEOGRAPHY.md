@@ -14,7 +14,7 @@ Hierarchy (Master Specification §27): **Country → Governorate → Center/City
 
 Fields: `id` (UUID), `code` (`CNT-` / `GOV-` / `CTR-` / `VIL-` + 6 digits, unique, checked case-sensitively), `name` (one required field, Arabic or English, utf8mb4, same normalization rules as the organization name, max 200 characters), `status` (`ACTIVE` / `INACTIVE`), timestamps; `centers` also has `kind`. CHECKs on status, code format, non-blank name and kind. The name-uniqueness rules are technical data-integrity guards (not business rules from the specification): a second village with the same name inside the same center would need a disambiguation rule that has not been defined.
 
-**No delete, rename or reactivation operation exists** (none is specified); `INACTIVE` is the only retirement state and nothing sets it yet. No HTTP endpoints, no permissions, no outbox events.
+**No delete, rename or reactivation operation exists** (none is specified); `INACTIVE` is the only retirement state and nothing sets it yet. No permissions, no outbox events. The only HTTP endpoints are the PUBLIC, read-only registration lookups below.
 
 ## Seed (reference data only)
 `npm run seed:geography` (after `npm run db:migrate`): idempotent; creates **Egypt and its 27 governorates** only, in a fixed order so every fresh environment gets the same codes (`CNT-000001`, `GOV-000001` .. `GOV-000027`). Existing nodes are never renamed, deleted or duplicated; a partial seed is completed. **Centers, cities and villages are NOT seeded and were not invented: this is not a complete geography dataset.** They must be loaded later from a trustworthy source (a future import; creating nodes is intentionally not part of the public read contract).
@@ -35,3 +35,12 @@ Downstream modules depend on `GeographyLookup` (read-only); composition root `ge
 
 ## Tests
 Unit: `tests/unit/geography` (name/code/node rules, dataset integrity, idempotent seed, hierarchy validation, in-memory repository rules, CLI). MariaDB: `tests/db/geography.test.ts` (schema and columns without `organization_id`, real FKs with RESTRICT, seed and idempotency, Arabic round trip, hierarchy validation, delete restriction, FK/unique/CHECK guards). Always rolled back; safe on a seeded database.
+
+## Public registration lookups (0.45.0, approved 2026-11-11)
+Anonymous, read-only, only `{ id, name }` per item (never the code, status, level or parent), real records from the tables above. Not paginated (short reference lists). Implemented by `GeographyService.listActiveCountries` / `listActiveGovernorates` (only `ACTIVE` nodes are offered, the same status rule that `validateHierarchy` applies by default).
+| Operation | Route | Notes |
+|---|---|---|
+| `getCountries` | `GET /api/v1/geography/countries` | The ACTIVE countries in code order (organization registration form). |
+| `getGovernorates` | `GET /api/v1/geography/governorates?countryId=...` or `?organizationId=...` | **Exactly one** parameter (neither or both: 400 `VALIDATION_FAILED`; not a UUID: 400). `countryId`: the country must exist (404 `GEOGRAPHY_NODE_NOT_FOUND`) and be ACTIVE (400 `GEOGRAPHY_NODE_INACTIVE`). `organizationId`: the country is derived on the server from that organization (Module 13); an organization that does not exist or may not receive school submissions (not ACTIVE, or without a country) answers 404 `ORGANIZATION_NOT_FOUND` (an ineligible organization is not revealed). A client never sends a country together with an organization. |
+Localization: a node has **one** stored name (Arabic in the seed), so the same value is returned for `ar` and `en`; no translation is invented. Error messages follow the request language (user preference, then `Accept-Language`, default `ar`). Module 14 reads organizations only through Module 13's public `findSubmissionEligibleById`.
+

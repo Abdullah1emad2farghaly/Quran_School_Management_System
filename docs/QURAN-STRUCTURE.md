@@ -114,3 +114,7 @@ See `docs/verification/module21/Module21-Final-Verification-Report.md` for the o
 
 1. ~~Run the checks and the first real import~~ done (0.29.1).
 2. Written clarification of redistribution and production terms of the sources (does not block development).
+
+## `listAyahs` (0.45.0, approved 2026-11-11)
+`QuranStructureLookup.listAyahs(request, direction?)` returns one page of ALL ayahs in canonical order (global position, `desc` reverses) with the unchanged `AyahDto`; it throws `QURAN_DATASET_NOT_IMPORTED` while nothing is imported. It is consumed by Memorization (`GET /memorization/ayahs`) and Revision (`GET /revision/ayahs`), which own those routes. `QURAN_READ_ROLES` exposes the roles that hold `quran.structure.read` so other contracts document the same roles. No dataset, table or migration changed.
+

@@ -1,7 +1,8 @@
+import { QURAN_READ_ROLES, QuranPermissions } from '../../../21-quran-structure/public';
 import { listQueryParameters, ref, schema as s, type AuthorizationDoc, type ErrorDoc, type ModuleApiDoc, type OperationDoc } from '../../../04-validation-api/public';
 import { RevisionPermissions } from '../../application/services/revision-authorization';
 import { ASSIGNMENT_STATUSES, MAX_BATCH_RECORDS, MAX_REASON_LENGTH } from '../../domain/value-objects/revision-range';
-import { REVISION_LIST_SPEC } from './revision-routes';
+import { REVISION_AYAHS_SPEC, REVISION_LIST_SPEC } from './revision-routes';
 
 const SESSION_ID = '5d2a8c41-7b36-4e09-9f15-a3c6e1d08b72';
 const GROUP_ID = '4c9e1b72-3a58-4d06-9b17-e2f8a0d5c613';
@@ -163,6 +164,32 @@ const teacherAuth = (permissionId: string, scope: string, extra = ''): Authoriza
 });
 const op = (o: OperationDoc): OperationDoc => o;
 
+const AYAH_EXAMPLE = { globalPosition: 1, surah: 1, ayah: 1, text: 'Example official text ۝١', firstPage: 1, firstLine: 2, lastPage: 1, lastLine: 2, juz: 1, quarter: 1, hizb: 1, startsRubMarker: false };
+/** The Quran selection answer: Module 21's own contract (the `QuranAyah` schema), the SAME in Memorization and Revision. */
+const quranAyahsOperation: OperationDoc = {
+  method: 'get',
+  path: '/ayahs',
+  operationId: 'getRevisionAyahs',
+  summary: 'The Quran ayahs for the revision selection',
+  description:
+    'A paginated list of the ayahs of the approved Quran edition (Madinah Mushaf, Hafs from Asim) in canonical order (surah, then ayah; `sort=-globalPosition` reverses it), for the revision selection interface. The data is read through the public contract of Module 21 (the only source of Quran data): the same complete dataset, the same identifiers (`surah`, `ayah`, `globalPosition`, page, line, juz, quarter) and the exact official text as `GET /quran/surahs/{surah}/ayahs`. It is NOT filtered by any student progress and has no student-specific structure. The same data is returned by the Memorization and the Revision operation: Revision chooses its own range types (Module 28) but not a different Quran. Readable by every authenticated role through the existing `quran.structure.read` permission. Quran text is not localized; only error messages follow the request language.',
+  authorization: {
+    authentication: 'required',
+    roles: [...QURAN_READ_ROLES],
+    scope: 'None: global reference data (no organization, school or ownership).',
+    enforcement: 'Authorization Engine permission `quran.structure.read` (unscoped, granted to every assignable role); no new permission. The data cannot be changed through this endpoint.',
+    permissionId: QuranPermissions.READ,
+    decision: 'APPROVED',
+    reference: 'docs/AUTHORIZATION-MATRIX.md (Quran structure 21); docs/QURAN-STRUCTURE.md; docs/REVISION.md',
+  },
+  query: listQueryParameters(REVISION_AYAHS_SPEC),
+  success: { status: 200, description: 'A page of ayahs.', paginated: true, data: ref('QuranAyah'), example: AYAH_EXAMPLE },
+  errors: [
+    { status: 403, codes: ['ACCESS_DENIED', 'PASSWORD_CHANGE_REQUIRED'], description: 'The caller has no role that may read the Quran structure, or the account must first change its initial password.' },
+    { status: 404, codes: ['QURAN_DATASET_NOT_IMPORTED'], description: 'The Quran dataset has not been imported yet.' },
+  ],
+};
+
 /** OpenAPI contract of `/revision` (`revision-routes.ts`). Module 28: revision. */
 export const revisionApiDoc: ModuleApiDoc = {
   moduleId: '28',
@@ -174,6 +201,7 @@ export const revisionApiDoc: ModuleApiDoc = {
   },
   schemas: { RevisionAssignment: assignmentSchema, RevisionRecord: recordSchema, SessionRevision: sessionSchema, RevisionBatchResult: batchSchema, RevisionCorrectionResult: correctionSchema },
   operations: [
+    quranAyahsOperation,
     op({
       method: 'get', path: '/students/:id/records', operationId: 'listStudentRevisionRecords', summary: 'A student\'s revision records',
       description: 'A paginated list of the student\'s revision records, by the session\'s start, newest first by default. Read access: the **School Manager** of the student\'s school and the student\'s own **Parent** (linked children only). A Student has no direct read access in this module.',

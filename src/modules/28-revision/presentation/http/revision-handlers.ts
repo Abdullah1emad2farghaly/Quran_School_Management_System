@@ -1,4 +1,5 @@
 import type { PageRequest, PageResult } from '../../../00-shared-kernel/public';
+import type { QuranStructureLookup } from '../../../21-quran-structure/public';
 import type { RevisionService } from '../../application/services/revision-service';
 import { serializeAssignment, serializeBatch, serializeCorrection, serializeRecord, serializeSession } from './revision-serializer';
 
@@ -17,8 +18,10 @@ type Json = Record<string, unknown>;
 const obj = (value: unknown): Json => (typeof value === 'object' && value !== null ? (value as Json) : {});
 
 /** Framework-free handlers behind the revision routes. The caller always comes from the verified token, never from the body. Ranges are validated by Module 22. */
-export function createRevisionHandlers(getService: () => RevisionHandlerService) {
+export function createRevisionHandlers(getService: () => RevisionHandlerService, getQuran: () => Pick<QuranStructureLookup, 'listAyahs'>) {
   return {
+    /** The approved Quran ayahs for the revision selection UI: Module 21's own contract and DTO, unchanged and not filtered by any student progress. */
+    listAyahs: (input: StudentRecordsRequest) => getQuran().listAyahs(input.page, input.direction),
     getSession: async (sessionId: string, userId: string) => serializeSession(await getService().getSessionRevision(sessionId, userId)),
     defineAssignment: async (sessionId: string, userId: string, body: unknown) => serializeAssignment(await getService().defineAssignment(sessionId, userId, { studentId: obj(body).studentId, range: obj(body).range })),
     modifyAssignment: async (assignmentId: string, userId: string, body: unknown) => serializeAssignment(await getService().modifyAssignment(assignmentId, userId, { range: obj(body).range })),

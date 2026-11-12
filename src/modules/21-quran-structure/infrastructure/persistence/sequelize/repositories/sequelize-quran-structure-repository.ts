@@ -82,6 +82,12 @@ export class SequelizeQuranStructureRepository implements QuranStructureReposito
     const rows = await this.select<Record<string, unknown>>(`${AYAH_SELECT} WHERE surah_number = :surah AND ayah_number = :ayah`, { surah, ayah });
     return rows[0] ? toAyah(rows[0]) : undefined;
   }
+  async listAyahs(request: PageRequest, direction: SortDirection): Promise<{ items: Ayah[]; total: number }> {
+    const order = direction === 'desc' ? 'DESC' : 'ASC'; // a fixed keyword, never user input
+    const rows = await this.select<Record<string, unknown>>(`${AYAH_SELECT} ORDER BY global_ayah ${order} LIMIT :limit OFFSET :offset`, { limit: request.pageSize, offset: pageOffset(request) });
+    const total = await this.select<{ total: number }>('SELECT COUNT(*) AS total FROM quran_ayahs');
+    return { items: rows.map(toAyah), total: n(total[0]?.total ?? 0) };
+  }
   async listAyahsOfSurah(surah: number, request: PageRequest, direction: SortDirection): Promise<{ items: Ayah[]; total: number }> {
     const order = direction === 'desc' ? 'DESC' : 'ASC'; // a fixed keyword, never user input
     const rows = await this.select<Record<string, unknown>>(`${AYAH_SELECT} WHERE surah_number = :surah ORDER BY ayah_number ${order} LIMIT :limit OFFSET :offset`, { surah, limit: request.pageSize, offset: pageOffset(request) });

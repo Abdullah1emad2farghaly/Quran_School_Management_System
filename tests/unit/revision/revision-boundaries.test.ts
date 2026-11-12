@@ -51,9 +51,9 @@ describe('Revision boundaries', () => {
     expect(imports.filter(({ spec }) => { const m = /\/(\d{2})-[a-z-]+\/public$/.exec(spec); return m !== null && Number(m[1]) >= 27; })).toEqual([]);
   });
 
-  it('its code dependencies are exactly Modules 00, 02, 03, 04, 06, 12, 16, 18, 19, 20, 22, 24 and 25 (no notification, audit or attendance module)', () => {
+  it('its code dependencies are exactly Modules 00, 02, 03, 04, 06, 12, 16, 18, 19, 20, 21, 22, 24 and 25 (no notification, audit or attendance module)', () => {
     const used = new Set(imports.map(({ spec }) => /\/(\d{2})-[a-z-]+\/public$/.exec(spec)?.[1]).filter(Boolean));
-    expect([...used].sort()).toEqual(['00', '02', '03', '04', '06', '12', '16', '18', '19', '20', '22', '24', '25']);
+    expect([...used].sort()).toEqual(['00', '02', '03', '04', '06', '12', '16', '18', '19', '20', '21', '22', '24', '25']);
   });
 
   it('reads and writes only its own four tables', () => {
@@ -108,10 +108,10 @@ describe('Revision boundaries', () => {
     expect(assignments).not.toMatch(/smartGuard|this\.guard\(/);
   });
 
-  it('has exactly the seven approved endpoints: no delete, nothing for a School Manager to record or correct, no history read', () => {
+  it('has exactly the eight approved endpoints (the seven of the module plus the approved GET /ayahs of 0.45.0): no delete, nothing for a School Manager to record or correct, no history read', () => {
     const routes = read('presentation/http/revision-routes.ts');
     expect([...routes.matchAll(/router\.(get|post|put|patch|delete)\(\s*'([^']*)'/g)].map((m) => `${m[1]} ${m[2]}`)).toEqual([
-      'get /students/:id/records', 'get /sessions/:id', 'post /sessions/:id/assignments', 'put /assignments/:id', 'post /assignments/:id/cancel', 'post /sessions/:id/records', 'put /records/:id',
+      'get /ayahs', 'get /students/:id/records', 'get /sessions/:id', 'post /sessions/:id/assignments', 'put /assignments/:id', 'post /assignments/:id/cancel', 'post /sessions/:id/records', 'put /records/:id',
     ]);
   });
 });

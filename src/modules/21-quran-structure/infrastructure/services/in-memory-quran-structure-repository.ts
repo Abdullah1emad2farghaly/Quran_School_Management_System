@@ -41,6 +41,11 @@ export class InMemoryQuranStructureRepository implements QuranStructureRepositor
   async findAyah(surah: number, ayah: number): Promise<Ayah | undefined> {
     return this.dataset?.ayahs.find((a) => a.surah === surah && a.ayah === ayah);
   }
+  async listAyahs(request: PageRequest, direction: SortDirection): Promise<{ items: Ayah[]; total: number }> {
+    const all = this.dataset?.ayahs ?? [];
+    const ordered = direction === 'desc' ? [...all].reverse() : all;
+    return { items: ordered.slice(pageOffset(request), pageOffset(request) + request.pageSize), total: all.length };
+  }
   async listAyahsOfSurah(surah: number, request: PageRequest, direction: SortDirection): Promise<{ items: Ayah[]; total: number }> {
     const all = (this.dataset?.ayahs ?? []).filter((a) => a.surah === surah);
     const ordered = direction === 'desc' ? [...all].reverse() : all;

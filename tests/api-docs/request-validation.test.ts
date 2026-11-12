@@ -9,6 +9,7 @@ import { registerAllErrorMessages } from '../../src/app/bootstrap/register-error
 import { buildApiDocument } from '../../src/app/openapi/api-documents';
 import { createAuthRouter } from '../../src/modules/10-sessions-jwt/public';
 import { createRecoveryRouter } from '../../src/modules/11-otp-password-recovery/public';
+import { createGeographyRouter } from '../../src/modules/14-geography/public';
 import { createOrganizationRouter, createSchoolRouter } from '../../src/modules/16-schools/public';
 import { createParentRouter } from '../../src/modules/17-parents/public';
 import { createTeacherRouter } from '../../src/modules/18-teachers/public';
@@ -66,6 +67,7 @@ function buildApp() {
   app.use(requestContextMiddleware);
   app.use(express.json({ limit: '1mb' }));
   const getService = (() => stubService) as never;
+  app.use('/geography', createGeographyRouter({ getGeography: getService, getOrganizations: getService } as never));
   app.use('/auth/password-recovery', createRecoveryRouter({ getService } as never));
   app.use('/auth', createAuthRouter({ getService, requireAuthentication: stubAuth } as never));
   app.use('/organizations', createOrganizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
@@ -78,8 +80,8 @@ function buildApp() {
   app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/group-schedules', createScheduleRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/attendance', createAttendanceRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
-  app.use('/memorization', createMemorizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
-  app.use('/revision', createRevisionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/memorization', createMemorizationRouter({ getService, getQuran: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/revision', createRevisionRouter({ getService, getQuran: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/evaluations', createEvaluationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/exams', createExamRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/notifications', createNotificationRouter({ getNotifications: getService, getPush: (() => pushStub) as never, requireAuthentication: stubAuth } as never));
@@ -152,16 +154,22 @@ describe('documented requests agree with the real validators', () => {
     expect(operations.length).toBeGreaterThanOrEqual(21);
     for (const o of operations) {
       const params = (o.operation.parameters ?? []) as OpenAPIV3.ParameterObject[];
-      const query = params.filter((p) => p.in === 'query' && p.example !== undefined).map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(String(p.example))}`).join('&');
-      const url = `${pathWith(o)}${query ? `?${query}` : ''}`;
+      const withExamples = params.filter((p) => p.in === 'query' && p.example !== undefined);
+      const queryOf = (list: OpenAPIV3.ParameterObject[]): string => list.map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(String(p.example))}`).join('&');
+      // Query parameters documented as "Mutually exclusive" (Module 14: countryId / organizationId) must never be sent together: one request per alternative.
+      const exclusive = withExamples.filter((p) => /mutually exclusive/i.test(p.description ?? ''));
+      const queries = exclusive.length > 1 ? exclusive.map((keep) => queryOf(withExamples.filter((p) => !exclusive.includes(p) || p === keep))) : [queryOf(withExamples)];
       // A multipart file upload (Module 36) cannot be sent as JSON: its own conformance test exercises it with a real file.
       if ((o.operation.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['multipart/form-data']) continue;
       const examples = Object.entries(((o.operation.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['application/json']?.examples ?? {}) as Record<string, OpenAPIV3.ExampleObject>);
       const bodies: Array<[string, unknown]> = examples.length > 0 ? examples.map(([name, e]) => [name, e.value]) : [['(no body)', undefined]];
-      for (const [name, body] of bodies) {
-        reached = false;
-        const res = await send(app, o, url, body);
-        expect(reached, `${o.method.toUpperCase()} ${o.path} (${name}) was stopped by validation: ${res.status} ${JSON.stringify(res.body)}`).toBe(true);
+      for (const query of queries) {
+        const url = `${pathWith(o)}${query ? `?${query}` : ''}`;
+        for (const [name, body] of bodies) {
+          reached = false;
+          const res = await send(app, o, url, body);
+          expect(reached, `${o.method.toUpperCase()} ${o.path}${query ? `?${query}` : ''} (${name}) was stopped by validation: ${res.status} ${JSON.stringify(res.body)}`).toBe(true);
+        }
       }
     }
   });

@@ -49,3 +49,7 @@ Modules 00, 02, 03, 04, 06, 12, 16, 18, 19, 20, 22 (range calculation and the `Q
 - The conformance and DB tests are written but never executed by me.
 - Page and quarter translation is tested against the hand-built mini Quran only; the real KFGQPC data (`tests/db/quran-range-engine.test.ts` style) has no Module 28 test yet. A quick manual check with the real data is worth doing (for example page 1 and 604, quarter 1 and 240, backward from page 2).
 - Concurrency and the reminder itself: as in Module 27.
+
+## Quran ayahs for the selection UI (0.45.0, approved 2026-11-11)
+`GET /api/v1/revision/ayahs` (`getRevisionAyahs`): authenticated, permission `quran.structure.read` (the existing one; every assignable role; no new permission). It returns a page (default 20, max 100; `sort=-globalPosition` reverses) of **all** ayahs of the approved edition (`MADINAH_MUSHAF_HAFS_604`, 6236 ayahs) with Module 21's own `AyahDto` and the exact stored text. **Memorization and Revision return the same complete dataset**: no progress-based filtering, no student-specific structure; this endpoint changes no revision business rule (ranges, assignments and records are unchanged). The data is read through Module 21's public `QuranStructureLookup.listAyahs`; this module keeps no Quran data, table or query, and Module 21 does not depend on this module.
+

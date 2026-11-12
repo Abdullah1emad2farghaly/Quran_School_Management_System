@@ -18,7 +18,7 @@ export async function createMemorizationApi() {
   const app = express();
   app.use(requestContextMiddleware);
   app.use(express.json());
-  app.use(MEMORIZATION, createMemorizationRouter({ getService: () => t.memorization, requireAuthentication, requirePermission: t.requirePermission }));
+  app.use(MEMORIZATION, createMemorizationRouter({ getService: () => t.memorization, getQuran: () => t.quran.service, requireAuthentication, requirePermission: t.requirePermission }));
   app.use(
     AUTH,
     createAuthRouter({

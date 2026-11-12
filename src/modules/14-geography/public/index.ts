@@ -4,7 +4,7 @@
 // geographic relationships separately; geography tables have no organization_id.
 // Downstream modules (Unified Address 15, Schools 16) depend on `GeographyLookup` (read-only, incl. validateHierarchy) and
 // may reference a level's `id` from their own tables with a Foreign Key (ON DELETE RESTRICT); they must not query these
-// tables or import internals. No HTTP endpoints, no permissions, no delete/rename/reactivation, no outbox events.
+// tables or import internals. The only HTTP endpoints are the PUBLIC, read-only registration lookups (`/geography/countries`, `/geography/governorates`); no permissions, no delete/rename/reactivation, no outbox events.
 export {
   GeographyService,
   type GeographyLookup,
@@ -28,6 +28,9 @@ export {
 } from '../domain/value-objects/geography-level';
 export { formatGeographyCode, isGeographyCode } from '../domain/value-objects/geography-code';
 export { normalizeGeographyName, GEOGRAPHY_NAME_MAX_LENGTH } from '../domain/value-objects/geography-name';
+export { createGeographyRouter, type GeographyRouterDeps } from '../presentation/http/geography-routes';
+export type { SubmissionOrganizationLookup, GeographyLookupItem } from '../presentation/http/geography-handlers';
+export { geographyApiDoc } from '../presentation/http/geography.openapi';
 export { GeographyNode } from '../domain/entities/geography-node';
 export { GeographyErrorCodes, geographyError, type GeographyErrorCode } from '../domain/errors/geography-errors';
 export { GEOGRAPHY_ERROR_MESSAGES } from '../application/services/geography-error-messages';

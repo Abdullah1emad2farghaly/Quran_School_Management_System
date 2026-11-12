@@ -37,6 +37,7 @@ export const ORGANIZATION_LIST_SPEC: ListQuerySpec = { sortable: { name: 'name' 
  * /organizations. Endpoints (all under /api/v1):
  *   POST /organizations        PUBLIC (login optional)  register an organization: name, country, own address + applicant -> 201
  *   GET  /organizations        organizations.organization.list  the organizations the caller manages (paginated)
+ *   GET  /organizations/lookup PUBLIC (no login)       the organizations a school submission may be sent to: only { id, name } (paginated, by name)
  *   GET  /organizations/:id    organizations.organization.read  one organization, only for ITS manager (management scope, otherwise 403)
  * The address is: registered country and governorate; `centerName` and `villageName` are FREE TEXT (no registered center/village).
  * The applicant becomes the ORGANIZATION_MANAGER of THIS organization only (never MAIN_ADMIN). Authorization is enforced by the shared
@@ -75,6 +76,16 @@ export function createOrganizationRouter(deps: OrganizationRouterDeps): Router {
     handle(async (req, res) => {
       const query = parseListQuery(req.query as Record<string, unknown>, ORGANIZATION_LIST_SPEC);
       sendPaginated(res, await h.list(sessionAuthRequired(req), query.page));
+    }),
+  );
+
+  // PUBLIC, read-only registration lookup. Declared BEFORE '/:id' so that "lookup" is never read as an id. No authentication, no permission:
+  // only { id, name } of organizations that may receive school submissions leaves (never the full organization of GET /organizations).
+  router.get(
+    '/lookup',
+    handle(async (req, res) => {
+      const query = parseListQuery(req.query as Record<string, unknown>, ORGANIZATION_LIST_SPEC);
+      sendPaginated(res, await h.lookup(query.page));
     }),
   );
 

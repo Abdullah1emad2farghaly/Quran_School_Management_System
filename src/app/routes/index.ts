@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { requirePermission } from '../../config/authorization';
 import { requireAuthentication, requireAuthenticationAllowingPasswordChange, getSessionService } from '../../config/sessions';
 import { getOrganizationRegistrationService, getSchoolService, PUBLIC_SUBMISSION_RATE_LIMIT } from '../../config/schools';
+import { getGeographyService } from '../../config/geography';
+import { getOrganizationService } from '../../config/organization';
 import { getParentService } from '../../config/parents';
 import { getTeacherService } from '../../config/teachers';
 import { getStudentService } from '../../config/students';
@@ -20,6 +22,7 @@ import { getQuranStructureService } from '../../config/quran';
 import { getPasswordRecoveryService } from '../../config/password-recovery';
 import { createAuthRouter } from '../../modules/10-sessions-jwt/public';
 import { createRecoveryRouter } from '../../modules/11-otp-password-recovery/public';
+import { createGeographyRouter } from '../../modules/14-geography/public';
 import { createOrganizationRouter, createPublicSubmissionRateLimiter, createSchoolRouter } from '../../modules/16-schools/public';
 import { createParentRouter } from '../../modules/17-parents/public';
 import { createTeacherRouter } from '../../modules/18-teachers/public';
@@ -44,6 +47,7 @@ export const API_BASE_PATH = '/api/v1';
 export function buildApiRouter(): Router {
   const router = Router();
   router.use('/health', healthRouter);
+  router.use('/geography', createGeographyRouter({ getGeography: getGeographyService, getOrganizations: getOrganizationService }));
   router.use('/auth/password-recovery', createRecoveryRouter({ getService: getPasswordRecoveryService }));
   router.use(
     '/organizations',
@@ -70,8 +74,8 @@ export function buildApiRouter(): Router {
   router.use('/group-schedules', createScheduleRouter({ getService: getGroupScheduleService, requireAuthentication, requirePermission }));
   router.use('/sessions', createSessionRouter({ getService: getClassSessionService, requireAuthentication, requirePermission }));
   router.use('/attendance', createAttendanceRouter({ getService: getAttendanceService, requireAuthentication, requirePermission }));
-  router.use('/memorization', createMemorizationRouter({ getService: getMemorizationService, requireAuthentication, requirePermission }));
-  router.use('/revision', createRevisionRouter({ getService: getRevisionService, requireAuthentication, requirePermission }));
+  router.use('/memorization', createMemorizationRouter({ getService: getMemorizationService, getQuran: getQuranStructureService, requireAuthentication, requirePermission }));
+  router.use('/revision', createRevisionRouter({ getService: getRevisionService, getQuran: getQuranStructureService, requireAuthentication, requirePermission }));
   router.use('/evaluations', createEvaluationRouter({ getService: getEvaluationService, requireAuthentication, requirePermission }));
   router.use('/exams', createExamRouter({ getService: getExamService, requireAuthentication, requirePermission }));
   router.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getSubscriptionService, getCollectors: getCollectorService, getGroups: getSubscriptionGroupService, requireAuthentication, requirePermission }));

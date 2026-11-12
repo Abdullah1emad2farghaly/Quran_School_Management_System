@@ -1,5 +1,5 @@
 import { ForeignKeyConstraintError, QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
-import type { TransactionContext } from '../../../../../00-shared-kernel/public';
+import { pageOffset, type PageRequest, type TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
 import type { OrganizationRepository } from '../../../../application/ports/organization-repository';
 import { Organization } from '../../../../domain/entities/organization';
@@ -70,6 +70,18 @@ export class SequelizeOrganizationRepository implements OrganizationRepository {
 
   findById(id: string, tx?: TransactionContext): Promise<Organization | undefined> {
     return this.findOne(`${SELECT} WHERE id = :id`, { id }, tx);
+  }
+
+  async listSubmissionEligible(request: PageRequest, tx?: TransactionContext): Promise<{ items: Organization[]; total: number }> {
+    const transaction = sequelizeTransactionOf(tx) ?? null;
+    const where = "WHERE status = 'ACTIVE' AND country_id IS NOT NULL";
+    const rows = await this.db.query<OrganizationRow>(`${SELECT} ${where} ORDER BY name ASC, id ASC LIMIT :limit OFFSET :offset`, {
+      replacements: { limit: request.pageSize, offset: pageOffset(request) },
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+    const total = await this.db.query<{ total: number | string }>(`SELECT COUNT(*) AS total FROM organizations ${where}`, { type: QueryTypes.SELECT, transaction });
+    return { items: rows.map((r) => Organization.rehydrate({ ...r, createdAt: asDate(r.createdAt), updatedAt: asDate(r.updatedAt) })), total: Number(total[0]?.total ?? 0) };
   }
 
   async assignCountryIfUnset(organizationId: string, countryId: string, updatedAt: Date, tx: TransactionContext): Promise<boolean> {

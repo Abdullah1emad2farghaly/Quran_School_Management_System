@@ -51,3 +51,6 @@ Foundation phase (Modules 00–07) is complete: typecheck, build, unit/integrati
 | 38 | Report Modules | NOT_STARTED |
 | 39 | File / Excel Access Control | NOT_STARTED |
 | 40 | Integration & E2E | NOT_STARTED |
+
+## Registration lookups and Quran ayah selection (0.45.0, 2026-11-11)
+IMPLEMENTED, **NOT verified** (no network or database in the implementation environment: `npm install`, `npm test`, `npm run api:verify`, `npm run test:db`, the typecheck and the build have NOT been run). Backend only; no migration; no frontend. Adds `GET /geography/countries`, `GET /geography/governorates`, `GET /organizations/lookup` (public, `{ id, name }` only), `GET /memorization/ayahs` and `GET /revision/ayahs` (authenticated, `quran.structure.read`, the same complete Module 21 dataset). No module status above changes: Modules 13, 14, 16, 21, 27 and 28 keep their statuses; the new operations are additive and must be verified by the owner (run the full suite, in particular `api:verify`, the new tests and the updated boundary tests). Details: docs/PROJECT-CHANGELOG.md (0.45.0).

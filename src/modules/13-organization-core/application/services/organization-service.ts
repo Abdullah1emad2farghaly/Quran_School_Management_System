@@ -1,4 +1,4 @@
-import { AppError, SystemClock, isUuid, type Clock, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
+import { AppError, SystemClock, buildPageResult, isUuid, type Clock, type PageRequest, type PageResult, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
 import type { OutboxService } from '../../../06-domain-events-outbox/public';
 import { Organization } from '../../domain/entities/organization';
 import { OrganizationAdminAssignment } from '../../domain/entities/organization-admin-assignment';
@@ -16,6 +16,15 @@ export interface OrganizationServiceDeps {
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
   readonly clock?: Clock;
+}
+
+/**
+ * The ONLY fields of an organization that the PUBLIC registration lookup exposes (never the code, status, address or any administrator information).
+ * `countryId` is NOT part of the public answer; it is only returned by `findSubmissionEligibleById` for server-side use.
+ */
+export interface OrganizationLookupItemDto {
+  readonly id: string;
+  readonly name: string;
 }
 
 export interface CreateOrganizationInput {
@@ -67,6 +76,29 @@ export class OrganizationService {
     const organization = await this.findById(id, tx);
     if (!organization) throw organizationError('ORGANIZATION_NOT_FOUND');
     return organization;
+  }
+
+  /**
+   * Organizations that may receive a school submission, for the public registration form: the existing rule of Module 16 (the organization
+   * must be ACTIVE and have a country), nothing more. Ordered by name; one page; only `{ id, name }`.
+   */
+  async listSubmissionEligible(request: PageRequest, tx?: TransactionContext): Promise<PageResult<OrganizationLookupItemDto>> {
+    const { items, total } = await this.repository.listSubmissionEligible(request, tx);
+    return buildPageResult(
+      items.map((o) => ({ id: o.id, name: o.name })),
+      total,
+      request,
+    );
+  }
+
+  /**
+   * The organization only when it may receive a school submission (ACTIVE with a country), otherwise `undefined` (missing and ineligible are
+   * indistinguishable, so a public caller learns nothing about an organization that is not selectable). Server-side use only: it carries `countryId`.
+   */
+  async findSubmissionEligibleById(id: string, tx?: TransactionContext): Promise<{ readonly id: string; readonly name: string; readonly countryId: string } | undefined> {
+    const organization = await this.findById(id, tx);
+    if (!organization || organization.status !== 'ACTIVE' || organization.countryId === null) return undefined;
+    return { id: organization.id, name: organization.name, countryId: organization.countryId };
   }
 
   /** The country of THAT organization (`countries.id`). ORGANIZATION_NOT_FOUND / ORGANIZATION_COUNTRY_NOT_SET (fails closed). */
@@ -247,4 +279,6 @@ export type OrganizationLookup = Pick<
   | 'getMainOrganization'
   | 'requireMainOrganization'
   | 'requireMainOrganizationCountryId'
+  | 'listSubmissionEligible'
+  | 'findSubmissionEligibleById'
 >;

@@ -59,3 +59,7 @@ Modules 00, 02, 03, 04, 06, 12, 16 (is the caller the school's manager), 18 (tea
 - Concurrency: define/modify, record and correct all lock the session's assignments (`SELECT ... FOR UPDATE`) and a correction locks the record; the unique active slot makes a duplicate assignment impossible. A real-database race test is not written.
 - A session can end a few seconds before the scheduler marks it COMPLETED; the service also compares the clock with the scheduled end, so the window closes exactly at the end.
 - The 15-second scheduler delay is not an issue for correctness; the reminder itself (Modules 31-34) is not implemented.
+
+## Quran ayahs for the selection UI (0.45.0, approved 2026-11-11)
+`GET /api/v1/memorization/ayahs` (`getMemorizationAyahs`): authenticated, permission `quran.structure.read` (the existing one; every assignable role; no new permission). It returns a page (default 20, max 100; `sort=-globalPosition` reverses) of **all** ayahs of the approved edition (`MADINAH_MUSHAF_HAFS_604`, 6236 ayahs) with Module 21's own `AyahDto` and the exact stored text. **Memorization and Revision return the same complete dataset**: no progress-based filtering, no student-specific structure; this endpoint changes no memorization business rule (ranges, assignments and records are unchanged). The data is read through Module 21's public `QuranStructureLookup.listAyahs`; this module keeps no Quran data, table or query, and Module 21 does not depend on this module.
+

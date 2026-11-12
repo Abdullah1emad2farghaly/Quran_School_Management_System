@@ -9,7 +9,7 @@ export type * from '../domain/entities/quran-structure';
 export { QuranErrorCodes, quranError, QuranDatasetValidationError, type QuranErrorCode } from '../domain/errors/quran-errors';
 export { validateQuranDataset, DATASET_FORMAT, DATASET_FORMAT_VERSION, MAX_REPORTED_PROBLEMS } from '../domain/services/quran-dataset-validator';
 export { QuranStructureService, type QuranStructureLookup } from '../application/services/quran-structure-service';
-export { QuranPermissions, registerQuranAuthorization } from '../application/services/quran-authorization';
+export { QuranPermissions, QURAN_READ_ROLES, registerQuranAuthorization } from '../application/services/quran-authorization';
 export { QURAN_ERROR_MESSAGES } from '../application/services/quran-error-messages';
 export { ImportQuranDataset, type ImportQuranDatasetDeps, type QuranImportSummary, type QuranImportOutcome } from '../application/use-cases/import-quran-dataset';
 export type { QuranStructureRepository, QuranDatasetStore, QuranImportMetadata } from '../application/ports/quran-structure-repository';

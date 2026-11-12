@@ -18,7 +18,7 @@ export async function createRevisionApi() {
   const app = express();
   app.use(requestContextMiddleware);
   app.use(express.json());
-  app.use(REVISION, createRevisionRouter({ getService: () => t.revision, requireAuthentication, requirePermission: t.requirePermission }));
+  app.use(REVISION, createRevisionRouter({ getService: () => t.revision, getQuran: () => t.quran.service, requireAuthentication, requirePermission: t.requirePermission }));
   app.use(
     AUTH,
     createAuthRouter({

@@ -1,6 +1,8 @@
 import { QuranRangeEngine } from '../../src/modules/22-quran-range-engine/public';
 import { InMemoryRevisionRepository, RevisionRangeResolver, RevisionService, registerRevisionAuthorization } from '../../src/modules/28-revision/public';
+import { registerQuranAuthorization } from '../../src/modules/21-quran-structure/public';
 import { createAttendanceHarness } from './attendance-harness';
+import { createQuranHarness } from './quran-service-harness';
 import { createMiniQuran } from './range-mini-quran';
 
 /**
@@ -15,5 +17,9 @@ export async function createRevisionHarness() {
     ranges: new RevisionRangeResolver({ engine: new QuranRangeEngine(createMiniQuran()), quran: createMiniQuran() }), unitOfWork: t.unitOfWork, outbox: t.h.outbox, clock: t.sessionClock,
   });
   registerRevisionAuthorization({ policies: t.policies });
-  return { ...t, revisionRepo, revision };
+  // Module 21 (the single Quran source) over the SYNTHETIC dataset, plus its existing read permission, for the `GET /revision/ayahs` selection endpoint.
+  registerQuranAuthorization({ policies: t.policies });
+  const quran = createQuranHarness();
+  await quran.importSynthetic();
+  return { ...t, revisionRepo, revision, quran };
 }

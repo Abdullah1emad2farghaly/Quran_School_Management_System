@@ -10,6 +10,8 @@ export interface QuranStructureRepository {
   findAyahByGlobal(globalAyah: number): Promise<Ayah | undefined>;
   findAyah(surah: number, ayah: number): Promise<Ayah | undefined>;
   listAyahsOfSurah(surah: number, request: PageRequest, direction: SortDirection): Promise<{ readonly items: Ayah[]; readonly total: number }>;
+  /** One page of ALL the ayahs of the approved edition in canonical order (global position), ascending or descending. */
+  listAyahs(request: PageRequest, direction: SortDirection): Promise<{ readonly items: Ayah[]; readonly total: number }>;
   findPage(page: number): Promise<QuranPage | undefined>;
   listLinesOfPage(page: number): Promise<QuranLine[]>;
   findLineByGlobal(globalLine: number): Promise<QuranLine | undefined>;

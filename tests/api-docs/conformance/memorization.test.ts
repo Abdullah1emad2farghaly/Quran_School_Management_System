@@ -180,8 +180,22 @@ describe('Module 27 endpoints conform to their OpenAPI documentation (real respo
     expect((await t.memorizationRepo.findRecord(recorded.body.data.results[0].record.id))!.snapshot.range.first).toEqual({ surah: 2, ayah: 4 });
   });
 
+  it('the Quran ayahs for the selection UI: every documented response, from Module 21 data', async () => {
+    const { app, t, login } = await createMemorizationApi();
+    const school = await t.newSchool('School');
+    const auth = await login(await t.newSchoolManager(school.id));
+    const page = api.conforms(await request(app).get(`${MEMORIZATION}/ayahs?page=1&pageSize=5`).set(auth));
+    expect(page.status).toBe(200);
+    expect(page.body.data).toHaveLength(5);
+    expect(api.conforms(await request(app).get(`${MEMORIZATION}/ayahs?sort=-globalPosition&pageSize=2`).set(auth)).status).toBe(200);
+    expect(api.conforms(await request(app).get(`${MEMORIZATION}/ayahs?sort=surah`).set(auth)).status).toBe(400);
+    expect(api.conforms(await request(app).get(`${MEMORIZATION}/ayahs`)).status).toBe(401);
+    await t.h.identity.createUser({ phone: '01090000001', password: 'secret1' }); // truly role-less: the harness createUser() always grants PARENT
+    expect(api.conforms(await request(app).get(`${MEMORIZATION}/ayahs`).set(await login({ phone: '01090000001', password: 'secret1' }))).status).toBe(403);
+  });
+
   it('exercised every documented operation of Module 27', () => {
-    expect(api.operationCount('27')).toBe(7);
+    expect(api.operationCount('27')).toBe(8);
     api.assertAllExercised('27');
   });
 });
