@@ -29,9 +29,7 @@ export function buildSequelizeOptions(
     },
     dialectOptions: {
       charset: DB_COLLATION.toUpperCase(),
-      ssl: {
-        rejectUnauthorized: true,
-      },
+      ssl: {},
     },
     define: {
       charset: DB_CHARSET,
