@@ -43,6 +43,13 @@ The endpoints (`POST /login`, `/refresh`, `/logout`, `/logout-all`, `/change-pas
 Token responses carry `Cache-Control: no-store`. The access token is accepted **only** from `Authorization: Bearer <token>` (never from the URL or body). `roles` in the response is informational for the UI; the backend never trusts it.
 Errors (Arabic + English): `SESSION_LIMIT_REACHED` (422), `SESSION_NOT_FOUND` (404), `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS`, `ACCESS_TOKEN_INVALID`, `ACCESS_TOKEN_EXPIRED` (the client should refresh), `SESSION_REVOKED`, `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REUSED` (all 401), `ACCOUNT_INACTIVE` (403), `SESSION_CONCURRENT_MODIFICATION` (409).
 
+## Active role (per session)
+An account may hold several roles; the **active role belongs to the session (device)**, in `auth_sessions.active_role`, never to the user. Three devices can act as three different roles at once; changing one never touches another.
+- **Login / refresh** answer `roles` (all current assignments) and `activeRole`: one role -> already active; several -> `null` until chosen; none -> `[]` / `null`. Refresh keeps the session's role.
+- **`POST /auth/switch-role`** `{ role }` (authentication only): locks the session, checks it is active and unexpired and that the account holds the role NOW, persists on this session only. Same role again = no-op. Errors: 400 malformed, 403 `ROLE_NOT_ASSIGNED`, 401 `SESSION_REVOKED`, 403 `PASSWORD_CHANGE_REQUIRED`. No token rotation; not a new session (the limit of 3 is unchanged).
+- **No stale roles:** the access token has no role claim; the active role is read from the persisted session on every request and checked against the CURRENT roles (`effectiveActiveRole`), so a switch or a role revocation takes effect immediately. A session created before the column existed (NULL) works for a single-role account and must choose for a multi-role one.
+- `schoolId` (login, refresh, switch-role): the school the user actively manages as School Manager, else `null`.
+
 ## For other modules
 Protect a route with `requireAuthentication` (`src/config/sessions.ts`); the caller is then in `req.auth` (`userId`, `sessionId`) and in the request log context. Authorization is a separate step (Module 12). Use `getSessionService()` for `revokeAllForUser`.
 

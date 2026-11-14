@@ -7,7 +7,7 @@ import { sessionError } from '../../domain/errors/session-errors';
 import { deviceLabelFromUserAgent } from '../../domain/services/device-label';
 
 export interface AuthRouterDeps {
-  readonly getService: () => Pick<SessionService, 'login' | 'refresh' | 'logout' | 'logoutAll' | 'changePassword' | 'listDevices' | 'revokeDevice'>;
+  readonly getService: () => Pick<SessionService, 'login' | 'refresh' | 'switchRole' | 'logout' | 'logoutAll' | 'changePassword' | 'listDevices' | 'revokeDevice'>;
   /** Middleware that authenticates the access token (see `createRequireAuthentication`). */
   readonly requireAuthentication: RequestHandler;
   /**
@@ -40,6 +40,7 @@ function serialize(result: AuthResult) {
     user: result.user,
     mustChangePassword: result.mustChangePassword,
     roles: result.roles,
+    activeRole: result.activeRole,
     schoolId: result.schoolId,
   };
 }
@@ -74,6 +75,19 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
       const result = await deps.getService().refresh(req.body.refreshToken);
       noStore(res);
       sendSuccess(res, serialize(result));
+    }),
+  );
+
+  // The role THIS session acts as. Authentication only (no business permission): it must stay reachable while no role is selected.
+  router.post(
+    '/switch-role',
+    deps.requireAuthentication,
+    validate(body('role').isString().withMessage('INVALID_VALUE').bail().trim().notEmpty().withMessage('REQUIRED_FIELD').isLength({ max: 32 }).withMessage('INVALID_VALUE')),
+    handle(async (req, res) => {
+      if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
+      const result = await deps.getService().switchRole(req.auth.userId, req.auth.sessionId, req.body.role);
+      noStore(res);
+      sendSuccess(res, { roles: result.roles, activeRole: result.activeRole, schoolId: result.schoolId });
     }),
   );
 

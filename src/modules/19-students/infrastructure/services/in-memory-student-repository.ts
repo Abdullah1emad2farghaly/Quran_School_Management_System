@@ -41,6 +41,9 @@ export class InMemoryStudentRepository implements StudentRepository {
   async listByParent(parentId: string, query: StudentListQuery, _tx?: TransactionContext): Promise<{ items: Student[]; total: number }> {
     return this.list((r) => r.parentId === parentId, query);
   }
+  async listByParentInSchools(parentId: string, schoolIds: readonly string[], query: StudentListQuery, _tx?: TransactionContext): Promise<{ items: Student[]; total: number }> {
+    return this.list((r) => r.parentId === parentId && schoolIds.includes(r.schoolId), query);
+  }
   async countByParentInSchool(parentId: string, schoolId: string, _tx: TransactionContext): Promise<number> {
     return [...this.rows.values()].filter((r) => r.parentId === parentId && r.schoolId === schoolId).length;
   }

@@ -363,6 +363,9 @@ describe('organization scope on the school endpoints (enforced by the Authorizat
     const manager = await t.h.createUser({ role: 'TEACHER' });
     await request(app).put(`${schools}/${mine.id}/manager`).set(adminAuth).send({ userId: manager.id });
     const auth = await login(manager);
+    // The account is a Teacher AND the School Manager of this school: the session acts as one role at a time.
+    expect((await request(app).get(`${schools}/${mine.id}`).set(auth)).status).toBe(403);
+    expect((await request(app).post('/api/v1/auth/switch-role').set(auth).send({ role: 'SCHOOL_MANAGER' })).status).toBe(200);
     expect((await request(app).get(`${schools}/${mine.id}`).set(auth)).status).toBe(200);
     expect((await request(app).get(`${schools}/${other.id}`).set(auth)).status).toBe(403);
     const list = await request(app).get(schools).set(auth);

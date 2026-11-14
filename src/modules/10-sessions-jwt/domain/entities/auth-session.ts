@@ -20,6 +20,8 @@ export interface AuthSessionSnapshot {
   readonly slot: number | null;
   /** Safe, human-readable device description derived from the User-Agent at login (for "My devices"); never the raw header. */
   readonly deviceLabel: string | null;
+  /** The role this session acts as (a role code), or null while none is selected. Belongs to the SESSION: other sessions of the account are independent. */
+  readonly activeRole: string | null;
   /** Optimistic-lock counter, incremented by the repository on every update. */
   readonly version: number;
 }
@@ -33,7 +35,7 @@ export class AuthSession extends AggregateRoot<string> {
     super(state.id);
   }
 
-  static start(input: { userId: string; slot: number; deviceLabel?: string | null; clock: Clock; id?: string }): AuthSession {
+  static start(input: { userId: string; slot: number; deviceLabel?: string | null; activeRole?: string | null; clock: Clock; id?: string }): AuthSession {
     if (!isValidSessionSlot(input.slot)) throw new RangeError('A session slot must be an integer from 1 to the maximum number of active sessions.');
     const session = new AuthSession({
       id: input.id ?? newUuid(),
@@ -43,6 +45,7 @@ export class AuthSession extends AggregateRoot<string> {
       revokedReason: null,
       slot: input.slot,
       deviceLabel: normalizeDeviceLabel(input.deviceLabel),
+      activeRole: input.activeRole ?? null,
       version: 1,
     });
     session.record(SessionEventTypes.AUTH_SESSION_STARTED, input.clock);
@@ -71,11 +74,20 @@ export class AuthSession extends AggregateRoot<string> {
   get deviceLabel(): string | null {
     return this.state.deviceLabel;
   }
+  get activeRole(): string | null {
+    return this.state.activeRole;
+  }
   get version(): number {
     return this.state.version;
   }
   get isActive(): boolean {
     return this.state.revokedAt === null;
+  }
+
+  /** Selects the role this session acts as. The caller has already proven the account holds it. Only this session changes. */
+  selectRole(role: string): void {
+    if (!this.isActive) throw sessionError('SESSION_REVOKED');
+    this.state = { ...this.state, activeRole: role };
   }
 
   revoke(reason: SessionRevokeReason, clock: Clock): void {

@@ -46,7 +46,7 @@ export interface ListStudentsInput {
 
 export interface StudentServiceDeps {
   readonly students: StudentRepository;
-  readonly schools: Pick<SchoolLookup, 'findById'>;
+  readonly schools: Pick<SchoolLookup, 'findById' | 'listManagedSchoolIds'>;
   readonly parents: ParentLookup & ParentSchoolLinkLocker;
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
@@ -142,6 +142,17 @@ export class StudentService {
     const parent = await this.parents.findByUserId(userId, tx);
     if (!parent) return buildPageResult([], 0, input.page);
     const { items, total } = await this.students.listByParent(parent.id, this.query(input), tx);
+    return buildPageResult(await this.toDtos(items, tx), total, input.page);
+  }
+
+  /**
+   * A School Manager lists the Students of one Parent, ONLY in the schools the manager actively manages (a Parent linked to several schools never
+   * exposes the children of a school the caller does not manage). The route has already proven that the Parent is linked to one of those schools.
+   */
+  async listChildrenOfParentForManager(parentId: string, managerUserId: string, input: ListStudentsInput, tx?: TransactionContext): Promise<PageResult<StudentDto>> {
+    const schoolIds = await this.schools.listManagedSchoolIds(managerUserId);
+    if (schoolIds.length === 0) return buildPageResult([], 0, input.page);
+    const { items, total } = await this.students.listByParentInSchools(parentId, schoolIds, this.query(input), tx);
     return buildPageResult(await this.toDtos(items, tx), total, input.page);
   }
 

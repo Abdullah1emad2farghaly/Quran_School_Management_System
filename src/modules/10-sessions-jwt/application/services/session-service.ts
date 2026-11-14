@@ -1,14 +1,15 @@
 import { AppError, SystemClock, type Clock, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
 import type { OutboxService } from '../../../06-domain-events-outbox/public';
 import { assertPasswordPolicy, tryNormalizePhone, type IdentityService, type PasswordHasher } from '../../../08-identity-core/public';
-import type { RoleService } from '../../../09-roles-permissions/public';
+import { isAssignableRole, type RoleService } from '../../../09-roles-permissions/public';
 import { AuthSession } from '../../domain/entities/auth-session';
 import { RefreshTokenRecord } from '../../domain/entities/refresh-token-record';
 import { sessionError } from '../../domain/errors/session-errors';
 import { MAX_ACTIVE_SESSIONS, firstFreeSlot } from '../../domain/value-objects/session-policy';
 import type { SessionRevokeReason } from '../../domain/value-objects/session-revoke-reason';
-import type { AuthPrincipal, AuthResult } from '../dto/auth-result';
+import type { ActiveRoleResult, AuthPrincipal, AuthResult } from '../dto/auth-result';
 import type { DeviceSessionListDto } from '../dto/device-session-dto';
+import { effectiveActiveRole } from '../../domain/services/active-role';
 import type { ManagedSchoolResolver } from '../ports/managed-school-resolver';
 import type { SessionRepository } from '../ports/session-repository';
 import type { AccessTokenService, RefreshTokenGenerator, RefreshTokenHasher } from '../ports/token-ports';
@@ -100,7 +101,10 @@ export class SessionService {
     if (!(await this.identity.verifyPassword(user.id, password))) throw sessionError('INVALID_CREDENTIALS');
     if (!user.isActive) throw sessionError('ACCOUNT_INACTIVE');
 
-    const issued = await this.startSession(user.id, input.deviceLabel ?? null);
+    // Approved rule: an account with exactly ONE role starts its session already acting as it; with several roles the session starts with no
+    // active role and the user chooses (switch-role). Never an arbitrary pick.
+    const roles = await this.roles.listActiveRoles(user.id);
+    const issued = await this.startSession(user.id, input.deviceLabel ?? null, roles.length === 1 ? (roles[0] as string) : null);
     return this.buildResult({ userId: user.id, phone: user.phone, mustChangePassword: user.mustChangePassword }, issued.session, issued.rawToken, issued.token);
   }
 
@@ -176,7 +180,36 @@ export class SessionService {
 
     const user = await this.identity.findById(userId);
     if (!user || !user.isActive) throw sessionError('ACCOUNT_INACTIVE');
-    return { userId, sessionId, mustChangePassword: user.mustChangePassword };
+    // The active role is read from the PERSISTED session on every request (the access token carries no role), so a role switch takes effect at once
+    // and an old token can never keep acting as the previous role. It is checked against the account's CURRENT roles: a revoked role is never active.
+    const activeRole = effectiveActiveRole(session.activeRole, await this.roles.listActiveRoles(userId));
+    return { userId, sessionId, mustChangePassword: user.mustChangePassword, activeRole };
+  }
+
+  /**
+   * The authenticated session chooses the role it acts as. ONLY this session changes: no other session is touched or revoked, no token is rotated
+   * (authorization reads the persisted active role on every request, so the previous role stops authorizing immediately), and it does not count as a
+   * new session. One transaction: lock the session, check it is still active and unexpired, check the role against the account's CURRENT assignments,
+   * persist. Concurrent switches of the same session are serialized by the session lock. Choosing the role already active is a no-op (idempotent).
+   */
+  async switchRole(userId: string, sessionId: string, requestedRole: unknown): Promise<ActiveRoleResult> {
+    if (typeof requestedRole !== 'string' || !isAssignableRole(requestedRole)) throw sessionError('ROLE_NOT_ASSIGNED');
+    const role = requestedRole;
+    const roles = await this.unitOfWork.run(async (tx) => {
+      const session = await this.repository.lockSession(sessionId, tx);
+      if (!session || session.userId !== userId || !session.isActive) throw sessionError('SESSION_REVOKED');
+      const token = await this.repository.lockActiveRefreshTokenBySession(session.id, tx);
+      if (!token || token.isExpired(this.clock.now())) throw sessionError('SESSION_REVOKED');
+
+      const assigned = await this.roles.listActiveRoles(userId, tx);
+      if (!assigned.includes(role)) throw sessionError('ROLE_NOT_ASSIGNED');
+      if (session.activeRole !== role) {
+        session.selectRole(role);
+        await this.repository.updateSession(session, tx);
+      }
+      return assigned;
+    });
+    return { roles, activeRole: role, schoolId: (await this.managedSchools?.findManagedSchoolId(userId)) ?? null };
   }
 
   /**
@@ -285,7 +318,7 @@ export class SessionService {
    * `(user_id, slot)` index (and the 1..3 CHECK) lets only one of them take a slot, the loser gets a retryable error and is retried here,
    * then either takes another free slot or is refused with SESSION_LIMIT_REACHED. The account can never exceed three active sessions.
    */
-  private async startSession(userId: string, deviceLabel: string | null) {
+  private async startSession(userId: string, deviceLabel: string | null, activeRole: string | null) {
     for (let attempt = 1; ; attempt += 1) {
       try {
         return await this.unitOfWork.run(async (tx) => {
@@ -301,7 +334,7 @@ export class SessionService {
           const slot = firstFreeSlot(live.flatMap((s) => (s.slot === null ? [] : [s.slot])));
           if (slot === undefined) throw sessionError('SESSION_LIMIT_REACHED', { maxActiveSessions: MAX_ACTIVE_SESSIONS });
 
-          const session = AuthSession.start({ userId, slot, deviceLabel, clock: this.clock });
+          const session = AuthSession.start({ userId, slot, deviceLabel, activeRole, clock: this.clock });
           await this.repository.insertSession(session, tx);
           await this.outbox.publishFrom(session, tx);
 
@@ -364,6 +397,7 @@ export class SessionService {
     token: RefreshTokenRecord,
   ): Promise<AuthResult> {
     const access = this.accessTokens.sign({ userId: user.userId, sessionId: session.id }, this.clock.now());
+    const roles = await this.roles.listActiveRoles(user.userId);
     return {
       tokenType: 'Bearer',
       accessToken: access.token,
@@ -372,7 +406,8 @@ export class SessionService {
       refreshTokenExpiresAt: token.expiresAt,
       user: { id: user.userId, phone: user.phone },
       mustChangePassword: user.mustChangePassword,
-      roles: await this.roles.listActiveRoles(user.userId),
+      roles,
+      activeRole: effectiveActiveRole(session.activeRole, roles),
       schoolId: (await this.managedSchools?.findManagedSchoolId(user.userId)) ?? null,
     };
   }

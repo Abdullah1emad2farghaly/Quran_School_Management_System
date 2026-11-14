@@ -57,7 +57,7 @@ const pushStub = new Proxy({}, {
         },
 });
 const stubAuth: RequestHandler = (req, _res, next) => {
-  req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1', mustChangePassword: false };
+  req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1', mustChangePassword: false, activeRole: null };
   next();
 };
 const pass: RequestHandler = (_req, _res, next) => next();

@@ -39,7 +39,7 @@ export function createRequirePermission(getAuthorizer: () => Authorizer): Requir
 
         const target = options.target ? await options.target(req) : undefined;
         const resource = options.resource ? await options.resource(req) : undefined;
-        const role = await getAuthorizer().assertAuthorized({ userId: auth.userId, permission, target, resource });
+        const role = await getAuthorizer().assertAuthorized({ userId: auth.userId, permission, target, resource, activeRole: auth.activeRole });
 
         req.authorization = { permission, role };
         next();

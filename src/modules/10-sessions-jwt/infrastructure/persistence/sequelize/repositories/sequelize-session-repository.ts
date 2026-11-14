@@ -20,6 +20,7 @@ interface SessionRow {
   revokedReason: SessionRevokeReason | null;
   slot: number | string | null;
   deviceLabel: string | null;
+  activeRole: string | null;
   version: number | string;
 }
 interface ActiveViewRow extends SessionRow {
@@ -55,7 +56,7 @@ export function isDeadlockError(error: unknown): boolean {
 
 const SELECT_SESSION = `
   SELECT id, user_id AS userId, created_at AS createdAt, revoked_at AS revokedAt,
-         revoked_reason AS revokedReason, slot, device_label AS deviceLabel, version
+         revoked_reason AS revokedReason, slot, device_label AS deviceLabel, active_role AS activeRole, version
     FROM auth_sessions`;
 const SELECT_TOKEN = `
   SELECT id, session_id AS sessionId, user_id AS userId, token_hash AS tokenHash, issued_at AS issuedAt,
@@ -71,6 +72,7 @@ function toSession(r: SessionRow): AuthSession {
     revokedReason: r.revokedReason,
     slot: r.slot === null ? null : Number(r.slot),
     deviceLabel: r.deviceLabel,
+    activeRole: r.activeRole ?? null,
     version: Number(r.version),
   });
 }
@@ -81,9 +83,9 @@ export class SequelizeSessionRepository implements SessionRepository {
   async insertSession(s: AuthSession, tx: TransactionContext): Promise<void> {
     try {
       await this.db.query(
-        `INSERT INTO auth_sessions (id, user_id, revoked_at, revoked_reason, active, slot, device_label, version, created_at, updated_at)
-         VALUES (:id, :userId, NULL, NULL, 1, :slot, :deviceLabel, 1, :createdAt, :createdAt)`,
-        { replacements: { id: s.id, userId: s.userId, slot: s.slot, deviceLabel: s.deviceLabel, createdAt: s.createdAt }, transaction: sequelizeTransactionOf(tx) ?? null },
+        `INSERT INTO auth_sessions (id, user_id, revoked_at, revoked_reason, active, slot, device_label, active_role, version, created_at, updated_at)
+         VALUES (:id, :userId, NULL, NULL, 1, :slot, :deviceLabel, :activeRole, 1, :createdAt, :createdAt)`,
+        { replacements: { id: s.id, userId: s.userId, slot: s.slot, deviceLabel: s.deviceLabel, activeRole: s.activeRole, createdAt: s.createdAt }, transaction: sequelizeTransactionOf(tx) ?? null },
       );
     } catch (error) {
       // The unique (user_id, slot) index is the final guard of the three-session limit: two racing logins can never take the same slot.
@@ -96,7 +98,7 @@ export class SequelizeSessionRepository implements SessionRepository {
     const [, affected] = await this.guarded(() => this.db.query(
       `UPDATE auth_sessions
           SET revoked_at = :revokedAt, revoked_reason = :reason, active = IF(:revokedAt IS NULL, 1, NULL),
-              slot = IF(:revokedAt IS NULL, :slot, NULL), updated_at = :updatedAt, version = version + 1
+              slot = IF(:revokedAt IS NULL, :slot, NULL), active_role = :activeRole, updated_at = :updatedAt, version = version + 1
         WHERE id = :id AND version = :version`,
       {
         replacements: {
@@ -105,6 +107,7 @@ export class SequelizeSessionRepository implements SessionRepository {
           revokedAt: s.revokedAt,
           reason: s.revokedReason,
           slot: s.slot,
+          activeRole: s.activeRole,
           updatedAt: s.revokedAt ?? s.createdAt,
         },
         type: QueryTypes.UPDATE,
@@ -129,7 +132,7 @@ export class SequelizeSessionRepository implements SessionRepository {
     const rows = await this.guarded(() =>
       this.db.query<ActiveViewRow>(
         `SELECT s.id, s.user_id AS userId, s.created_at AS createdAt, s.revoked_at AS revokedAt, s.revoked_reason AS revokedReason,
-                s.slot, s.device_label AS deviceLabel, s.version, t.issued_at AS lastActiveAt, t.expires_at AS tokenExpiresAt
+                s.slot, s.device_label AS deviceLabel, s.active_role AS activeRole, s.version, t.issued_at AS lastActiveAt, t.expires_at AS tokenExpiresAt
            FROM auth_sessions s
            JOIN refresh_tokens t ON t.session_id = s.id AND t.active = 1
           WHERE s.user_id = :userId AND s.active = 1 AND t.expires_at > :now

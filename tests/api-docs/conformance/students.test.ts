@@ -44,6 +44,14 @@ describe('Module 19 endpoints conform to their OpenAPI documentation (real respo
     api.conforms(await request(app).get(`${STUDENTS}/schools/${school.id}`).set(auth2)); // 403
     api.conforms(await request(app).get(`${STUDENTS}/schools/not-a-uuid`).set(auth)); // 400
 
+    // the Students of one Parent (School Manager)
+    expect(api.conforms(await request(app).get(`${STUDENTS}/parents/${parent.id}?filter[status]=ACTIVE&sort=-createdAt`).set(auth)).status).toBe(200);
+    api.conforms(await request(app).get(`${STUDENTS}/parents/${parent.id}`)); // 401
+    api.conforms(await request(app).get(`${STUDENTS}/parents/${parent.id}`).set(auth2)); // 403 (no link to the Parent)
+    api.conforms(await request(app).get(`${STUDENTS}/parents/${parent.id}`).set(parentAuth)); // 403 (the Parent role)
+    api.conforms(await request(app).get(`${STUDENTS}/parents/${UNKNOWN}`).set(auth)); // 403 (never reveals existence)
+    api.conforms(await request(app).get(`${STUDENTS}/parents/not-a-uuid`).set(auth)); // 400
+
     expect(api.conforms(await request(app).get(`${STUDENTS}/${id}`).set(auth)).status).toBe(200);
     expect(api.conforms(await request(app).get(`${STUDENTS}/${id}`).set(parentAuth)).status).toBe(200);
     api.conforms(await request(app).get(`${STUDENTS}/${id}`).set(auth2)); // 403
@@ -74,7 +82,7 @@ describe('Module 19 endpoints conform to their OpenAPI documentation (real respo
   });
 
   it('exercised every documented operation of Module 19', () => {
-    expect(api.operationCount('19')).toBe(9);
+    expect(api.operationCount('19')).toBe(10);
     api.assertAllExercised('19');
   });
 });

@@ -68,4 +68,8 @@ export const SESSION_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
     code: SessionErrorCodes.NEW_PASSWORD_SAME_AS_CURRENT,
     message: { ar: 'كلمة المرور الجديدة يجب أن تختلف عن الحالية.', en: 'The new password must be different from the current one.' },
   },
+  {
+    code: SessionErrorCodes.ROLE_NOT_ASSIGNED,
+    message: { ar: 'هذا الدور غير مسند إلى حسابك.', en: 'This role is not assigned to your account.' },
+  },
 ];

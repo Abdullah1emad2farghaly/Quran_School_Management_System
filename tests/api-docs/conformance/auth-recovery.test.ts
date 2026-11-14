@@ -134,8 +134,25 @@ describe('Modules 10 and 11 endpoints conform to their OpenAPI documentation (re
     }
   });
 
+  it('switch-role: success and error responses', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ role: 'TEACHER' });
+    await h.roles.assignRole({ userId: u.id, roleCode: 'PARENT', assignedBy: null });
+    const login = api.conforms(await request(app).post(`${base}/login`).send({ phone: u.phone, password: u.password }));
+    expect(login.body.data.activeRole).toBeNull();
+    const bearer = { Authorization: `Bearer ${login.body.data.accessToken}` };
+
+    expect(api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'PARENT' })).body.data.activeRole).toBe('PARENT');
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'PARENT' })); // idempotent
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({})); // 400
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'SCHOOL_MANAGER' })); // 403 ROLE_NOT_ASSIGNED
+    api.conforms(await request(app).post(`${base}/switch-role`).send({ role: 'PARENT' })); // 401
+    await request(app).post(`${base}/logout`).set(bearer);
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'TEACHER' })); // 401 revoked session
+  });
+
   it('exercised every documented operation of Modules 10 and 11', () => {
-    expect(api.operationCount('10')).toBe(7);
+    expect(api.operationCount('10')).toBe(8);
     expect(api.operationCount('11')).toBe(3);
     api.assertAllExercised('10');
     api.assertAllExercised('11');

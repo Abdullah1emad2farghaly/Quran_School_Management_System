@@ -19,6 +19,8 @@ export const SessionErrorCodes = {
   PASSWORD_CHANGE_REQUIRED: 'PASSWORD_CHANGE_REQUIRED',
   /** The current password given to the password change is wrong. */
   CURRENT_PASSWORD_INCORRECT: 'CURRENT_PASSWORD_INCORRECT',
+  /** `POST /auth/switch-role`: the account does not hold the requested role (never assigned, or already revoked). */
+  ROLE_NOT_ASSIGNED: 'ROLE_NOT_ASSIGNED',
   /** The new password equals the current one, so nothing would change. */
   NEW_PASSWORD_SAME_AS_CURRENT: 'NEW_PASSWORD_SAME_AS_CURRENT',
 } as const;
@@ -40,6 +42,7 @@ const KIND: Record<SessionErrorCode, ErrorKind> = {
   PASSWORD_CHANGE_REQUIRED: 'FORBIDDEN',
   CURRENT_PASSWORD_INCORRECT: 'VALIDATION',
   NEW_PASSWORD_SAME_AS_CURRENT: 'BUSINESS_RULE',
+  ROLE_NOT_ASSIGNED: 'FORBIDDEN',
 };
 
 export function sessionError(code: SessionErrorCode, details?: unknown): AppError {

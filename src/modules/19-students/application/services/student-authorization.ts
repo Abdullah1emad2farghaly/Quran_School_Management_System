@@ -16,6 +16,7 @@ export const StudentPermissions = {
   ARCHIVE: 'students.student.archive',
   READ_HISTORY: 'students.student.read-history',
   LIST_OWN_CHILDREN: 'students.student.list-own-children',
+  LIST_BY_PARENT: 'students.student.list-by-parent',
 } as const;
 
 /** Scope target type of a Student (the SCHOOL target type belongs to Module 16 and its resolver is reused as is). */
@@ -47,6 +48,8 @@ export function registerStudentAuthorization(deps: StudentAuthorizationDeps): vo
   const manager = ['SCHOOL_MANAGER'] as const;
   deps.policies.register({ code: StudentPermissions.CREATE, roles: manager, scope: 'MANAGEMENT' });
   deps.policies.register({ code: StudentPermissions.LIST, roles: manager, scope: 'MANAGEMENT' });
+  // Scope target PARENT: Module 17's MANAGEMENT/PARENT resolver proves the Parent is linked to a school the caller manages (reused, not duplicated).
+  deps.policies.register({ code: StudentPermissions.LIST_BY_PARENT, roles: manager, scope: 'MANAGEMENT' });
   deps.policies.register({ code: StudentPermissions.UPDATE, roles: manager, scope: 'MANAGEMENT' });
   deps.policies.register({ code: StudentPermissions.DEACTIVATE, roles: manager, scope: 'MANAGEMENT' });
   deps.policies.register({ code: StudentPermissions.REACTIVATE, roles: manager, scope: 'MANAGEMENT' });

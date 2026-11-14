@@ -25,6 +25,8 @@ export interface StudentRepository {
   findByNationalId(nationalId: string, tx?: TransactionContext): Promise<Student | undefined>;
   listBySchool(schoolId: string, query: StudentListQuery, tx?: TransactionContext): Promise<{ items: Student[]; total: number }>;
   listByParent(parentId: string, query: StudentListQuery, tx?: TransactionContext): Promise<{ items: Student[]; total: number }>;
+  /** The Parent's Students restricted to the given schools (never any other school). `schoolIds` must not be empty. */
+  listByParentInSchools(parentId: string, schoolIds: readonly string[], query: StudentListQuery, tx?: TransactionContext): Promise<{ items: Student[]; total: number }>;
   /** Students of the Parent in the school in EVERY status (an archived student still anchors the Parent-to-School relationship). */
   countByParentInSchool(parentId: string, schoolId: string, tx: TransactionContext): Promise<number>;
   listHistory(studentId: string, tx?: TransactionContext): Promise<StudentHistoryEntry[]>;

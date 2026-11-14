@@ -124,8 +124,13 @@ export class AuthorizationService implements Authorizer {
     const activeRoles = (await this.roles.listActiveRoles(request.userId)).filter(isAssignableRole);
     if (activeRoles.length === 0) return deny('NO_ACTIVE_ROLE');
 
+    // A session acts as ONE role: when the request names it, no other role of the account may authorize (and none selected means no access).
+    // The named role must also still be assigned right now (a revoked role never authorizes).
+    if (request.activeRole !== undefined && (request.activeRole === null || !activeRoles.includes(request.activeRole))) return deny('NO_ACTIVE_ROLE');
+    const actingRoles = request.activeRole === undefined ? activeRoles : activeRoles.filter((role) => role === request.activeRole);
+
     const granted = new Set(this.permissions.rolesGranting(policy.code));
-    const candidates = activeRoles.filter((role) => granted.has(role));
+    const candidates = actingRoles.filter((role) => granted.has(role));
     if (candidates.length === 0) return deny('PERMISSION_NOT_GRANTED');
 
     let firstFailure: DenyReason | undefined;

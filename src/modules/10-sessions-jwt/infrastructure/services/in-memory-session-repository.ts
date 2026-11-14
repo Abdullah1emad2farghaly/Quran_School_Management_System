@@ -97,7 +97,7 @@ export class InMemorySessionRepository implements SessionRepository {
   }
 
   private sessionSnapshot(s: AuthSession, version: number): AuthSessionSnapshot {
-    return { id: s.id, userId: s.userId, createdAt: s.createdAt, revokedAt: s.revokedAt, revokedReason: s.revokedReason, slot: s.slot, deviceLabel: s.deviceLabel, version };
+    return { id: s.id, userId: s.userId, createdAt: s.createdAt, revokedAt: s.revokedAt, revokedReason: s.revokedReason, slot: s.slot, deviceLabel: s.deviceLabel, activeRole: s.activeRole, version };
   }
 
   private tokenSnapshot(t: RefreshTokenRecord, version: number): RefreshTokenSnapshot {

@@ -2,7 +2,7 @@
 // access-token verification, up to three concurrent sessions per account, "My devices", expired-session cleanup). Authorization (roles, permissions, scope, ownership) is Module 12.
 // Other modules' routes use `createRequireAuthentication` to protect endpoints and read `req.auth`.
 export { SessionService, type SessionServiceDeps } from '../application/services/session-service';
-export type { AuthResult, AuthPrincipal } from '../application/dto/auth-result';
+export type { ActiveRoleResult, AuthResult, AuthPrincipal } from '../application/dto/auth-result';
 export type { ManagedSchoolResolver } from '../application/ports/managed-school-resolver';
 export type { DeviceSessionDto, DeviceSessionListDto } from '../application/dto/device-session-dto';
 export type { SessionRepository, ActiveSessionView } from '../application/ports/session-repository';

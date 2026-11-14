@@ -14,9 +14,10 @@ const authTokens = s.object(
     user: s.object({ id: s.uuid(), phone: s.string({ description: 'The normalized phone number (the login identifier).' }) }, ['id', 'phone']),
     mustChangePassword: s.boolean({ description: 'True while the account still has an initial password that must be changed. The backend then answers every protected request except `POST /auth/change-password`, `POST /auth/logout` and `POST /auth/logout-all` with 403 `PASSWORD_CHANGE_REQUIRED`.', example: false }),
     roles: s.array(s.string({ enum: ROLE_CODES }), { description: 'Informational, for the client UI. Authorization is always decided by the backend.' }),
+    activeRole: s.string({ nullable: true, maxLength: 32, description: 'The role THIS session acts as. Set automatically when the account has exactly one role; NULL for an account with several roles until it chooses with `POST /auth/switch-role` (business endpoints answer 403 until then). Belongs to the session: the same account can act as different roles on different devices. Survives token refresh.', example: 'MAIN_ADMIN' }),
     schoolId: s.uuid({ nullable: true, description: 'The school the user works in as School Manager (their active manager link). Null for every other account. Informational, for the client UI; authorization is always decided by the backend.' }),
   },
-  ['tokenType', 'accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'user', 'mustChangePassword', 'roles', 'schoolId'],
+  ['tokenType', 'accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'user', 'mustChangePassword', 'roles', 'activeRole', 'schoolId'],
 );
 
 const deviceSession = s.object(
@@ -55,8 +56,18 @@ const tokensExample = {
   user: { id: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', phone: '+201001234567' },
   mustChangePassword: false,
   roles: ['MAIN_ADMIN'],
+  activeRole: 'MAIN_ADMIN',
   schoolId: null,
 };
+const activeRoleResult = s.object(
+  {
+    roles: s.array(s.string({ maxLength: 32 }), { description: 'Every role the account currently holds (from the real role assignments).' }),
+    activeRole: s.string({ maxLength: 32, description: 'The role this session now acts as.', example: 'TEACHER' }),
+    schoolId: s.uuid({ nullable: true, description: 'The school the user works in as School Manager, or null.' }),
+  },
+  ['roles', 'activeRole', 'schoolId'],
+);
+const switchRoleExample = { roles: ['TEACHER', 'PARENT'], activeRole: 'PARENT', schoolId: null };
 
 /** OpenAPI contract of `/auth` (`auth.routes.ts`). Module 10: sessions and JWT. */
 export const authApiDoc: ModuleApiDoc = {
@@ -109,6 +120,26 @@ export const authApiDoc: ModuleApiDoc = {
         { status: 401, codes: ['REFRESH_TOKEN_INVALID', 'REFRESH_TOKEN_EXPIRED', 'REFRESH_TOKEN_REUSED'], description: 'The refresh token is not usable.' },
         { status: 403, codes: ['ACCOUNT_INACTIVE'], description: 'The account was deactivated.' },
         { status: 409, codes: ['SESSION_CONCURRENT_MODIFICATION'], description: 'A concurrent session update could not be resolved; retry.' },
+      ],
+    },
+    {
+      method: 'post',
+      path: '/switch-role',
+      operationId: 'switchRole',
+      summary: 'Choose the role this session acts as',
+      description:
+        'An account may hold several roles. The ACTIVE ROLE belongs to the SESSION (device), not to the account: this call changes the active role of the session the access token belongs to and NOTHING else. Other sessions of the account keep their own active roles, none is revoked and no token is rotated; it is not a new login and does not count towards the 3-session limit. The requested role is checked against the account\'s CURRENT role assignments in the database (a role that was never assigned or was revoked is refused). Every protected business endpoint authorizes only through the active role of the calling session, read on every request, so the previous role stops working immediately and an old access token cannot keep acting as it. Choosing the role that is already active is a safe no-op. Role codes are the platform\'s role codes (for example `TEACHER`, `PARENT`, `SCHOOL_MANAGER`, `ORGANIZATION_MANAGER`). Reachable while no role is selected (that is its purpose).',
+      authorization: authenticatedOnly('The caller\'s own current session.', 'Authentication only: the account and session come from the verified access token; the role is validated against the account\'s real assignments.'),
+      request: {
+        description: 'The role to act as.',
+        schema: s.object({ role: s.string({ maxLength: 32, description: 'A role code the account currently holds.', example: 'PARENT' }) }, ['role']),
+        examples: { switch: { summary: 'Act as a parent', value: { role: 'PARENT' } } },
+      },
+      success: { status: 200, description: 'The session now acts as this role.', data: ref('ActiveRoleResult'), example: switchRoleExample, noStore: true },
+      errors: [
+        { status: 400, codes: ['VALIDATION_FAILED'], description: 'The role is missing or malformed.' },
+        { status: 401, codes: ['SESSION_REVOKED'], description: 'The session was revoked or its refresh token expired.' },
+        { status: 403, codes: ['ROLE_NOT_ASSIGNED', 'PASSWORD_CHANGE_REQUIRED'], description: 'The account does not hold this role (never assigned or revoked), or it must first change its initial password.' },
       ],
     },
     {
@@ -181,5 +212,5 @@ export const authApiDoc: ModuleApiDoc = {
       ],
     },
   ],
-  schemas: { AuthTokens: authTokens, DeviceSession: deviceSession, DeviceSessionList: deviceSessionList },
+  schemas: { AuthTokens: authTokens, ActiveRoleResult: activeRoleResult, DeviceSession: deviceSession, DeviceSessionList: deviceSessionList },
 };

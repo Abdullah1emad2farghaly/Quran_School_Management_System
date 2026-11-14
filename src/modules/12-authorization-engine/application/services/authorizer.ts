@@ -13,6 +13,12 @@ export interface AuthorizationRequest {
   readonly target?: ScopeTarget;
   /** WHAT is acted on, for ownership. Required when the permission has ownership roles, otherwise omitted. */
   readonly resource?: ResourceRef;
+  /**
+   * The role the caller's SESSION currently acts as (`req.auth.activeRole`). When this property is PRESENT the request is authorized ONLY through
+   * that role: `null` (a multi-role account that has not chosen a role) is always denied, and roles the account holds but is not acting as never
+   * count. When it is ABSENT (non-HTTP callers such as system jobs, which have no session) every active role of the user is a candidate, as before.
+   */
+  readonly activeRole?: RoleCode | null;
 }
 
 /**

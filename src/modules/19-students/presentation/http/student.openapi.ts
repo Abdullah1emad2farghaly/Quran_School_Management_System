@@ -104,6 +104,7 @@ const studentExample = (overrides: Record<string, unknown> = {}): Record<string,
 });
 
 const studentIdParam = { id: { description: 'The Student id.', example: STUDENT_ID, schema: s.uuid() } };
+const parentIdParam = { parentId: { description: 'The Parent id (the Parent record id, not the user id).', example: '2d6e1c35-7b0a-4f19-8e43-5a9c3b7d1f20', schema: s.uuid() } };
 const schoolIdParam = { schoolId: { description: 'The school id.', example: SCHOOL_ID, schema: s.uuid() } };
 
 const validationErrors: ErrorDoc = {
@@ -206,6 +207,18 @@ export const studentApiDoc: ModuleApiDoc = {
       pathParams: schoolIdParam,
       query: listQueryParameters(STUDENT_LIST_SPEC),
       success: { status: 200, description: 'A page of Students.', paginated: true, data: ref('Student'), example: studentExample() },
+      errors: [NOT_ALLOWED],
+    },
+    {
+      method: 'get',
+      path: '/parents/:parentId',
+      operationId: 'listParentStudents',
+      summary: 'List the Students of one Parent',
+      description: 'A School Manager lists the Students of a Parent (any status; filter with `filter[status]`), but ONLY those in the schools the caller actively manages: a Parent linked to several schools never exposes the children of a school the caller does not manage. The Parent must be linked to at least one school the caller manages, otherwise the request is denied. Newest first by default (`sort=createdAt`, `joinDate` or `fullName`, `-` for descending).',
+      authorization: schoolManager(StudentPermissions.LIST_BY_PARENT, 'A Parent linked to a school the caller actively manages (proven by the Module 17 MANAGEMENT/PARENT scope resolver from server data).'),
+      pathParams: parentIdParam,
+      query: listQueryParameters(STUDENT_LIST_SPEC),
+      success: { status: 200, description: 'A page of the Parent\'s Students in the caller\'s schools.', paginated: true, data: ref('Student'), example: studentExample() },
       errors: [NOT_ALLOWED],
     },
     {
