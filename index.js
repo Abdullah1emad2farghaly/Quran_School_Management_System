@@ -15,6 +15,13 @@ try {
 
   console.log("Starting QSMS Backend...");
 
+  console.log("Running database migrations...");
+
+  execSync("npm run db:migrate", {
+    stdio: "inherit",
+  });
+
+  console.log("Database migrations completed.");
   require("./dist/app/server.js");
 } catch (error) {
   console.error("QSMS deployment failed:", error);
