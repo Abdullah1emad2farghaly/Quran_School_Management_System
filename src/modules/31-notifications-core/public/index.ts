@@ -5,14 +5,10 @@ export { PushSubscriptionService, type PushSubscriptionServiceDeps } from '../ap
 export { PushDeliveryProcessor, type PushDeliveryProcessorDeps, type PushPassResult } from '../application/services/push-delivery-processor';
 export { NotificationTemplateRegistry, type NotificationTemplate } from '../application/services/template-registry';
 export { NOTIFICATION_ERROR_MESSAGES } from '../application/services/notification-error-messages';
-<<<<<<< HEAD
 export { createDisconnectSocketsOnSessionRevokedHandler } from '../application/handlers/disconnect-sockets-on-session-revoked';
 export { createDeletePushSubscriptionsOnSessionRevokedHandler } from '../application/handlers/delete-push-subscriptions-on-session-revoked';
 export { noRealtimeGateway, REALTIME_EVENTS, type RealtimeConnectionControl, type RealtimeNotificationGateway } from '../application/ports/realtime-gateway';
 export { SocketIoNotificationGateway, type RealtimePrincipal, type SocketIoGatewayOptions } from '../infrastructure/realtime/socket-io-gateway';
-=======
-export { createDeletePushSubscriptionsOnSessionRevokedHandler } from '../application/handlers/delete-push-subscriptions-on-session-revoked';
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 export { type AccountLanguageResolver, noAccountLanguage } from '../application/ports/account-language-resolver';
 export type { NotificationRepository, NotificationRecord, PushSubscriptionRecord } from '../application/ports/notification-repository';
 export type { PushSender, PushSendOutcome, PushTarget } from '../application/ports/push-sender';

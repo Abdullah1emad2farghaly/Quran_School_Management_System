@@ -95,7 +95,6 @@ export class SequelizeNotificationRepository implements NotificationRepository {
     );
   }
 
-<<<<<<< HEAD
   async findNotification(userId: string, notificationId: string): Promise<NotificationRecord | null> {
     const rows = await this.db.query<NotificationRow>(`${NOTIFICATION_SELECT} WHERE id = :id AND recipient_user_id = :userId`, {
       replacements: { id: notificationId, userId },
@@ -104,8 +103,6 @@ export class SequelizeNotificationRepository implements NotificationRepository {
     return rows[0] ? toNotification(rows[0]) : null;
   }
 
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   async listNotifications(userId: string, options: { unreadOnly: boolean; newestFirst: boolean; page: PageRequest }) {
     const where = `recipient_user_id = :userId${options.unreadOnly ? ' AND read_at IS NULL' : ''}`;
     const direction = options.newestFirst ? 'DESC' : 'ASC';
@@ -221,15 +218,9 @@ export class SequelizeNotificationRepository implements NotificationRepository {
     );
     const rows = await this.db.query<{
       deliveryId: string; attempts: number | string; subscriptionId: string | null; endpoint: string | null; p256dh: string | null; auth: string | null;
-<<<<<<< HEAD
       notificationId: string | null; type: string | null; title: string | null; body: string | null; sessionId: string | null; notificationCreatedAt: D | null;
     }>(
       `SELECT d.id AS deliveryId, d.attempts, s.id AS subscriptionId, s.auth_session_id AS sessionId, s.endpoint, s.p256dh, s.auth, n.id AS notificationId, n.type, n.title, n.body, n.created_at AS notificationCreatedAt
-=======
-      notificationId: string | null; type: string | null; title: string | null; body: string | null;
-    }>(
-      `SELECT d.id AS deliveryId, d.attempts, s.id AS subscriptionId, s.endpoint, s.p256dh, s.auth, n.id AS notificationId, n.type, n.title, n.body
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
          FROM push_deliveries d
          LEFT JOIN push_subscriptions s ON s.id = d.subscription_id
          LEFT JOIN notifications n ON n.id = d.notification_id
@@ -240,24 +231,15 @@ export class SequelizeNotificationRepository implements NotificationRepository {
     const out: DeliveryForSend[] = [];
     const orphans: string[] = [];
     for (const r of rows) {
-<<<<<<< HEAD
       if (r.subscriptionId === null || r.notificationId === null || r.endpoint === null || r.p256dh === null || r.auth === null || r.type === null || r.title === null || r.body === null || r.sessionId === null || r.notificationCreatedAt === null) {
-=======
-      if (r.subscriptionId === null || r.notificationId === null || r.endpoint === null || r.p256dh === null || r.auth === null || r.type === null || r.title === null || r.body === null) {
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
         orphans.push(r.deliveryId); // cannot normally happen (foreign keys cascade); cleaned up defensively
         continue;
       }
       out.push({
         deliveryId: r.deliveryId,
         attempts: Number(r.attempts),
-<<<<<<< HEAD
         subscription: { id: r.subscriptionId, sessionId: r.sessionId, endpoint: r.endpoint, p256dh: r.p256dh, auth: r.auth },
         notification: { id: r.notificationId, type: r.type, title: r.title, body: r.body, createdAt: asDate(r.notificationCreatedAt) },
-=======
-        subscription: { id: r.subscriptionId, endpoint: r.endpoint, p256dh: r.p256dh, auth: r.auth },
-        notification: { id: r.notificationId, type: r.type, title: r.title, body: r.body },
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
       });
     }
     if (orphans.length > 0) await this.db.query('DELETE FROM push_deliveries WHERE id IN (:ids)', { replacements: { ids: orphans } });

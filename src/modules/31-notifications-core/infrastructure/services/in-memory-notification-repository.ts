@@ -38,14 +38,11 @@ export class InMemoryNotificationRepository implements NotificationRepository {
     this.notifications.set(record.id, { ...record });
   }
 
-<<<<<<< HEAD
   async findNotification(userId: string, notificationId: string): Promise<NotificationRecord | null> {
     const n = this.notifications.get(notificationId);
     return n && n.recipientUserId === userId ? { ...n } : null;
   }
 
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   async listNotifications(userId: string, options: { unreadOnly: boolean; newestFirst: boolean; page: PageRequest }) {
     const all = [...this.notifications.values()]
       .filter((n) => n.recipientUserId === userId && (!options.unreadOnly || n.readAt === null))
@@ -165,13 +162,8 @@ export class InMemoryNotificationRepository implements NotificationRepository {
       out.push({
         deliveryId: d.id,
         attempts: d.attempts,
-<<<<<<< HEAD
         subscription: { id: subscription.id, sessionId: subscription.sessionId, endpoint: subscription.endpoint, p256dh: subscription.p256dh, auth: subscription.auth },
         notification: { id: notification.id, type: notification.type, title: notification.title, body: notification.body, createdAt: notification.createdAt },
-=======
-        subscription: { id: subscription.id, endpoint: subscription.endpoint, p256dh: subscription.p256dh, auth: subscription.auth },
-        notification: { id: notification.id, type: notification.type, title: notification.title, body: notification.body },
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
       });
     }
     return out;

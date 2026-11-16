@@ -37,14 +37,9 @@ export interface NewPushDelivery {
 export interface DeliveryForSend {
   readonly deliveryId: string;
   readonly attempts: number;
-<<<<<<< HEAD
   /** `sessionId` is the authentication session that created the subscription (the "device"). */
   readonly subscription: { readonly id: string; readonly sessionId: string; readonly endpoint: string; readonly p256dh: string; readonly auth: string };
   readonly notification: { readonly id: string; readonly type: string; readonly title: string; readonly body: string; readonly createdAt: Date };
-=======
-  readonly subscription: { readonly id: string; readonly endpoint: string; readonly p256dh: string; readonly auth: string };
-  readonly notification: { readonly id: string; readonly type: string; readonly title: string; readonly body: string };
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 }
 
 export interface ClaimParams {
@@ -65,11 +60,8 @@ export interface NotificationRepository {
 
   // ---- notifications ----
   insertNotification(record: NotificationRecord, tx: TransactionContext): Promise<void>;
-<<<<<<< HEAD
   /** One notification of this account, or null (unknown or foreign id). Reads committed data only: used to emit a real-time event after the creating transaction committed. */
   findNotification(userId: string, notificationId: string): Promise<NotificationRecord | null>;
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   listNotifications(userId: string, options: { unreadOnly: boolean; newestFirst: boolean; page: PageRequest }): Promise<{ items: NotificationRecord[]; total: number }>;
   countUnread(userId: string): Promise<number>;
   /** Sets `read_at` only when it is still empty (the first read time is kept). Another account's id changes nothing. */

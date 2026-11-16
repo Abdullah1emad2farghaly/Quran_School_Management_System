@@ -55,7 +55,6 @@ export interface AppConfig {
     /** `mailto:` address or `https:` URL identifying the sender to push services (it is an identifier, not email delivery). Empty when push is disabled. */
     readonly vapidSubject: string;
   };
-<<<<<<< HEAD
   /** Real-time notifications over Socket.IO (Module 31). Nothing here is secret; the transport is portable (plain Node HTTP server, no hosting-specific service). */
   readonly realtime: {
     /** `SOCKET_IO_ENABLED` (default true). When false the server starts without Socket.IO and notifications use Web Push and the notification APIs only. */
@@ -67,8 +66,6 @@ export interface AppConfig {
     /** `SOCKET_IO_MAX_CONNECTIONS_PER_USER`: above it the oldest connection of that account is closed. */
     readonly maxConnectionsPerUser: number;
   };
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   readonly redis: {
     readonly host: string;
     readonly port: number;

@@ -16,10 +16,7 @@ On any invalid value the server refuses to start and prints **all** problems at 
 | DATABASE_NAME / USER / PASSWORD | empty | **required in production** |
 | JWT_ACCESS_SECRET / JWT_REFRESH_SECRET | empty | **required in production**, ≥ 32 chars, must differ |
 | VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT | empty | Web Push (Module 31): all three or none; none = push disabled, in-app notifications still work. Generate with `npx web-push generate-vapid-keys`. The private key is a secret (redacted in logs). Subject: `mailto:` or `https:` |
-<<<<<<< HEAD
 | SOCKET_IO_ENABLED / SOCKET_IO_PATH / SOCKET_IO_PING_INTERVAL_MS / SOCKET_IO_PING_TIMEOUT_MS / SOCKET_IO_MAX_CONNECTIONS_PER_USER | true / `/socket.io` / 25000 / 20000 / 20 | Real-time notifications over Socket.IO (Module 31, see `docs/NOTIFICATIONS.md`). Portable: same HTTP server, no hosting-specific value. `false` = Web Push and the notification APIs only. |
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 | OTP_HMAC_SECRET | empty | **required in production**, ≥ 32 chars, must differ from both JWT secrets (dedicated key for OTP / reset-token hashing) |
 | OTP_SENDER | disabled | `disabled` or `dev-file` (development only; rejected in production) |
 | TRUSTED_PROXIES | empty (none trusted) | comma-separated IPs, CIDR ranges or `loopback`/`linklocal`/`uniquelocal`; `true`, hop counts, `*` and `/0` ranges are rejected |

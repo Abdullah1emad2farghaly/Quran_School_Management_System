@@ -2,25 +2,19 @@ import { newUuid, type Clock, type UnitOfWork } from '../../../00-shared-kernel/
 import { PUSH_LIMITS, pushPreview, pushRetryDelayMs } from '../../domain/value-objects/notification-rules';
 import type { DeliveryForSend, NotificationRepository } from '../ports/notification-repository';
 import type { PushSender } from '../ports/push-sender';
-<<<<<<< HEAD
 import type { RealtimeNotificationGateway } from '../ports/realtime-gateway';
 
 /** How long a delivery for an ONLINE session waits for its real-time emission before falling back to Web Push. */
 const DEFAULT_REALTIME_GRACE_MS = 6000;
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 
 export interface PushDeliveryProcessorDeps {
   readonly repository: NotificationRepository;
   readonly sender: PushSender;
   readonly unitOfWork: UnitOfWork;
   readonly clock: Clock;
-<<<<<<< HEAD
   /** Optional. A push is not sent to a session that already received the notification through its live connection (see `processDue`). */
   readonly realtime?: RealtimeNotificationGateway;
   readonly realtimeGraceMs?: number;
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 }
 
 export interface PushPassResult {
@@ -40,7 +34,6 @@ export interface PushPassResult {
  * Each result is applied in its own short transaction; failed rows are kept for 7 days and then removed.
  */
 export class PushDeliveryProcessor {
-<<<<<<< HEAD
   /** Counters for the logs (kept apart from `PushPassResult`, whose shape other code relies on). */
   readonly stats = { realtimeSkipped: 0, realtimeDeferred: 0 };
 
@@ -62,17 +55,12 @@ export class PushDeliveryProcessor {
     return 'send';
   }
 
-=======
-  constructor(private readonly deps: PushDeliveryProcessorDeps) {}
-
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   async processDue(limit: number = PUSH_LIMITS.batchSize): Promise<PushPassResult> {
     const { repository, clock } = this.deps;
     const now = clock.now();
     const claimed = await repository.claimDeliveries({ claimId: newUuid(), now, lockUntil: new Date(now.getTime() + PUSH_LIMITS.claimLockMs), limit });
     const result = { sent: 0, retried: 0, failed: 0, subscriptionsRemoved: 0 };
     for (const item of claimed) {
-<<<<<<< HEAD
       const route = this.route(item, clock.now());
       if (route === 'skip') {
         await this.deps.unitOfWork.run((tx) => repository.completeDelivery(item.deliveryId, tx));
@@ -85,8 +73,6 @@ export class PushDeliveryProcessor {
         this.stats.realtimeDeferred += 1;
         continue;
       }
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
       const outcome = await this.send(item);
       const at = clock.now();
       await this.deps.unitOfWork.run(async (tx) => {

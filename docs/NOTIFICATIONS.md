@@ -54,7 +54,6 @@ Everything is stored once per account, so a change made on one device is visible
 
 ## Known limits
 Only a Module 31 test template exists: the real templates, event consumers and reminders belong to Module 32. In this environment the HTTP, OpenAPI conformance and database suites were not executed; see the changelog entry.
-<<<<<<< HEAD
 
 ## Real-time delivery (Socket.IO, 0.47.0)
 Real-time makes a notification that is already stored appear at once in every browser of the account that is connected. It **complements** Web Push and the notification APIs; it replaces neither, and **the database remains the source of truth**.
@@ -86,5 +85,3 @@ Register the listeners once (outside the reconnect handler) so reconnecting neve
 - Free hosts that sleep or restart drop every connection: clients reconnect and resync as described. The server does not rely on connections surviving.
 - "Delivered" means emitted to a live connection of that session; the browser does not acknowledge, so a connection that dies in the same instant can miss one emission; the notification is then found by the next fetch.
 - An existing connection is authenticated at connection time. It ends when its session ends (event above) or when it drops; a new connection always needs a currently valid token.
-=======
->>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
