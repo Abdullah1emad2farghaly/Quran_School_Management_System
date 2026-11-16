@@ -134,5 +134,5 @@ export async function createSchoolsApiHarness(options: { extraStores?: readonly 
     await organizations.assignOrganizationAdmin({ organizationId, userId: user.id, assignedBy: null });
     return user;
   };
-  return { h, service, registration, organizations, schools, managers, engine, requirePermission, country, france, gov, paris, center, org, newOrgAdmin, policies, resolvers, unitOfWork, address };
+  return { h, service, registration, organizations, orgRepo, schools, managers, engine, requirePermission, country, france, gov, paris, center, org, newOrgAdmin, policies, resolvers, unitOfWork, address };
 }

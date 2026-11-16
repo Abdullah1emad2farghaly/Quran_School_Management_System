@@ -79,8 +79,9 @@ export async function lintOpenApi(document: OpenApiDocument): Promise<string[]> 
       }
     }
 
-    const body = (op.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['application/json'];
-    if (op.requestBody && !body) problems.push(`${where}: the request body is not documented as application/json`);
+    const requestContent = (op.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content;
+    const body = requestContent?.['application/json'] ?? requestContent?.['multipart/form-data'];
+    if (op.requestBody && !body) problems.push(`${where}: the request body is not documented as application/json or multipart/form-data`);
     if (body) {
       const examples = Object.entries(body.examples ?? {});
       if (examples.length === 0) problems.push(`${where}: the request body has no example`);

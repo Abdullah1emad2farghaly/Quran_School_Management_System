@@ -13,8 +13,22 @@ import { unifiedAddressError, UnifiedAddressErrorCodes } from '../../src/modules
 import { schoolError, SchoolErrorCodes } from '../../src/modules/16-schools/domain/errors/school-errors';
 import { parentError, ParentErrorCodes } from '../../src/modules/17-parents/domain/errors/parent-errors';
 import { teacherError, TeacherErrorCodes } from '../../src/modules/18-teachers/domain/errors/teacher-errors';
+import { subscriptionError, SubscriptionErrorCodes } from '../../src/modules/33-subscriptions/domain/errors/subscription-errors';
 import { studentError, StudentErrorCodes } from '../../src/modules/19-students/domain/errors/student-errors';
 import { groupError, GroupErrorCodes } from '../../src/modules/20-groups/domain/errors/group-errors';
+import { quranError, QuranErrorCodes } from '../../src/modules/21-quran-structure/domain/errors/quran-errors';
+import { scheduleError, ScheduleErrorCodes } from '../../src/modules/23-group-schedules/public';
+import { classSessionError, ClassSessionErrorCodes } from '../../src/modules/24-sessions/public';
+import { smartGuardError, SmartGuardErrorCodes } from '../../src/modules/25-smart-guard/public';
+import { attendanceError, AttendanceErrorCodes } from '../../src/modules/26-attendance/public';
+import { rangeError, QuranRangeErrorCodes } from '../../src/modules/22-quran-range-engine/public';
+import { memorizationError, MemorizationErrorCodes } from '../../src/modules/27-memorization/public';
+import { revisionError, RevisionErrorCodes } from '../../src/modules/28-revision/public';
+import { evaluationError, EvaluationErrorCodes } from '../../src/modules/29-evaluations/public';
+import { examError, ExamErrorCodes } from '../../src/modules/30-exams/public';
+import { notificationError, NotificationErrorCodes } from '../../src/modules/31-notifications-core/public';
+import { FileErrorCodes, fileError } from '../../src/modules/07-file-infrastructure/public';
+import { ImportErrorCodes, importError } from '../../src/modules/36-excel-import/public';
 import { operationsOf } from './support/lint';
 
 type Factory = (code: never) => { kind: keyof typeof HTTP_STATUS_BY_KIND };
@@ -29,8 +43,22 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [SchoolErrorCodes, schoolError as Factory],
   [ParentErrorCodes, parentError as Factory],
   [TeacherErrorCodes, teacherError as Factory],
+  [SubscriptionErrorCodes, subscriptionError as Factory],
   [StudentErrorCodes, studentError as Factory],
   [GroupErrorCodes, groupError as Factory],
+  [QuranErrorCodes, quranError as Factory],
+  [ScheduleErrorCodes, scheduleError as Factory],
+  [ClassSessionErrorCodes, classSessionError as Factory],
+  [SmartGuardErrorCodes, smartGuardError as Factory],
+  [AttendanceErrorCodes, attendanceError as Factory],
+  [QuranRangeErrorCodes, rangeError as Factory],
+  [MemorizationErrorCodes, memorizationError as Factory],
+  [RevisionErrorCodes, revisionError as Factory],
+  [EvaluationErrorCodes, evaluationError as Factory],
+  [ExamErrorCodes, examError as Factory],
+  [NotificationErrorCodes, notificationError as Factory],
+  [FileErrorCodes, ((code: never) => fileError(code)) as Factory],
+  [ImportErrorCodes, ((code: never) => importError(code)) as Factory],
 ];
 
 /** The status each module-owned code REALLY answers: taken from the module's own error factory, never retyped. */

@@ -45,6 +45,17 @@ export class GeographyService {
   listGovernorates(countryId: string, tx?: TransactionContext): Promise<GeographyNodeDto[]> {
     return this.list('GOVERNORATE', countryId, tx);
   }
+  /**
+   * Countries available for registration forms: the ACTIVE ones (the same rule `validateHierarchy` applies by default). Read-only.
+   * Used by the public registration lookup; the unfiltered `listCountries` is unchanged.
+   */
+  async listActiveCountries(tx?: TransactionContext): Promise<GeographyNodeDto[]> {
+    return (await this.list('COUNTRY', null, tx)).filter((n) => n.status === 'ACTIVE');
+  }
+  /** The ACTIVE governorates of a country, in code order. The country itself is NOT checked here (callers use `getCountry`). */
+  async listActiveGovernorates(countryId: string, tx?: TransactionContext): Promise<GeographyNodeDto[]> {
+    return (await this.list('GOVERNORATE', countryId, tx)).filter((n) => n.status === 'ACTIVE');
+  }
   listCenters(governorateId: string, tx?: TransactionContext): Promise<GeographyNodeDto[]> {
     return this.list('CENTER', governorateId, tx);
   }
@@ -112,6 +123,8 @@ export type GeographyLookup = Pick<
   | 'getCenter'
   | 'getVillage'
   | 'listCountries'
+  | 'listActiveCountries'
+  | 'listActiveGovernorates'
   | 'listGovernorates'
   | 'listCenters'
   | 'listVillages'

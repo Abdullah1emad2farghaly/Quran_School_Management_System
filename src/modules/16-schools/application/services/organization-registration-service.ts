@@ -1,7 +1,7 @@
 import { SystemClock, buildPageResult, type Clock, type PageRequest, type PageResult, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
 import { normalizePhone, type IdentityService } from '../../../08-identity-core/public';
 import type { RoleService } from '../../../09-roles-permissions/public';
-import { normalizeOrganizationName, type OrganizationDto, type OrganizationService } from '../../../13-organization-core/public';
+import { normalizeOrganizationName, type OrganizationDto, type OrganizationLookupItemDto, type OrganizationService } from '../../../13-organization-core/public';
 import type { OrganizationAddressInput, UnifiedAddressLookup } from '../../../15-unified-address/public';
 import { normalizeApplicantName } from '../../domain/value-objects/applicant-name';
 import { ApplicantAccountResolver } from './applicant-account-resolver';
@@ -21,7 +21,7 @@ export interface OrganizationRegistrationResult {
 }
 
 export interface OrganizationRegistrationDeps {
-  readonly organizations: Pick<OrganizationService, 'createOrganization' | 'assignOrganizationAdmin' | 'requireById' | 'isOrganizationAdmin' | 'listAdministeredOrganizationIds'>;
+  readonly organizations: Pick<OrganizationService, 'createOrganization' | 'assignOrganizationAdmin' | 'requireById' | 'isOrganizationAdmin' | 'listAdministeredOrganizationIds' | 'listSubmissionEligible'>;
   readonly address: Pick<UnifiedAddressLookup, 'validateOrganizationAddress'>;
   readonly identity: Pick<IdentityService, 'findById' | 'createUser' | 'ensureFullName'>;
   readonly roles: Pick<RoleService, 'hasRole' | 'assignRole'>;
@@ -91,6 +91,14 @@ export class OrganizationRegistrationService {
     const slice = ids.slice((page.page - 1) * page.pageSize, page.page * page.pageSize);
     const items = await Promise.all(slice.map((id) => this.organizations.requireById(id, tx)));
     return buildPageResult(items, ids.length, page);
+  }
+
+  /**
+   * PUBLIC registration lookup: the organizations a school submission may be sent to (the Module 16 rule: ACTIVE with a country), only `{ id, name }`, by name.
+   * Nothing about the caller is used or needed; no private organization data leaves (the full `OrganizationDto` is never returned here).
+   */
+  listRegistrationOrganizations(page: PageRequest, tx?: TransactionContext): Promise<PageResult<OrganizationLookupItemDto>> {
+    return this.organizations.listSubmissionEligible(page, tx);
   }
 
   /** One organization (ORGANIZATION_NOT_FOUND when it does not exist). Who may read it is decided by the Authorization Engine at the route. */

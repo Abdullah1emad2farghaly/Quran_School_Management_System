@@ -37,7 +37,7 @@ Table `user_roles`, one row per assignment, **never deleted**: `assigned_at`, `a
 `RoleAssigned`, `RoleRevoked` — aggregate `RoleAssignment`, payload `{ assignmentId, userId, roleCode }`. Module 10 can use them to refresh a user's roles.
 
 ## Errors (Arabic + English)
-`INVALID_ROLE` (400), `ROLE_NOT_ASSIGNABLE` (422), `ROLE_ALREADY_ASSIGNED` (409), `ROLE_ASSIGNMENT_NOT_FOUND` (404), `LAST_ACTIVE_ROLE` (422), `ROLE_CONCURRENT_MODIFICATION` (409), plus `USER_NOT_FOUND` from Module 08. Registry configuration errors (`INVALID_PERMISSION_CODE`, `PERMISSION_ALREADY_REGISTERED`, `INVALID_PERMISSION_GRANT`) are startup errors, not user-facing.
+`INVALID_ROLE` (400), `ROLE_NOT_ASSIGNABLE` (422), `ROLE_ALREADY_ASSIGNED` (409), `ROLE_ASSIGNMENT_NOT_FOUND` (404), `LAST_ACTIVE_ROLE` (422), `ROLE_CONCURRENT_MODIFICATION` (409), plus `USER_NOT_FOUND` from Module 08. Two simultaneous revocations for the same user can make InnoDB roll one back with a deadlock (errno 1213); the repository reports it as the retryable `ROLE_CONCURRENT_MODIFICATION` and `RoleService.revokeRole` retries up to 3 times when it owns the transaction, so the loser gets the true outcome (`LAST_ACTIVE_ROLE`). With a caller-owned transaction the 409 is returned to the caller. No schema, API or event change. Registry configuration errors (`INVALID_PERMISSION_CODE`, `PERMISSION_ALREADY_REGISTERED`, `INVALID_PERMISSION_GRANT`) are startup errors, not user-facing.
 
 ## Tests
 Unit: `tests/unit/roles`. Real database: `tests/db/user-roles.test.ts` (`npm run test:db`, needs `npm run db:migrate`).

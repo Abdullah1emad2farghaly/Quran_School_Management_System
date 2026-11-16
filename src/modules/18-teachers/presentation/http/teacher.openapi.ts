@@ -19,7 +19,7 @@ const schoolManager = (permissionId: string, scope: string): AuthorizationDoc =>
   scope,
   enforcement: MANAGER_ENFORCEMENT,
   permissionId,
-  decision: 'PROVISIONAL',
+  decision: 'APPROVED',
   reference: REFERENCE,
 });
 
@@ -129,7 +129,7 @@ export const teacherApiDoc: ModuleApiDoc = {
         scope: 'The caller\'s own Teacher record (derived from the access token).',
         enforcement: 'Authorization Engine permission (unscoped); the record is looked up by the verified user id, never by a client-supplied id.',
         permissionId: TeacherPermissions.READ_OWN,
-        decision: 'PROVISIONAL',
+        decision: 'APPROVED',
         reference: REFERENCE,
       },
       success: { status: 200, description: 'The caller\'s Teacher profile.', data: ref('Teacher'), example: teacherExample() },

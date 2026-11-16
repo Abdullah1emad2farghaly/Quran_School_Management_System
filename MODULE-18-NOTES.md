@@ -7,7 +7,7 @@ Unzip over the project root: REPLACE = the WHOLE updated file; NEW = added. Cont
     npm run db:migrate          # NEW migration: 20261019120000-create-teachers
     npm run typecheck && npm run build && npm test && npm run api:verify && npm run test:db
 
-## Needs your confirmation (PROVISIONAL, marked as such in the API docs, the authorization matrix and the spec amendment)
+## Needs your confirmation (HISTORICAL: all eight were APPROVED by the project owner on 2026-10-31; see docs/TEACHERS.md)
 SCHOOL_MANAGER-only management of Teachers of their own school; ORGANIZATION_MANAGER/MAIN_ADMIN get no Teacher permission; a Teacher reads only their own profile; same-organization reuse only (a Parent record of the account must be of that organization); no other personal data; no update endpoint; the unlink guard for groups (temporary until Module 20); no global deactivation (D-3).
 
 ## REPLACE

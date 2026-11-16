@@ -56,9 +56,16 @@ export interface SuccessDoc {
   readonly paginated?: boolean;
   /** Documents `Cache-Control: no-store` (token and OTP answers). */
   readonly noStore?: boolean;
+  /**
+   * A FILE answer (for example an .xlsx template): the body is the raw file, not the JSON envelope, so `data` and `example` are not used.
+   * Documents the content type and a `Content-Disposition` header. Only for downloads.
+   */
+  readonly binary?: { readonly contentType: string };
 }
 
 export interface RequestDoc {
+  /** Defaults to `application/json`. `multipart/form-data` documents a file upload (the schema describes the form fields; a file field is `{ type: 'string', format: 'binary' }`). */
+  readonly contentType?: 'application/json' | 'multipart/form-data';
   readonly description: string;
   readonly schema: SchemaOrRef;
   readonly examples: Readonly<Record<string, { readonly summary: string; readonly value: unknown }>>;

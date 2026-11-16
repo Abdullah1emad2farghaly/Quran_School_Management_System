@@ -40,10 +40,11 @@ function build() {
   app.use(notFoundHandler);
   app.use(errorHandler);
 
+  /** Logs in; a multi-role account must choose the role its session acts as, so `act` selects it (as `POST /auth/switch-role` does). */
   async function tokenFor(...roles: Parameters<typeof h.createUser>) {
     const u = await h.createUser(...roles);
     const login = await h.sessions.login({ phone: u.phone, password: u.password });
-    return { user: u, authorization: { Authorization: `Bearer ${login.accessToken}` } };
+    return { user: u, sessionId: (await h.sessions.authenticate(login.accessToken)).sessionId, authorization: { Authorization: `Bearer ${login.accessToken}` } };
   }
   return { app, h, tokenFor, managerOf };
 }
@@ -100,7 +101,9 @@ describe('requirePermission', () => {
 
   it('role revocation takes effect on the next request even with a still-valid token', async () => {
     const { app, tokenFor, h } = build();
-    const { user, authorization } = await tokenFor('TEACHER', 'PARENT');
+    const { user, sessionId, authorization } = await tokenFor('TEACHER', 'PARENT');
+    expect((await request(app).get('/profile').set(authorization)).status).toBe(403); // two roles, none chosen yet
+    await h.sessions.switchRole(user.id, sessionId, 'TEACHER');
     expect((await request(app).get('/profile').set(authorization)).status).toBe(200);
     await h.roles.revokeRole({ userId: user.id, roleCode: 'TEACHER', revokedBy: null });
     await h.roles.revokeRole({ userId: user.id, roleCode: 'PARENT', revokedBy: null }).catch(() => undefined); // last role cannot be revoked

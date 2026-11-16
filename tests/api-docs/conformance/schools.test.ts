@@ -57,6 +57,11 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
 
     expect(api.conforms(await request(app).get(`${orgs}?page=1&pageSize=5&sort=name`).set(auth)).status).toBe(200);
     api.conforms(await request(app).get(orgs)); // 401
+    // the PUBLIC registration lookup: anonymous, only { id, name }
+    const lookup = api.conforms(await request(app).get(`${orgs}/lookup?page=1&pageSize=5`));
+    expect(lookup.status).toBe(200);
+    for (const item of lookup.body.data) expect(Object.keys(item).sort()).toEqual(['id', 'name']);
+    expect(api.conforms(await request(app).get(`${orgs}/lookup?sort=code`)).status).toBe(400);
     expect(api.conforms(await request(app).get(`${orgs}/${t.org.id}`).set(auth)).status).toBe(200);
     expect(api.conforms(await request(app).get(`${orgs}/${registered.body.data.organization.id}`).set(auth)).status).toBe(403); // not its manager
   });
@@ -133,7 +138,7 @@ describe('Module 16 endpoints conform to their OpenAPI documentation (real respo
   });
 
   it('exercised every documented operation of Module 16', () => {
-    expect(api.operationCount('16')).toBe(14);
+    expect(api.operationCount('16')).toBe(15);
     api.assertAllExercised('16');
   });
 });

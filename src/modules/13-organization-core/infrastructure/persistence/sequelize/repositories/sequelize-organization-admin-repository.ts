@@ -68,4 +68,12 @@ export class SequelizeOrganizationAdminRepository implements OrganizationAdminRe
     );
     return rows.map((r) => r.organizationId);
   }
+
+  async listActiveUserIdsByOrganization(organizationId: string, tx?: TransactionContext): Promise<string[]> {
+    const rows = await this.db.query<{ userId: string }>(
+      'SELECT user_id AS userId FROM organization_admins WHERE organization_id = :organizationId AND active = 1 ORDER BY assigned_at, id',
+      { replacements: { organizationId }, type: QueryTypes.SELECT, transaction: sequelizeTransactionOf(tx) ?? null },
+    );
+    return rows.map((r) => r.userId);
+  }
 }

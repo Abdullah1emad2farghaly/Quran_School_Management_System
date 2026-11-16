@@ -6,6 +6,7 @@ import {
   HmacRefreshTokenHasher,
   JwtAccessTokenService,
   SequelizeSessionRepository,
+  SessionExpiryScheduler,
   SessionService,
   createRequireAuthentication,
   createRevokeSessionsOnUserDeactivatedHandler,
@@ -13,8 +14,10 @@ import {
 import { getSequelize, getUnitOfWork } from './database';
 import { env } from './env';
 import { getIdentityService } from './identity';
+import { logger } from './logger';
 import { getEventHandlerRegistry, getOutboxService } from './outbox';
 import { getRoleService } from './roles';
+import { getSchoolService } from './schools';
 
 let service: SessionService | undefined;
 
@@ -28,6 +31,8 @@ export function getSessionService(): SessionService {
       repository: new SequelizeSessionRepository(getSequelize()),
       identity: getIdentityService(),
       roles: getRoleService(),
+      // The school the user manages (Module 16 public contract); the first active link when a user manages several.
+      managedSchools: { findManagedSchoolId: async (userId) => (await getSchoolService().listManagedSchoolIds(userId))[0] ?? null },
       accessTokens: new JwtAccessTokenService(accessSecret),
       refreshTokenHasher: new HmacRefreshTokenHasher(refreshSecret),
       refreshTokenGenerator: new CryptoRefreshTokenGenerator(),
@@ -56,4 +61,25 @@ export function registerSessionEventHandlers(): void {
   if (handlersRegistered) return;
   handlersRegistered = true;
   getEventHandlerRegistry().register(createRevokeSessionsOnUserDeactivatedHandler(getSessionService()));
+}
+
+let expiryScheduler: SessionExpiryScheduler | undefined;
+
+/**
+ * Starts the periodic cleanup of expired sessions (polls every 5 minutes; no Redis needed): a session whose 30-day refresh token expired is revoked
+ * with SESSION_EXPIRED and AuthSessionRevoked, which frees its slot and lets dependent modules clean up. Idempotent; call once at startup.
+ */
+export function startSessionExpiryScheduler(): void {
+  if (expiryScheduler) return;
+  expiryScheduler = new SessionExpiryScheduler({
+    job: getSessionService(),
+    onError: (error) => logger.error('session expiry pass failed', { error: String(error) }),
+    onResult: (result) => logger.info('expired sessions revoked', { expired: result.expired, failed: result.failed }),
+  });
+  expiryScheduler.start();
+}
+
+export function stopSessionExpiryScheduler(): void {
+  expiryScheduler?.stop();
+  expiryScheduler = undefined;
 }

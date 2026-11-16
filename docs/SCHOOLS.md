@@ -104,3 +104,9 @@ Notification delivery (31/32); Module 17 (not started).
 
 ## Tests
 Unit `tests/unit/schools` (domain, service with simulated rollback, public submissions, **engine authorization**, HTTP handlers and route/permission inventory, organization registration, boundaries), `tests/unit/organization`, `tests/unit/unified-address`, `tests/unit/roles`. HTTP/API `tests/integration/schools.test.ts` (supertest; cross-organization 403s, approval flow, free-text address). MariaDB `tests/db/schools.test.ts` (schema, no Main/Sub or center/village ids, archive tables, role migration SQL on fixture rows, atomic approval and failure injection, listing SQL; every test is rolled back) and `tests/db/organizations.test.ts`.
+
+## Public registration lookups (0.45.0, approved 2026-11-11)
+- `GET /api/v1/organizations/lookup` (`getOrganizations`): public (no token, no permission), read-only, paginated (default 20, max 100, `sort` validated but the order is always by name). Returns only `{ id, name }` of the organizations that may receive school submissions (ACTIVE with a country); every other organization is excluded; no code, status, address or administrator data is exposed. It is a separate route from the protected `GET /organizations` and is declared before `/organizations/:id`.
+- The governorate selector of the school submission form uses `GET /api/v1/geography/governorates?organizationId=<id>` (see docs/GEOGRAPHY.md): the country is derived from the organization on the server, and the submission itself still validates the governorate against the organization's country (`POST /schools/submissions` is unchanged).
+- The organization registration form uses `GET /api/v1/geography/countries` and `GET /api/v1/geography/governorates?countryId=<id>` and submits `organization.countryId` / `organization.governorateId` (the existing `registerOrganization` request fields).
+

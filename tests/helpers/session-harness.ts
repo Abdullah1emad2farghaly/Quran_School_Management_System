@@ -13,6 +13,7 @@ import {
   InMemorySessionRepository,
   JwtAccessTokenService,
   SessionService,
+  type ManagedSchoolResolver,
 } from '../../src/modules/10-sessions-jwt/public';
 
 export const ACCESS_SECRET = 'test-access-secret-0123456789abcdef-A';
@@ -21,7 +22,7 @@ export const REFRESH_SECRET = 'test-refresh-secret-0123456789abcdef-B';
 const tx = {} as TransactionContext;
 
 /** In-memory wiring of Modules 08, 09 and 10 with a controllable clock. */
-export function createSessionHarness() {
+export function createSessionHarness(options: { managedSchools?: ManagedSchoolResolver } = {}) {
   let current = new Date('2026-10-09T10:00:00Z');
   const clock = { now: () => current };
   const advance = (ms: number) => {
@@ -56,6 +57,7 @@ export function createSessionHarness() {
     repository,
     identity,
     roles,
+    ...(options.managedSchools ? { managedSchools: options.managedSchools } : {}),
     accessTokens,
     refreshTokenHasher,
     refreshTokenGenerator: new CryptoRefreshTokenGenerator(),

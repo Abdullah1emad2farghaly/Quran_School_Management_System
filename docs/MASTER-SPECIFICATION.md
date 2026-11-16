@@ -1041,6 +1041,18 @@ Support:
 
 -   logout all sessions
 
+**Approved amendment (Module 10, owner decision of 2026-11-04, supersedes "Only one active session/device per User" and the "Revoke old active session" flow above; the original text is kept as the historical record):**
+
+-   An account may have up to **THREE concurrent active sessions**, for EVERY role without exception. Each device/browser has its own independent session, access-token and refresh-token lifecycle (rotation, reuse detection and revocation affect only that session).
+
+-   A login NEVER revokes or replaces another session (no `LOGIN_REPLACED` for ordinary logins). When the account already has three active sessions, a fourth login is rejected with `SESSION_LIMIT_REACHED` and a clear message that the user must log out of one existing device first; nothing is terminated automatically. The password is verified BEFORE this answer, so it discloses nothing to someone who does not know the password. The limit holds under simultaneous logins (database-level guarantee).
+
+-   A session ends when it is logged out, revoked, or when its 30-day refresh token expires (`SESSION_EXPIRED`); expired sessions stop counting and are revoked at login and by a periodic job. Every revocation publishes `AuthSessionRevoked`.
+
+-   Logout revokes only the current session. Logout all, account deactivation (§22) and password reset (§26) keep revoking all of the account's sessions. Changing the password through `POST /auth/change-password` keeps the calling session and revokes every OTHER session (`PASSWORD_CHANGED`).
+
+-   **My Devices:** the authenticated user can list their own active sessions with safe device information (a coarse "browser on system" label derived from the User-Agent at login, creation time, last token issue time, expiry, and whether it is the current one) and revoke one selected session (`DEVICE_REVOKED`); the others stay active. No token or secret is ever exposed.
+
 * * *
 
 # 26\. FORGOT PASSWORD / OTP
@@ -1354,7 +1366,23 @@ Global teacher deactivation blocks teaching actions across schools but preserves
 -   Existing account: when the phone matches an existing User and the identity matches, the account is reused and receives the TEACHER role and the school relationship. The password is never reset and `mustChangePassword` is never set, cleared or otherwise modified by role assignment; the account's security state is preserved.
 -   Identity: the Teacher's personal name is exactly three parts and is the account's canonical stored name. A missing or different stored name is `TEACHER_IDENTITY_CONFLICT`; the existing name is never overwritten and accounts are never merged. A matching name is the approved matching criterion, not independent proof of identity.
 
-**Implementation assumptions pending the project owner's confirmation (provisional, NOT approved business rules):** SCHOOL_MANAGER registers, reads, lists and removes the school link of Teachers of their own school only; ORGANIZATION_MANAGER and MAIN_ADMIN have no Teacher permission from their role; a Teacher reads only their own profile; a Teacher account is reused only within the same organization (a Parent record of the same account must belong to that organization too); no personal data other than the three-part name and the phone is collected; a school link cannot be removed while the Teacher has groups in that school (guard supplied by Module 20); no global Teacher deactivation while decision D-3 is open. See `docs/TEACHERS.md`.
+**Approved amendment (Module 18, confirmed by the project owner on 2026-10-31), business rules:**
+
+-   SCHOOL_MANAGER manages the Teachers of their own school (register, list, read, remove the school link), within the approved permissions and school scope. ORGANIZATION_MANAGER and MAIN_ADMIN have no Teacher permission from their role. A Teacher reads only their own profile. No personal data other than the three-part name and the phone is collected.
+
+-   An existing Teacher added to another school of the SAME organization reuses the existing account (no duplicate account). A Parent record of the same account must belong to that organization too.
+
+-   Identity matching uses the phone number and the full name. A matching phone with a conflicting name is never merged automatically; it is an explicit identity conflict.
+
+-   Historical Teacher-to-Group assignments are preserved; reassignment follows the approved group rules. A school link cannot be removed while the Teacher has ACTIVE groups in that school.
+
+-   Hard deletion of a Teacher account is not allowed; the account lifecycle / deactivation mechanism is used and history is preserved.
+
+-   One account may be linked to several schools of the same organization; permissions and data access stay scoped to the relevant school.
+
+-   A deactivated Teacher cannot log in or perform new operations that need an active account. Historical records and completed sessions stay intact. Existing group assignments are handled without destroying historical relationships. (Approved behaviour; its implementation waits for decision D-3, see `docs/TEACHERS.md`.)
+
+-   The same person may hold both PARENT and TEACHER on one account and one phone number; role permissions stay separate and active-role selection follows the existing RBAC rules.
 
 * * *
 
@@ -1613,11 +1641,13 @@ Start Time
 End Time
 ```
 
-Multiple recurring schedule slots are allowed.
+Multiple recurring schedule slots are allowed, subject to the approved amendment below.
 
 No overlapping teacher schedules.
 
 Exact boundaries do not overlap.
+
+**Approved amendment (Module 23, final, confirmed by the project owner on 2026-10-31):** a Group may have at most ONE schedule slot per weekday, whatever the times (so at most one session per day); different weekdays may have different slots. This decision is final and is not reopened.
 
 * * *
 
@@ -1787,6 +1817,24 @@ A session may contain multiple valid memorization records.
 
 Historical context must remain unchanged.
 
+**Approved amendment (Module 27, confirmed by the project owner on 2026-10-31), business rules:**
+
+-   **Who records.** Only the Teacher assigned to the group/session may record students' memorization. Recording goes through Smart Guard with GPS validation (§50). A School Manager cannot record on behalf of a Teacher.
+
+-   **Scheduled assignment.** A memorization assignment is scheduled only when it was explicitly defined before the target session starts; no session is assumed to include memorization. The assigned group Teacher defines the assignment of the NEXT session DURING the current session, and may modify or cancel it only while the current session is still in progress. When the current session ends the assignment is final and immutable. The history of the changes made in the permitted period is preserved.
+
+-   **Group type (Module 20).** Collective group: ONE shared assignment for the whole group; no separate assignments for individual students; the Teacher may repeat the same assignment for the whole group or define a new shared one. Individual group: each student has an independent assignment and different students may receive different ranges, according to each student's recitation.
+
+-   **Assignment and performance.** A student is evaluated against the assignment defined for them or for their group; a different range cannot be recorded as fulfilment of the assignment. If a student does not memorize the complete assigned range, the ENTIRE original assignment is repeated for that student in the next session (never only the unfinished part). The scheduled assignment and the actual memorization record stay distinct.
+
+-   **Continuity.** The assignment stays available for the next actual session of the group. If the target session is cancelled the assignment is kept and carried forward; if it is rescheduled it is carried forward according to the updated group schedule; if the Teacher is absent from the target session it is carried forward unchanged to the next actual session. It is never discarded or reset because of cancellation, rescheduling or Teacher absence, and the assigned range is preserved.
+
+-   **Read permissions (strict school and relationship scope).** The assigned Teacher reads the records of their sessions; the School Manager reads the records within their own school; a Parent reads only the records of their own linked children; a Student has no direct read access in this module.
+
+-   **Overlap.** Overlapping memorization ranges are allowed, including ranges previously recorded for the same student; a student may memorize the same verses again in different sessions. Every record is independent and historical records are never overwritten or deleted because of an overlap.
+
+-   **Corrections.** The assigned Teacher may correct a memorization record only during the same session in which it was created; after that session ends the record is immutable. Records are never permanently deleted; the original record and the correction history are preserved and nothing is silently overwritten. A School Manager cannot correct on behalf of the Teacher.
+
 * * *
 
 # 49\. REVISION
@@ -1809,6 +1857,15 @@ to Surah Y
 Historical context must remain preserved.
 
 * * *
+
+**Approved amendment (Module 28, confirmed by the project owner on 2026-11-01), business rules:**
+
+-   **Same rules as Memorization.** Revision follows the approved Module 27 rules (§48 amendment): the assignment of the NEXT session defined by the session's Teacher during the current session and changeable only while it is in progress, then final with its history kept; carried forward unchanged when the target session is cancelled, rescheduled or the Teacher is absent; one shared assignment for a collective group and one assignment per student for an individual group; an incomplete revision repeats the ENTIRE original assigned range in the next applicable session; only the assigned Teacher records, through Smart Guard, and a School Manager cannot record on a Teacher's behalf; same recording, correction (same session only), immutability and audit-history rules; records are never permanently deleted; the same read permissions (assigned Teacher: their sessions; School Manager: their school; Parent: their own linked children only; Student: none); a revision record may exist even when no revision assignment was scheduled. Overlapping ranges are allowed.
+
+-   **Range selection, form A (Start + Unit + Amount).** The meaning of the start number depends on the unit: AYAHS: the ayah number within the selected surah (the surah is required); PAGES: the Mushaf page number; QUARTERS: the Quran quarter number; SURAHS: the surah number in Mushaf order. No separate surah is selected for pages, quarters and surahs. The amount determines the range according to the unit.
+
+-   **Range selection, form B (From Surah X to Surah Y).** Complete surahs, both the starting and the ending surah included; forward and backward are both supported; the number of surahs is inclusive of both ends. It is represented through the existing Quran Range Engine as start = the starting surah, unit = SURAHS, amount = the inclusive number of surahs. Module 22's behaviour is not changed for Module 28.
+
 
 # 50\. SMART GUARD
 
@@ -1872,6 +1929,10 @@ No:
 
 -   postal fallback
 
+**Approved amendment (Module 29, 2026-11-02):** the time window above is unchanged for every protected operation. The ONLY exception is Module 29 (Evaluations), which may keep the window open up to 15 minutes after the scheduled session end to record MISSING evaluations (§52); ownership, GPS, distance, accuracy and the cancelled-session check all still apply in those minutes.
+
+**Approved amendment (Module 30, 2026-11-02):** exam result recording is a protected action that is not a session occurrence. Module 25 provides an additive exam-compatible entry point, `checkProtectedAction`: the protected module (Exams) verifies that the caller is an examiner currently assigned to that exam and supplies the time window (15 minutes before the scheduled start through the effective end, with no upper bound when the exam has no end time); Smart Guard validates the window, the GPS reading, the 50 m school geofence, the 20 m accuracy and that the school is active, with the same error codes. `check` (sessions) is unchanged.
+
 * * *
 
 # 51\. ATTENDANCE
@@ -1934,6 +1995,17 @@ Authorization
 +
 Audit
 ```
+
+**Approved amendment (Module 29, approved by the project owner on 2026-11-02; this amendment SUPERSEDES the paragraphs above wherever they conflict, which are kept as the original record):**
+
+1.  **Ownership.** Only the Teacher assigned to the session creates or modifies evaluations, through Smart Guard (GPS). The School Manager cannot create, modify or correct evaluations. There is NO correction workflow and NO correction permission. The Organization Manager and the Governorate, Center and Village Managers read evaluation information through the future Reports module (not directly in Module 29); Main Admin has no direct evaluation permission; a Student has no login and no access.
+2.  **Reads.** The Teacher reads the evaluations of sessions assigned to them only. The School Manager reads the evaluations (grades and Teacher notes) of all students of their own school. A Parent reads the evaluations (grades and Teacher notes) of their own linked children only, and never sees historical values or modification details.
+3.  **Based on assignments.** An evaluation is available only for a student with an applicable Memorization assignment (Module 27), Revision assignment (Module 28), or both. The EXISTENCE of the assignment is enough; an execution record is NOT required. Categories: Memorization only gives Memorization, Performance, Tajweed; Revision only gives Revision, Performance, Tajweed; both give all four; neither gives none. Each available category has its own independent score out of 10; Performance and Tajweed appear once each. The Memorization score is associated with the applicable Memorization assignment, the Revision score with the applicable Revision assignment, Performance and Tajweed with the applicable assignment context. Evaluation is per student, also in collective groups (no shared group score).
+4.  **Attendance consistency (cross-module invariant, Modules 26 and 29).** A student marked ABSENT cannot receive an evaluation for the session. If an evaluation has been recorded for a student, marking that student ABSENT for the same session is rejected. A student with an assignment who is present must be evaluated; a student without an assignment need not be; ABSENT students are exempt; unmarked attendance is never interpreted as ABSENT. Enforced at the service and database transaction level, also for concurrent requests.
+5.  **Scores and note.** Each score is from 0.00 to 10.00 and is ROUNDED to two decimal places (not rejected). One optional Teacher note per student's evaluation for the session, shared by all categories, at most 200 characters, never editable or deletable once saved. Scores can be modified only within the permitted window. Previous score and note values are NOT retained, and NO modification history and NO audit history of score changes is kept (this supersedes the audit requirement above for evaluation modifications).
+6.  **Time windows.** The session lifecycle remains owned by Module 24. Before and during the scheduled session the assigned Teacher records evaluations through Smart Guard and GPS and may modify previously recorded scores while the session is in progress; no evaluation for a cancelled session. Exactly 15 minutes before the scheduled end, the Teacher is warned (through the future Notifications modules) when present students with assignments still lack a required evaluation. A session becomes COMPLETED automatically at its scheduled end (Module 24); Module 29 then has a 15-minute grace period after the scheduled end in which the assigned Teacher may record MISSING evaluations only (Smart Guard and GPS remain mandatory; no score, note or existing evaluation can change and no duplicate can be created). After the grace period every evaluation write is permanently closed. The grace period is computed from the actual scheduled session end (the Africa/Cairo schedule computed by Module 24), never from processing time. Smart Guard's general window (§50) is NOT extended for any other module or operation: the post-end minutes are a narrow, explicit exception used by Module 29 only.
+7.  **Parent notifications.** Delivery belongs to the Notifications modules. Module 29 publishes the integration events (EvaluationRecorded: grades and the Teacher note when one exists; EvaluationScoresUpdated: the updated grades, on every score modification in the permitted window). No note-edit notification exists (the note is immutable); historical values are never exposed.
+8.  **Missing evaluations.** Missing evaluations never prevent Module 24 from completing the session. After the grace period they remain unrecorded: no default score, no zero score and no fabricated record is ever created.
 
 * * *
 
@@ -2072,6 +2144,22 @@ Required:
 
 -   reminder 24 hours before
 
+**Approved amendment (Module 30, approved by the project owner on 2026-11-02; it SUPERSEDES §53-57 above wherever they conflict, which are kept as the original record):**
+
+1.  **Lifecycle.** `DRAFT -> SCHEDULED -> STARTED -> COMPLETED -> ENDED`, plus `CANCELLED`. The School Manager creates any number of exams at any time (DRAFT) and schedules them. A SCHEDULED exam becomes STARTED automatically at its scheduled start time (Africa/Cairo). If an end time is defined it becomes COMPLETED automatically at the effective end time; with no end time the School Manager completes it manually. ENDED is a SEPARATE, manual, final closure that is only possible after COMPLETED and never happens automatically.
+2.  **Cancellation and deletion** are separate operations and both are allowed ONLY before STARTED (DRAFT or SCHEDULED). An exam cannot be cancelled after it started, whatever the permission (this supersedes §54's "cancellation after start with a special Manager permission"). An exam cannot be deleted after STARTED. (Deletion keeps the record and hides the exam from every read.)
+3.  **Editing.** Before STARTED the School Manager can change all exam data: start and end date/times, question count, maximum score per question, target groups, examiners and the other configuration. After STARTED the start time is immutable and the question count, maximum score and targets are locked; the end time remains editable (extended or reduced) but a new end time must be strictly in the future at the moment of the update, and the updated end time decides the automatic completion. After COMPLETED or ENDED nothing about scheduling or configuration can change, except the COMPLETED -> ENDED action.
+4.  **Targets.** One group, several groups, or the entire school (every student who currently belongs to a group of the school). Before STARTED the target student list stays synchronized with the current group membership (add, remove, move, and a change of the targeted groups rebuilds it). At STARTED it is frozen: students who leave a targeted group stay in the exam, students who join are not added, and group membership changes never affect the frozen list.
+5.  **Examiner workflow.** For exams targeting several groups or the whole school, students are shown separated by group: the examiner selects a group, then sees its PENDING students (never one flat list). Several examiners can be assigned; any assigned examiner can examine any pending student of any targeted group. Of two concurrent submissions for the same student the first atomic transaction wins; no duplicate result exists. An examined student leaves the pending list.
+6.  **Examiners and permissions.** Examiners are Teachers registered in the exam's school (a Teacher of another school is not eligible, even in the same organization); a School Manager can be an examiner only if registered as a Teacher in that school. Only currently assigned examiners can submit results. The School Manager can add or remove examiners until the exam is ENDED, also after STARTED; removing an examiner does not affect results already recorded. The examiner permission (the approved "TESTER" permission) is scoped to the specific exam and never creates, removes or changes the user's TEACHER role or any other role. At ENDED it is removed from every examiner of the exam; all records and results are preserved.
+7.  **Questions and scoring.** The School Manager defines the question count and ONE uniform maximum score applied to every question; both are fixed at scheduling and cannot change after STARTED. Each question score satisfies `0 <= score <= maximum`, is rounded to two decimal places (consistently with Module 29), and the total is the sum of the question scores. There is no pass mark, percentage, ranking or pass/fail classification.
+8.  **Results.** The examiner submits all question scores of one student in one atomic operation (no partial persistence); a student has one result per exam. Results are immutable once recorded: no user, including the School Manager or any higher-level administrator, can edit or delete an exam result under any circumstances (this supersedes §56's "authorized corrections with authorization and audit": there is NO correction workflow, and no audit/history of result changes exists because results never change).
+9.  **Absence.** When the exam reaches COMPLETED every targeted student without a recorded result is automatically marked ABSENT. No score and no result with zero scores is ever created for an absent student. No score can be submitted after COMPLETED, and the end time cannot be extended or the submission reopened once COMPLETED. While the exam is still STARTED the School Manager can move the end time to a future time.
+10. **COMPLETED and ENDED are different.** COMPLETED: the effective end was reached, missing students are ABSENT, new results cannot be submitted, existing results are immutable, and the examiners' exam-scoped permission stays active (subject to the restrictions above) until ENDED. ENDED: the final closure by the School Manager (only after COMPLETED, never automatic); all exam data and operations become permanently locked, the exam-scoped examiner permission is removed from all of the exam's examiners, and all records and results are preserved.
+11. **Smart Guard.** Recording a result requires Smart Guard and GPS verification, only for an examiner assigned to that exam, with the approved school geofence rules. The exam-specific time window starts 15 minutes before the scheduled start and continues through the effective end time. An exam is not a session occurrence: Module 25 gains an additive exam-compatible entry point (`checkProtectedAction`) and its behavior for every other module is unchanged. Results can in any case only be recorded while the exam is STARTED.
+12. **Reads.** School Manager: all exams and all recorded results of their school. Assigned examiner: the exams they are currently assigned to and the pending students list (with each student's group and examination status), never any recorded result (not even their own); they lose all exam-scoped access at ENDED. Parent: the exam schedule relevant to their children's school, and only their own linked children's recorded results and ABSENT status. A Teacher who is not an assigned examiner and a Student (no login): no direct access. Organization and geographic managers: through the future Reports module only.
+13. **Notifications** (delivery belongs to the Notifications modules 31-34; Module 30 only publishes events and reads): examiner assignment, exam creation/assignment to parents (on scheduling and when a student is added to a targeted group before the exam starts), the result immediately after it is recorded, and the 24-hour reminder (`ExamService.getExamReminderStatus`). Details: docs/EXAMS.md.
+
 * * *
 
 # 58\. SUBSCRIPTIONS
@@ -2105,6 +2193,17 @@ The system tracks only:
 No prorating.
 
 * * *
+
+**Approved amendment (Module 33), business rules (approved 2026-11-07 and 2026-11-08; implementation details are in `docs/SUBSCRIPTIONS.md`):**
+
+1. **Monthly creation is manual and bulk, per school.** The School Manager or a Subscription Collector of the school starts it. The system takes the current month in `Africa/Cairo`. If the school already has that month, the user is told and nothing is duplicated. Otherwise one UNPAID subscription is created for every regular (ACTIVE) student of the school. Student + Month is unique. A student who joins after the bulk creation may get an individual subscription for the same month (also duplicate-protected) without affecting other students.
+2. **A subscription is only Student + Month + Status (PAID / UNPAID / WAIVED).** There are no fee calculations, prorated payments, partial-month rules or charges based on enrollment dates.
+3. **Subscription Collectors (Option A).** The Collector-to-School assignment is a Module 33 relationship with history. The School Manager assigns and unassigns Collectors for their own school and may create a Collector account with the Teacher account conventions (initial password = the last four normalized digits of the phone; existing eligible accounts are reused without duplicates). A Collector may serve several schools of the same organization and accesses subscription data only for schools they are currently assigned to; historical assignments grant nothing.
+4. **Payments.** Module 33 owns subscription records, statuses and the Oldest-Unpaid Rule and exposes a `markPaid` application contract and a `SubscriptionPaid` event. Module 34 will also call the contract when a payment is recorded. *Amended 2026-11-09:* the same contract is exposed over HTTP (`mark-paid`) to the School Manager and the school's Subscription Collector, with the Oldest-Unpaid Rule unchanged; Module 33 still collects no payment and stores no amount.
+5. **Notifications** (through the Notifications infrastructure only): (A) bulk creation → Subscription Collector; (B) payment recorded → Parent only; (C) first unpaid reminder 3 calendar days after creation (Africa/Cairo; status checked first; only if still UNPAID; Parent only); (D) end-of-month unpaid reminder once per school and month at the beginning of the final five calendar days of the month (26th in a 30-day month, 27th in a 31-day month, February by its actual length) → each unpaid student's Parent (own child), the Subscription Collector(s) and the School Manager (the students who remain unpaid); PAID and WAIVED are excluded, nothing is sent when no student remains unpaid, and no duplicates are sent.
+
+6. **Group-based subscription display (amended 2026-11-09).** The School Manager and the school's Subscription Collector can see the school's existing educational groups with, for a selected month, the number of PAID students, UNPAID students and the total of regular/active students of the group, and open a group to see all its students with their subscription status. WAIVED students are in the total only. A missing subscription record is reported explicitly and is never treated as UNPAID. Group relationships are those of Module 20; no group data is duplicated.
+7. **PAID → UNPAID (amended 2026-11-09).** A subscription may be changed from PAID to UNPAID only during its own calendar month in Africa/Cairo; a subscription of a past month is never changed to UNPAID. WAIVED → UNPAID and UNPAID → UNPAID are rejected. No new status is introduced and this is not the payment reversal workflow of Module 34 (§60). The Oldest-Unpaid Rule (§59) is unchanged and is preserved (the reverted month is always the newest month of the student).
 
 # 59\. OLDEST UNPAID RULE
 
@@ -2244,13 +2343,95 @@ V1:
 
 -   Exam reminder
 
+-   Session half-time teaching reminder (approved amendment)
+
 No competition notifications.
+
+Session half-time teaching reminder (approved amendment):
+
+-   A session may contain memorization, revision, both, or neither. Missing teaching records are NOT an error by themselves, and the system never creates teaching records or fabricates educational data when a session ends.
+
+-   If memorization and/or revision were SCHEDULED for the session and the assigned Teacher has not recorded the corresponding teaching data after half of the session's scheduled duration has elapsed, a reminder is sent to the assigned Teacher only.
+
+-   No reminder is sent for an activity that is not scheduled for that session, and none for a cancelled session.
+
+-   "Scheduled" means explicitly defined for that session before it starts (for memorization: a specific memorization assignment, §48). A session without such a definition has no scheduled activity.
+
+-   Missing teaching records never justify fabricating educational records or creating them automatically.
+
+-   Modules 27 (Memorization) and 28 (Revision) must expose, through public read interfaces, which activities are scheduled for a session and which teaching records exist for it, so that the Notifications modules can decide whether a reminder is due.
+
+-   Notification delivery belongs to the Notifications modules (31-34). Modules before them only document this requirement and preserve the integration contract (docs/ATTENDANCE.md); no notification delivery or notification infrastructure is introduced earlier.
+
+Evaluation notifications (approved amendment, Module 29, 2026-11-02):
+
+-   Parent: when an evaluation is first recorded, a notification with the recorded grades and the Teacher note (when one exists); on every later score modification in the permitted window, a new notification with the updated grades (grades only when there is no note). Never historical values.
+
+-   Teacher: exactly 15 minutes before the scheduled session end, a warning when present students with an assignment still lack a required evaluation (the session is not cancelled).
+
+-   Module 29 exposes `EvaluationService.getSessionEvaluationStatus` and the events EvaluationRecorded / EvaluationScoresUpdated for this; delivery belongs to the Notifications modules (31-34) and nothing is delivered inside Module 29 (docs/EVALUATIONS.md).
+
+Exam notifications (approved amendment, Module 30, 2026-11-02): examiner assignment (ExamExaminerAssigned / ExamExaminerRemoved); exam created/assigned to the parents of the target students (ExamScheduled, and ExamStudentTargeted / ExamStudentUntargeted for a student who joins or leaves a targeted group before the exam starts); the result immediately after it is recorded (ExamResultRecorded, with the question scores and the total); the reminder 24 hours before the start (the read `ExamService.getExamReminderStatus`, due at `startAt - 24 h` while SCHEDULED). Delivery belongs to the Notifications modules (31-34); nothing is delivered inside Module 30 (docs/EXAMS.md).
+
+**Approved amendment (Module 31, owner decisions of 2026-11-04 and 2026-11-05; the text above is kept as the historical record):**
+
+-   **Channels:** only **In-App notifications** and free **Web Push** (Web Push API, Service Worker, VAPID, the Node `web-push` library, subscriptions stored in MariaDB). No SMS and no email in this scope. Push depends on browser/OS support and the user's permission; a push failure never loses the notification ("realtime delivery is not the source of truth").
+
+-   **Account-based, not device-based:** a notification belongs to the user ACCOUNT. One record is created per recipient account and the same notifications, read state and deletions apply on every device/session of the account. A push subscription belongs to a browser/device endpoint, is linked to the account and to the authentication session that created it, and is deleted when that session ends for any reason (Module 10 `AuthSessionRevoked`); other subscriptions and the account's notifications are never touched. Invalid subscriptions (push service answers 404/410) are removed without affecting the account's other subscriptions.
+
+-   **Account operations:** mark one as read, mark all as read, delete one, clear all. All are account-wide; ownership is enforced; another account's notifications cannot be read, changed or deleted.
+
+-   **Hard delete:** delete and clear-all permanently remove the records (no `deleted_at`, no archive, no automatic purge, which replaces "retention: indefinite" for the account's own deletions). Deleting a notification never touches domain events, audit records or any other module's data.
+
+-   **Once-only keys:** a ledger `notification_dedup_keys` (only `recipient_user_id`, `dedup_key`, `created_at`, no content, never exposed) is written BEFORE the notification and is never deleted, so reprocessing the same event or reminder never recreates a notification that was generated and later deleted.
+
+-   **Language:** Arabic and English templates for every notification; the account's configured language is used when one exists, otherwise Arabic; the rendered title and body are persisted at creation and keep their original language afterwards. No account-language setting is added by Module 31.
+
+-   **Responsibilities:** Module 31 (Notifications Core) owns storage, templates, the `notify` contract, the in-app API, push subscriptions, push delivery and cleanup. It consumes no business event. Module 32 (Notification Rules) owns the event consumers, the time-driven reminders, the recipient resolution and the once-only keys of each rule.
+
+**Approved amendment (Module 32, owner decisions of 2026-11-07; they SUPERSEDE any conflicting text above, which is kept as the historical record):**
+
+-   **Group changes:** `GroupStudentAssigned`, `GroupStudentUnassigned`, `GroupTeacherChanged` and `GroupArchived` notify the Teacher responsible for the group (all four, including changes affecting individual students) and, for the student-specific events, ONLY the Parent accounts linked to the affected student. A move between groups notifies those parents of the removal from the previous group and the assignment to the new one.
+
+-   **Student assignment changes:** changing a student's memorization or revision assignment is exclusive to the responsible Group Teacher (Modules 27 and 28 unchanged). Only the Parent accounts linked to that student are notified; no unrelated parent and not the Teacher who made the change.
+
+-   **Exam reminder 24 hours before the start:** sent to the Parent accounts of all targeted students AND all examiners currently assigned; an exam scheduled less than 24 hours before its start is reminded IMMEDIATELY (not skipped).
+
+-   **Exam modifications:** every modification of a scheduled exam that Module 30 permits (start or end time, target groups or students, examiner assignments or removals, other modifiable configuration) and every cancellation notifies the affected parents and the currently assigned examiners as applicable, reflecting the actual change and exposing nothing about unrelated students. No notification for a change Module 30 does not permit.
+
+-   **Delayed scheduler, half-session reminder:** if the scheduler misses the time (delay, outage, restart) the reminder is sent immediately when it resumes, provided the session is still in progress and not cancelled, memorization and/or revision was explicitly scheduled, and the required record does not exist; the assigned Group Teacher only; never for an unscheduled activity.
+
+-   **Delayed scheduler, evaluation warning (15 minutes before the end):** if missed, sent immediately on resume provided the session is still in progress and present students still lack the required evaluation; the assigned Teacher only; not after the session ended or was cancelled, nor when no eligible student remains.
+
+-   **Evaluation notifications:** every Parent account linked to the evaluated student is notified when an evaluation is recorded or its scores updated, with the associated assignment, the student's scores, the total and the Teacher note when one exists (omitted otherwise); never a historical or superseded value (Module 29 rules unchanged).
+
+-   **School requests:** a submitted school creation request notifies the Organization Manager; approval or rejection notifies ONLY the original requester (with the rejection reason when rejected), and nobody else unless an approved rule requires it.
+
+-   **Cancelled sessions and exams:** a pending time-driven reminder is cancelled or suppressed and never sent after the cancellation.
+
+-   **Multiple Parent accounts:** whenever a rule notifies a student's parents, every Parent account currently linked to that student is notified, each only about their own linked children, with duplicate delivery to the same Parent for the same event prevented.
+
+-   **Dependencies (Module 32):** besides 31 and 06, only public contracts of 00 (shared kernel), 13, 16, 17, 18, 19, 20, 24, 27, 28, 29 and 30; its own tables are `notification_reminders` and `notification_exam_audience`.
+
+**Approved clarifications (Module 32, owner decisions of 2026-11-07, second review):**
+
+-   **Group Teacher change:** BOTH the newly assigned Teacher and the previously assigned Teacher are notified.
+
+-   **Group archiving:** unchanged: the responsible Group Teacher is notified, and each Parent account linked to a student of the archived group is notified separately.
+
+-   **Student assignments:** both creating a new assignment and modifying an existing one notify the Parent accounts linked to the affected student; only the responsible Group Teacher may create or modify assignments (Modules 27 and 28).
+
+-   **Assignment details:** the Parent notification includes the ACTUAL Quran range according to the assignment unit (surah and ayah range, Mushaf page range, quarter range, or surah range with both endpoints included), obtained from the existing public contracts (Modules 22, 27, 28 and the read-only Quran structure) without direct access to another module's tables or duplicated business logic.
+
+-   **No backfill:** reminders are generated only from the normal Module 32 event and scheduling flow after deployment; no historical reminders and no delayed notifications for exams scheduled or sessions generated before the deployment.
 
 * * *
 
 # 64\. AUDIT / HISTORY
 
 Audit is immutable.
+
+**Approved amendment (Module 29, 2026-11-02):** evaluation score modifications are NOT audited and no previous evaluation value is retained (see §52). This does not authorize deleting any other historical record.
 
 Retention:
 
@@ -2910,13 +3091,19 @@ Depends on 22, 24, 25.
 
 Depends on 24, 27, 28, 25.
 
+**Approved amendment (Module 29, 2026-11-02):** Module 29 also depends on 26 (Attendance, for the attendance/evaluation invariant), and on 20 (the eligible roster), 18 (the Teacher) and 16 (the School Manager) through their public contracts. Module 26 depends on Module 29 through NO import: it owns a veto port (`StudentEvaluationGuard`) that the composition root plugs in. Module 25 gains the optional, narrowly scoped `allowAfterEndMinutes` exception (at most 15 minutes) that only Module 29 uses.
+
 ## 30
 
 Depends on 18, 19, 20, 25.
 
+**Approved amendment (Module 30, 2026-11-02):** Module 30 also depends on 16 (the School Manager and the school), 17 (the Parent's schools), 12 (authorization) and 29 (the shared score rounding), and consumes Module 20's public events (group membership). It adds the exam-scoped examiner permission as a MANAGEMENT/EXAM scope resolver registered through the Authorization Engine (no role is created or changed) and the additive Smart Guard entry point `checkProtectedAction` (Module 25). No earlier module imports Module 30.
+
 ## 31
 
 Depends on 06, 03.
+
+**Amended (Module 31, 2026-11-05):** also depends on 00, 01, 02, 04 (shared kernel, configuration, database, validation/API) and 10 (`AuthSessionRevoked`, authentication), through their public contracts only.
 
 ## 32
 

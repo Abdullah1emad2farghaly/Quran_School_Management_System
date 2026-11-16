@@ -46,7 +46,7 @@ export interface ListStudentsInput {
 
 export interface StudentServiceDeps {
   readonly students: StudentRepository;
-  readonly schools: Pick<SchoolLookup, 'findById'>;
+  readonly schools: Pick<SchoolLookup, 'findById' | 'listManagedSchoolIds'>;
   readonly parents: ParentLookup & ParentSchoolLinkLocker;
   readonly unitOfWork: UnitOfWork;
   readonly outbox: OutboxService;
@@ -145,6 +145,17 @@ export class StudentService {
     return buildPageResult(await this.toDtos(items, tx), total, input.page);
   }
 
+  /**
+   * A School Manager lists the Students of one Parent, ONLY in the schools the manager actively manages (a Parent linked to several schools never
+   * exposes the children of a school the caller does not manage). The route has already proven that the Parent is linked to one of those schools.
+   */
+  async listChildrenOfParentForManager(parentId: string, managerUserId: string, input: ListStudentsInput, tx?: TransactionContext): Promise<PageResult<StudentDto>> {
+    const schoolIds = await this.schools.listManagedSchoolIds(managerUserId);
+    if (schoolIds.length === 0) return buildPageResult([], 0, input.page);
+    const { items, total } = await this.students.listByParentInSchools(parentId, schoolIds, this.query(input), tx);
+    return buildPageResult(await this.toDtos(items, tx), total, input.page);
+  }
+
   /** The Student's change history, oldest first (who, when, what changed, the previous value, the reason). */
   async listHistory(studentId: string, tx?: TransactionContext): Promise<StudentHistoryDto[]> {
     if (!(await this.students.findById(studentId, tx))) throw studentError('STUDENT_NOT_FOUND');
@@ -228,6 +239,15 @@ export class StudentService {
   }
 
   /**
+   * Read-only lookup by the globally unique National ID (Module 36 uses it to recognize an existing Student; nothing is created, moved or changed).
+   * The input is normalized like a registration (Arabic-Indic digits accepted); an invalid National ID throws INVALID_STUDENT_NATIONAL_ID.
+   */
+  async findByNationalId(nationalId: unknown, tx?: TransactionContext): Promise<StudentDto | undefined> {
+    const student = await this.students.findByNationalId(normalizeNationalId(nationalId), tx);
+    return student ? this.toDto(student, tx) : undefined;
+  }
+
+  /**
    * Module 17's unlink guard (`ParentStudentDependencies`): how many students of `parentId` exist in `schoolId`, in EVERY status. An ARCHIVED
    * student still anchors the Parent-to-School relationship (the Parent of a student never changes in V1), so it blocks the unlink too.
    */
@@ -271,3 +291,6 @@ export class StudentService {
 
 /** What downstream modules (Groups 20, Attendance 26, Subscriptions 33...) should depend on (read-only). */
 export type StudentLookup = Pick<StudentService, 'findById' | 'findScopeById'>;
+
+/** Read-only National ID lookup for Module 36 (Excel Import). */
+export type StudentNationalIdLookup = Pick<StudentService, 'findByNationalId'>;

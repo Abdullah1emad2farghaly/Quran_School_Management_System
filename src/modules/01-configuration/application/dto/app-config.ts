@@ -45,6 +45,27 @@ export interface AppConfig {
      */
     readonly enabled: boolean;
   };
+  readonly push: {
+    /** Web Push (Module 31). True only when ALL three VAPID settings are present and valid; otherwise push is disabled (in-app notifications still work). */
+    readonly enabled: boolean;
+    /** VAPID public key (safe to give to browsers). Empty when push is disabled. */
+    readonly vapidPublicKey: string;
+    /** VAPID private key. A SECRET: never logged, returned or documented with a real value. Empty when push is disabled. */
+    readonly vapidPrivateKey: string;
+    /** `mailto:` address or `https:` URL identifying the sender to push services (it is an identifier, not email delivery). Empty when push is disabled. */
+    readonly vapidSubject: string;
+  };
+  /** Real-time notifications over Socket.IO (Module 31). Nothing here is secret; the transport is portable (plain Node HTTP server, no hosting-specific service). */
+  readonly realtime: {
+    /** `SOCKET_IO_ENABLED` (default true). When false the server starts without Socket.IO and notifications use Web Push and the notification APIs only. */
+    readonly enabled: boolean;
+    /** `SOCKET_IO_PATH` (default `/socket.io`): the URL path of the Socket.IO endpoint (useful behind a reverse proxy). */
+    readonly path: string;
+    readonly pingIntervalMs: number;
+    readonly pingTimeoutMs: number;
+    /** `SOCKET_IO_MAX_CONNECTIONS_PER_USER`: above it the oldest connection of that account is closed. */
+    readonly maxConnectionsPerUser: number;
+  };
   readonly redis: {
     readonly host: string;
     readonly port: number;

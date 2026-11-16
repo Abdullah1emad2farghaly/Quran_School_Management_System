@@ -6,7 +6,7 @@ import { serializeStudent, serializeStudentForTeacher, serializeStudentHistory }
 
 export type StudentHandlerService = Pick<
   StudentService,
-  'registerStudent' | 'getStudent' | 'listStudentsOfSchool' | 'listChildrenOfParentUser' | 'listHistory' | 'updateStudent' | 'deactivateStudent' | 'reactivateStudent' | 'archiveStudent'
+  'registerStudent' | 'getStudent' | 'listStudentsOfSchool' | 'listChildrenOfParentUser' | 'listChildrenOfParentForManager' | 'listHistory' | 'updateStudent' | 'deactivateStudent' | 'reactivateStudent' | 'archiveStudent'
 >;
 
 type Json = Record<string, unknown>;
@@ -45,6 +45,12 @@ export function createStudentHandlers(getService: () => StudentHandlerService) {
 
     listOwnChildren: async (userId: string, input: StudentListRequest): Promise<PageResult<ReturnType<typeof serializeStudent>>> => {
       const page = await getService().listChildrenOfParentUser(userId, { sort: input.sort.key as StudentSortKey, direction: input.sort.direction, ...(input.status ? { status: statuses(input.status)! } : {}), page: input.page });
+      return { ...page, items: page.items.map(serializeStudent) };
+    },
+
+    /** The caller (a School Manager) lists one Parent's Students in the schools they manage; the Parent link was already proven by the engine. */
+    listParentStudents: async (managerUserId: string, parentId: string, input: StudentListRequest): Promise<PageResult<ReturnType<typeof serializeStudent>>> => {
+      const page = await getService().listChildrenOfParentForManager(parentId, managerUserId, { sort: input.sort.key as StudentSortKey, direction: input.sort.direction, ...(input.status ? { status: statuses(input.status)! } : {}), page: input.page });
       return { ...page, items: page.items.map(serializeStudent) };
     },
 

@@ -1,12 +1,13 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import { sendNoContent, sendSuccess, validate } from '../../../04-validation-api/public';
 import type { AuthResult } from '../../application/dto/auth-result';
 import type { SessionService } from '../../application/services/session-service';
 import { sessionError } from '../../domain/errors/session-errors';
+import { deviceLabelFromUserAgent } from '../../domain/services/device-label';
 
 export interface AuthRouterDeps {
-  readonly getService: () => Pick<SessionService, 'login' | 'refresh' | 'logout' | 'logoutAll' | 'changePassword'>;
+  readonly getService: () => Pick<SessionService, 'login' | 'refresh' | 'switchRole' | 'logout' | 'logoutAll' | 'changePassword' | 'listDevices' | 'revokeDevice'>;
   /** Middleware that authenticates the access token (see `createRequireAuthentication`). */
   readonly requireAuthentication: RequestHandler;
   /**
@@ -39,11 +40,13 @@ function serialize(result: AuthResult) {
     user: result.user,
     mustChangePassword: result.mustChangePassword,
     roles: result.roles,
+    activeRole: result.activeRole,
+    schoolId: result.schoolId,
   };
 }
 
 /**
- * /auth: login, refresh, logout, logout-all, change-password.
+ * /auth: login, refresh, logout, logout-all, change-password, and "My devices" (`GET /sessions`, `DELETE /sessions/:sessionId`).
  * Login and refresh are public (they ARE the authentication); logout, logout-all and change-password need a valid access token and are
  * the ONLY authenticated routes that stay open while the account still has to change its initial password.
  */
@@ -58,7 +61,8 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
       body('password').isString().withMessage('INVALID_VALUE').bail().notEmpty().withMessage('REQUIRED_FIELD').isLength({ max: 128 }).withMessage('INVALID_VALUE'),
     ),
     handle(async (req, res) => {
-      const result = await deps.getService().login({ phone: req.body.phone, password: req.body.password });
+      // The device label is a coarse "Browser on System" derived here from the User-Agent; the raw header is never stored.
+      const result = await deps.getService().login({ phone: req.body.phone, password: req.body.password, deviceLabel: deviceLabelFromUserAgent(req.get('user-agent')) });
       noStore(res);
       sendSuccess(res, serialize(result));
     }),
@@ -71,6 +75,19 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
       const result = await deps.getService().refresh(req.body.refreshToken);
       noStore(res);
       sendSuccess(res, serialize(result));
+    }),
+  );
+
+  // The role THIS session acts as. Authentication only (no business permission): it must stay reachable while no role is selected.
+  router.post(
+    '/switch-role',
+    deps.requireAuthentication,
+    validate(body('role').isString().withMessage('INVALID_VALUE').bail().trim().notEmpty().withMessage('REQUIRED_FIELD').isLength({ max: 32 }).withMessage('INVALID_VALUE')),
+    handle(async (req, res) => {
+      if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
+      const result = await deps.getService().switchRole(req.auth.userId, req.auth.sessionId, req.body.role);
+      noStore(res);
+      sendSuccess(res, { roles: result.roles, activeRole: result.activeRole, schoolId: result.schoolId });
     }),
   );
 
@@ -105,7 +122,41 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
     ),
     handle(async (req, res) => {
       if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
-      await deps.getService().changePassword(req.auth.userId, { currentPassword: req.body.currentPassword, newPassword: req.body.newPassword });
+      await deps.getService().changePassword(req.auth.userId, req.auth.sessionId, { currentPassword: req.body.currentPassword, newPassword: req.body.newPassword });
+      noStore(res);
+      sendNoContent(res);
+    }),
+  );
+
+  // "My devices": the caller's own sessions only (the account comes from the verified token, never from the request).
+  router.get(
+    '/sessions',
+    deps.requireAuthentication,
+    handle(async (req, res) => {
+      if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
+      const list = await deps.getService().listDevices(req.auth.userId, req.auth.sessionId);
+      noStore(res);
+      sendSuccess(res, {
+        maxActiveSessions: list.maxActiveSessions,
+        items: list.items.map((d) => ({
+          id: d.id,
+          deviceLabel: d.deviceLabel,
+          createdAt: d.createdAt.toISOString(),
+          lastActiveAt: d.lastActiveAt.toISOString(),
+          expiresAt: d.expiresAt.toISOString(),
+          isCurrent: d.isCurrent,
+        })),
+      });
+    }),
+  );
+
+  router.delete(
+    '/sessions/:sessionId',
+    deps.requireAuthentication,
+    validate(param('sessionId').isUUID().withMessage('INVALID_VALUE')),
+    handle(async (req, res) => {
+      if (!req.auth) throw sessionError('AUTHENTICATION_REQUIRED');
+      await deps.getService().revokeDevice(req.auth.userId, req.params.sessionId as string, req.auth.sessionId);
       noStore(res);
       sendNoContent(res);
     }),

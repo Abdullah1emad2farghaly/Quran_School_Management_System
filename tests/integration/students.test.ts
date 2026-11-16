@@ -105,6 +105,54 @@ describe('reads', () => {
   });
 });
 
+describe('GET /students/parents/:parentId', () => {
+  const ADDRESS = { kind: 'raw', text: 'المنيا / سمالوط / برمشا' } as const;
+
+  it('a School Manager lists a Parent\'s Students ONLY in the schools they manage, even when the Parent is linked to several schools', async () => {
+    const { app, t, authA, authB, schoolB, managerA, managerB, schoolA, parent } = await setup();
+    // The same Parent account (same phone and name) is also linked to school B, which has its own Student.
+    await t.parents.registerParent({ schoolId: schoolB.id, name: parent.name, phone: parent.phone, address: ADDRESS }, managerB.id);
+    const inA1 = await t.registerStudent(schoolA.id, parent.id, managerA.id);
+    const inA2 = await t.registerStudent(schoolA.id, parent.id, managerA.id);
+    const inB = await t.registerStudent(schoolB.id, parent.id, managerB.id);
+    await t.students.deactivateStudent(inA2.id, 'reason', managerA.id);
+
+    const asA = await request(app).get(`${STUDENTS}/parents/${parent.id}`).set(authA);
+    expect(asA.status).toBe(200);
+    expect(asA.body.data.map((x: { id: string }) => x.id).sort()).toEqual([inA1.id, inA2.id].sort());
+    expect(asA.body.data.every((x: { schoolId: string; parentId: string }) => x.schoolId === schoolA.id && x.parentId === parent.id)).toBe(true);
+    expect(JSON.stringify(asA.body)).not.toContain(inB.id);
+    expect(JSON.stringify(asA.body)).not.toMatch(/password|hash|token/i);
+
+    const asB = await request(app).get(`${STUDENTS}/parents/${parent.id}`).set(authB);
+    expect(asB.body.data.map((x: { id: string }) => x.id)).toEqual([inB.id]);
+
+    const active = await request(app).get(`${STUDENTS}/parents/${parent.id}?filter[status]=ACTIVE`).set(authA);
+    expect(active.body.data.map((x: { id: string }) => x.id)).toEqual([inA1.id]);
+    expect((await request(app).get(`${STUDENTS}/parents/${parent.id}?filter[status]=DELETED`).set(authA)).status).toBe(400);
+  });
+
+  it('returns an empty page for a Parent of the school who has no Students yet', async () => {
+    const { app, authA, parent } = await setup();
+    const res = await request(app).get(`${STUDENTS}/parents/${parent.id}`).set(authA);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('denies everyone else: unauthenticated, a manager with no link to the Parent, the Parent, an organization admin, an unknown Parent; rejects a bad id', async () => {
+    const { app, t, authA, authB, parent, login, schoolB } = await setup();
+    const url = `${STUDENTS}/parents/${parent.id}`;
+    expect((await request(app).get(url)).status).toBe(401);
+    expect((await request(app).get(url).set(authB)).status).toBe(403); // manager of a school the Parent is not linked to
+    expect((await request(app).get(url).set(await login(t.orgAdmin))).status).toBe(403);
+    expect((await request(app).get(url).set(await login(await t.h.createUser({ role: 'MAIN_ADMIN' })))).status).toBe(403);
+    expect((await request(app).get(url).set(await login(await t.h.createUser({ role: 'PARENT' })))).status).toBe(403);
+    expect((await request(app).get(`${STUDENTS}/parents/${UNKNOWN}`).set(authA)).status).toBe(403); // never reveals existence
+    expect((await request(app).get(`${STUDENTS}/parents/not-a-uuid`).set(authA)).status).toBe(400);
+    void schoolB;
+  });
+});
+
 describe('update and lifecycle', () => {
   it('corrects the join date, ignores attempts to change the National ID / Parent / school, and keeps the history', async () => {
     const { app, authA, schoolB, body } = await setup();

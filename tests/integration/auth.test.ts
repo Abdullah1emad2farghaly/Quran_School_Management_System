@@ -173,16 +173,159 @@ describe('logout', () => {
     expect((await request(app).get('/api/v1/whoami').set(bearer(login.body.data.accessToken))).status).toBe(401);
   });
 
-  it('a second login on another device ends the first one (one active session)', async () => {
+  it('a second login on another device does NOT end the first one (independent sessions)', async () => {
     const { app, h } = build();
     const u = await h.createUser();
     const a = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
     const b = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    expect((await request(app).get('/api/v1/whoami').set(bearer(a.body.data.accessToken))).status).toBe(200);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(b.body.data.accessToken))).status).toBe(200);
+  });
+
+  it('logout ends only the calling device; the other sessions keep working', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const a = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    const b = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    expect((await request(app).post('/api/v1/auth/logout').set(bearer(a.body.data.accessToken))).status).toBe(204);
     expect((await request(app).get('/api/v1/whoami').set(bearer(a.body.data.accessToken))).body.error.code).toBe('SESSION_REVOKED');
     expect((await request(app).get('/api/v1/whoami').set(bearer(b.body.data.accessToken))).status).toBe(200);
   });
+
+  it('logout-all ends every session of the account', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const a = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    const b = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    expect((await request(app).post('/api/v1/auth/logout-all').set(bearer(a.body.data.accessToken))).status).toBe(204);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(a.body.data.accessToken))).status).toBe(401);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(b.body.data.accessToken))).status).toBe(401);
+  });
 });
 
+describe('three-session limit (POST /auth/login)', () => {
+  const login = (app: express.Express, u: { phone: string; password: string }, password = u.password) =>
+    request(app).post('/api/v1/auth/login').send({ phone: u.phone, password });
+
+  it('answers the fourth login with a localized 422 SESSION_LIMIT_REACHED and revokes nothing', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const sessions = [await login(app, u), await login(app, u), await login(app, u)];
+    const fourth = await login(app, u);
+
+    expect(fourth.status).toBe(422);
+    expect(fourth.body.success).toBe(false);
+    expect(fourth.body.error.code).toBe('SESSION_LIMIT_REACHED');
+    expect(fourth.body.error.details).toEqual({ maxActiveSessions: 3 });
+    expect(typeof fourth.body.error.message).toBe('string');
+    expect(fourth.body.error.message.length).toBeGreaterThan(10);
+    expect(fourth.body.data).toBeUndefined();
+    for (const s of sessions) expect((await request(app).get('/api/v1/whoami').set(bearer(s.body.data.accessToken))).status).toBe(200);
+  });
+
+  it('gives the Arabic message when Arabic is requested', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    for (let i = 0; i < 3; i += 1) await login(app, u);
+    const res = await request(app).post('/api/v1/auth/login').set('Accept-Language', 'ar').send({ phone: u.phone, password: u.password });
+    expect(res.status).toBe(422);
+    expect(res.body.error.message).toMatch(/أجهزة/);
+  });
+
+  it('does not reveal the limit to someone who does not know the password', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    for (let i = 0; i < 3; i += 1) await login(app, u);
+    const wrong = await login(app, u, 'wrong-pass');
+    expect(wrong.status).toBe(401);
+    expect(wrong.body.error.code).toBe('INVALID_CREDENTIALS');
+  });
+});
+
+describe('My devices (GET /auth/sessions, DELETE /auth/sessions/:sessionId)', () => {
+  const login = (app: express.Express, u: { phone: string; password: string }, userAgent?: string) => {
+    const req = request(app).post('/api/v1/auth/login');
+    if (userAgent) req.set('User-Agent', userAgent);
+    return req.send({ phone: u.phone, password: u.password });
+  };
+  const CHROME_ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+  const SAFARI_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+
+  it('requires authentication', async () => {
+    const { app } = build();
+    expect((await request(app).get('/api/v1/auth/sessions')).status).toBe(401);
+    expect((await request(app).delete('/api/v1/auth/sessions/8c1f3d2e-5b6a-4f7c-9d10-3e4a5b6c7d81')).status).toBe(401);
+  });
+
+  it('lists the caller\'s sessions with a safe device label and never any token', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const a = await login(app, u, CHROME_ANDROID);
+    const b = await login(app, u, SAFARI_IOS);
+
+    const res = await request(app).get('/api/v1/auth/sessions').set(bearer(b.body.data.accessToken));
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body.data.maxActiveSessions).toBe(3);
+    expect(res.body.data.items.map((d: { deviceLabel: string }) => d.deviceLabel)).toEqual(['Chrome on Android', 'Safari on iOS']);
+    expect(res.body.data.items.map((d: { isCurrent: boolean }) => d.isCurrent)).toEqual([false, true]);
+    for (const item of res.body.data.items) {
+      expect(Object.keys(item).sort()).toEqual(['createdAt', 'deviceLabel', 'expiresAt', 'id', 'isCurrent', 'lastActiveAt']);
+    }
+    const text = JSON.stringify(res.body);
+    for (const secret of [a.body.data.refreshToken, b.body.data.refreshToken, a.body.data.accessToken, b.body.data.accessToken]) expect(text).not.toContain(secret);
+    expect(text).not.toContain(CHROME_ANDROID); // the raw User-Agent is never stored or returned
+  });
+
+  it('revokes one selected session (204) and keeps the others active', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const a = await login(app, u, CHROME_ANDROID);
+    const b = await login(app, u, SAFARI_IOS);
+    const list = await request(app).get('/api/v1/auth/sessions').set(bearer(a.body.data.accessToken));
+    const target = list.body.data.items.find((d: { deviceLabel: string }) => d.deviceLabel === 'Safari on iOS');
+
+    const res = await request(app).delete(`/api/v1/auth/sessions/${target.id}`).set(bearer(a.body.data.accessToken));
+    expect(res.status).toBe(204);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(b.body.data.accessToken))).body.error.code).toBe('SESSION_REVOKED');
+    expect((await request(app).get('/api/v1/whoami').set(bearer(a.body.data.accessToken))).status).toBe(200);
+    expect((await request(app).get('/api/v1/auth/sessions').set(bearer(a.body.data.accessToken))).body.data.items).toHaveLength(1);
+  });
+
+  it('answers 404 SESSION_NOT_FOUND for another account\'s session and an unknown id, and 400 for a malformed id', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const other = await h.createUser();
+    const mine = await login(app, u);
+    const theirs = await login(app, other);
+    const theirList = await request(app).get('/api/v1/auth/sessions').set(bearer(theirs.body.data.accessToken));
+    const theirId = theirList.body.data.items[0].id;
+
+    const foreign = await request(app).delete(`/api/v1/auth/sessions/${theirId}`).set(bearer(mine.body.data.accessToken));
+    expect(foreign.status).toBe(404);
+    expect(foreign.body.error.code).toBe('SESSION_NOT_FOUND');
+    const unknown = await request(app).delete('/api/v1/auth/sessions/00000000-0000-4000-8000-000000000000').set(bearer(mine.body.data.accessToken));
+    expect(unknown.status).toBe(404);
+    expect((await request(app).delete('/api/v1/auth/sessions/not-a-uuid').set(bearer(mine.body.data.accessToken))).status).toBe(400);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(theirs.body.data.accessToken))).status).toBe(200);
+  });
+});
+
+describe('change password revokes the other sessions (POST /auth/change-password)', () => {
+  it('keeps the calling session and ends every other one', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const a = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    const b = await request(app).post('/api/v1/auth/login').send({ phone: u.phone, password: u.password });
+    const res = await request(app)
+      .post('/api/v1/auth/change-password')
+      .set(bearer(b.body.data.accessToken))
+      .send({ currentPassword: u.password, newPassword: 'brand-new1' });
+    expect(res.status).toBe(204);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(b.body.data.accessToken))).status).toBe(200);
+    expect((await request(app).get('/api/v1/whoami').set(bearer(a.body.data.accessToken))).body.error.code).toBe('SESSION_REVOKED');
+  });
+});
 
 describe('mandatory first-login password change (account-level, enforced by the backend)', () => {
   const login = async (app: express.Express, u: { phone: string; password: string }) =>

@@ -15,6 +15,9 @@ Module 12 defines **no permissions and no HTTP endpoints**. The catalog starts e
 
 Denial reasons (`DenyReason`) go to the log only. Clients always get `403 ACCESS_DENIED` (Arabic/English). Unauthenticated callers get `401 AUTHENTICATION_REQUIRED` from Module 10.
 
+## The session's active role
+HTTP requests are authorized through the role the caller's **session** currently acts as (`req.auth.activeRole`, set by `requireAuthentication` from the persisted session): `requirePermission` passes it as `AuthorizationRequest.activeRole`. When it is present only that role can authorize (it must still be assigned), and `null` (a multi-role account that has not chosen) is denied with `NO_ACTIVE_ROLE` (403 `ACCESS_DENIED`). A role in a header or body is never read. Callers with no session (system jobs) omit `activeRole` and every active role of the user is a candidate, as before. See `SESSIONS.md`.
+
 ## Using it from a module
 ```ts
 // 1. Register the module's approved permission (after the grants are in docs/AUTHORIZATION-MATRIX.md)

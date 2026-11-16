@@ -109,6 +109,10 @@ export class SequelizeStudentRepository implements StudentRepository {
     return this.list('s.parent_id = :ownerId', parentId, query, tx);
   }
 
+  listByParentInSchools(parentId: string, schoolIds: readonly string[], query: StudentListQuery, tx?: TransactionContext): Promise<{ items: Student[]; total: number }> {
+    return this.list('s.parent_id = :ownerId AND s.school_id IN (:schoolIds)', parentId, query, tx, { schoolIds: [...schoolIds] });
+  }
+
   async countByParentInSchool(parentId: string, schoolId: string, tx: TransactionContext): Promise<number> {
     // A locking read (not a snapshot read) so the unlink guard always sees the latest committed students and blocks a concurrent registration.
     const rows = await this.db.query<{ total: number | string }>('SELECT COUNT(*) AS total FROM students WHERE parent_id = :parentId AND school_id = :schoolId FOR UPDATE', {
@@ -128,10 +132,10 @@ export class SequelizeStudentRepository implements StudentRepository {
     return rows.map((r) => ({ ...r, occurredAt: asDate(r.occurredAt) }));
   }
 
-  private async list(where: string, ownerId: string, query: StudentListQuery, tx?: TransactionContext): Promise<{ items: Student[]; total: number }> {
+  private async list(where: string, ownerId: string, query: StudentListQuery, tx?: TransactionContext, extra: Record<string, unknown> = {}): Promise<{ items: Student[]; total: number }> {
     const transaction = sequelizeTransactionOf(tx) ?? null;
     const statusClause = query.status && query.status.length > 0 ? ' AND s.status IN (:statuses)' : '';
-    const replacements = { ownerId, ...(statusClause ? { statuses: [...query.status!] } : {}) };
+    const replacements = { ownerId, ...extra, ...(statusClause ? { statuses: [...query.status!] } : {}) };
     const direction = query.direction === 'asc' ? 'ASC' : 'DESC';
     const counted = await this.db.query<{ total: number | string }>(`SELECT COUNT(*) AS total FROM students s WHERE ${where}${statusClause}`, { replacements, type: QueryTypes.SELECT, transaction });
     const rows = await this.db.query<StudentRow>(`${SELECT} WHERE ${where}${statusClause} ORDER BY ${SORT_COLUMN[query.sort]} ${direction}, s.id ASC LIMIT :limit OFFSET :offset`, {

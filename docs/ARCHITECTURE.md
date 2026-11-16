@@ -46,7 +46,7 @@ The login identity (normalized phone, bcrypt hash, ACTIVE/INACTIVE) is owned by 
 Roles are a fixed catalog; assignments keep full history; role -> permission grants are registered by each owning module and are deny-by-default. Module 09 does not authorize its callers and has no HTTP routes until Modules 10 and 12; see `docs/ROLES.md`.
 
 ## Sessions & authentication (Module 10)
-Login, refresh-token rotation, logout and access-token verification. One active session per user; refresh tokens stored only as keyed hashes; each protected request checks the session and the user. Authentication only: authorization is Module 12. See `docs/SESSIONS.md`.
+Login, refresh-token rotation, logout and access-token verification. Up to three concurrent sessions per account (each with its own slot, tokens and refresh lifecycle), My devices and periodic expired-session cleanup; refresh tokens stored only as keyed hashes; each protected request checks the session and the user. Authentication only: authorization is Module 12. See `docs/SESSIONS.md`.
 
 ## OTP & password recovery (Module 11)
 Forgot-password with an OTP and a single-use reset token; keyed-hash storage, no account enumeration, concurrency-safe MySQL rate limits, OTP delivery behind the `OtpSender` port (provider chosen later). A reset revokes all sessions through Module 10. See `docs/PASSWORD-RECOVERY.md`.

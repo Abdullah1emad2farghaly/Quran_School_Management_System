@@ -64,3 +64,7 @@ Downstream modules depend on `OrganizationLookup` (read-only): `getMainOrganizat
 
 ## Tests
 Unit: `tests/unit/organization` (name/code/status rules, idempotent bootstrap, race recovery, event, in-memory V1 rule, CLI step and integration with the Main Admin CLI; `organization-country.test.ts` country rules and `organization-country-cli.test.ts` the country CLI step, including `--yes`, conflicts and the primary-key-not-code rule). MariaDB: `tests/db/organizations.test.ts` (schema, Arabic round trip, atomic row + event, rollback, idempotency, race via the DB guard, CHECK/unique guards) and `tests/db/organization-country.test.ts` (column type equals `countries.id`, RESTRICT foreign key, primary key stored, one event, immutability, set-once UPDATE, code and unknown id rejected, country cannot be deleted while used). The DB tests run in one always-rolled-back transaction, so they are safe on a database that already has an organization.
+
+## Public lookup for school submission (0.45.0, approved 2026-11-11)
+`OrganizationService.listSubmissionEligible(page)` and `findSubmissionEligibleById(id)` (read-only, in the `OrganizationLookup` contract): an organization is selectable for a school submission only when it is **ACTIVE and has a country** (the existing rule enforced by `POST /schools/submissions`; no new condition). The list returns only `{ id, name }`, by name. HTTP: `GET /api/v1/organizations/lookup` (Module 16 router, public, paginated; see docs/SCHOOLS.md). `GET /organizations` and `GET /organizations/:id` are unchanged.
+

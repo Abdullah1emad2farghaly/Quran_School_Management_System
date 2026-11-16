@@ -189,11 +189,11 @@ export const groupApiDoc: ModuleApiDoc = {
     }),
     op({
       method: 'put', path: '/:id/teacher', operationId: 'assignGroupTeacher', summary: 'Assign or change the group\'s Teacher',
-      description: 'A group has at most ONE Teacher. The Teacher must be actively linked to the group\'s school (the link is locked in the same transaction). The change is kept in the history and a GroupTeacherChanged event is published.',
+      description: 'A group has at most ONE Teacher. The Teacher must be actively linked to the group\'s school (the link is locked in the same transaction). A NEW Teacher is also validated against the group\'s schedule slots (Group Schedules, Module 23) before the change commits: the slots must not overlap the Teacher\'s slots in their other active groups in any school (touching boundaries are allowed), otherwise 409 TEACHER_SCHEDULE_CONFLICT and nothing changes. The change is kept in the history and a GroupTeacherChanged event is published.',
       authorization: schoolManager(GroupPermissions.ASSIGN_TEACHER, onGroup), pathParams: groupIdParam,
       request: { description: 'The Teacher.', schema: s.object({ teacherId: s.uuid({ example: TEACHER_ID }) }, ['teacherId']), examples: { teacher: { summary: 'Assign a Teacher', value: { teacherId: TEACHER_ID } } } },
       success: { status: 200, description: 'The group with its Teacher.', data: ref('Group'), example: groupExample() },
-      errors: [NOT_ALLOWED, notFound, concurrent, { status: 422, codes: ['GROUP_TEACHER_NOT_LINKED_TO_SCHOOL', 'GROUP_ARCHIVED'], description: 'The Teacher does not exist, belongs to another organization or is not linked to the school; or the group is ARCHIVED.' }],
+      errors: [NOT_ALLOWED, notFound, { status: 409, codes: ['GROUP_CONCURRENT_MODIFICATION', 'TEACHER_SCHEDULE_CONFLICT', 'SCHEDULE_CONCURRENT_MODIFICATION'], description: 'A concurrent change could not be resolved (retry), or the group\'s schedule slots overlap the new Teacher\'s slots in their other active groups (`details.conflicts`).' }, { status: 422, codes: ['GROUP_TEACHER_NOT_LINKED_TO_SCHOOL', 'GROUP_ARCHIVED'], description: 'The Teacher does not exist, belongs to another organization or is not linked to the school; or the group is ARCHIVED.' }],
     }),
     op({
       method: 'delete', path: '/:id/teacher', operationId: 'removeGroupTeacher', summary: 'Leave the group without a Teacher',
@@ -204,7 +204,7 @@ export const groupApiDoc: ModuleApiDoc = {
     }),
     op({
       method: 'post', path: '/:id/archive', operationId: 'archiveGroup', summary: 'Archive a group (final)',
-      description: 'Archives the group: it becomes read-only, its name is free for a new group of the school, its Teacher no longer depends on the school link, and EVERY student in it is unassigned in the same transaction (reason GROUP_ARCHIVED; the students and their history stay). Groups are never deleted.',
+      description: 'Archives the group: it becomes read-only, its name is free for a new group of the school, its Teacher no longer depends on the school link, and EVERY student in it is unassigned in the same transaction (reason GROUP_ARCHIVED; the students and their history stay). Its schedule slots are retired in the same transaction (reason GROUP_ARCHIVED) and kept as history. Groups are never deleted.',
       authorization: schoolManager(GroupPermissions.ARCHIVE, onGroup), pathParams: groupIdParam,
       request: { description: 'An optional free-text reason (at most 500 characters), kept in the group history.', schema: s.object({ reason: s.string({ maxLength: 500, nullable: true, example: 'انتهاء الحلقة' }) }, []), examples: { withReason: { summary: 'With a reason', value: { reason: 'انتهاء الحلقة' } } } },
       success: { status: 200, description: 'The archived group.', data: ref('Group'), example: groupExample({ status: 'ARCHIVED' }) },

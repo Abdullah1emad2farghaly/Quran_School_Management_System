@@ -1,0 +1,50 @@
+
+======== 0. File checksums (published SHA-256 of kfgqpc_hafs_v30.zip: 227E6B15...C635F245)
+  227e6b1564d980f2bd09c2c35ebfb0330ac268c79a7c247cd1ab665bc635f245  kfgqpc_hafs_v30.zip
+  fb04bdfb0da38925853bc0ccdecd08b1536ac74fb1c8e9ff27a9af7ad7a452f9  qpc-v1-15-lines_db.zip
+  8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a  quran-data.xml
+
+======== 1. Official KFGQPC Hafs v30 (CSV / JSON)
+  rows 6236 | JSON == CSV on every compared field: True
+  surahs 114 | ids 1..6236 in order: True | pages 1 .. 604 | ayahs with line_end<line_start: 0
+
+======== 2. Word alignment official text <-> QUL
+  official tokens (incl. standalone ۞): 83867 | standalone ۞ tokens: 199 | words without ۞: 83668 | QUL max word id: 83668
+  QUL info: [('Quran Complex V1 ( 1405 print )', 604, 15, 'v1')] | lines/page: Counter({15: 602, 8: 2}) | types: Counter({'ayah': 8820, 'surah_name': 114, 'basmallah': 112})
+  QUL basmallah lines with a surah_number: 0 of 112
+  QUL ayah-line word ranges contiguous 1..N: True
+
+======== 3. Official DOCX: page/line layout reconstructed from its <w:br> breaks
+  pages 604 | lines 9046 | lines per page: {8: 2, 15: 602} | pages with 8 lines: [1, 2]
+  line kinds: {'banner': 114, 'text': 8820, 'basmala': 112}
+  DOCX text tokens 83668 == CSV tokens 83668 | position-wise mismatches: 0
+  CSV (page,line_start,line_end) == DOCX position, ayahs: 6236 of 6236 | ayahs crossing a page in DOCX: 0
+
+======== 4. Official CSV vs QUL V1 (1405) - the reported mismatch
+  ayahs whose line RANGE is entirely non-ayah lines in QUL      : 74    <-- the reported 74
+  ayahs with at least one declared line non-ayah in QUL          : 102
+  example 23:118 CSV [(349, 15, 15)] | DOCX (349, 15, 349, 15) | QUL p349 line15 type: surah_name | QUL p350 line1/2: basmallah ayah
+  ayahs whose QUL (word-derived) line set equals the CSV line set: 4257 of 6236 | different: 1979
+  (page,line) cells whose KIND differs DOCX vs QUL: 144 = 48 sites x 3 lines (banner / basmala / text moved across a page break)
+  pages with the same first text word in both layouts: 390 of 604 | first differing page: 121 | pages 263-451 shifted by exactly +1 word: 189
+  QUL ayahs crossing a page: 189 | official layout: 0
+  text lines starting at the same word: 3572 of 8820
+
+======== 5. Tanzil quran-data.xml
+  header: {'type': 'metadata', 'version': '1.0', 'copyright': '(C) 2008-2009 Tanzil.info', 'license': 'cc-by'} | ayahs per surah: CSV == Tanzil == project oracle: True | sum 6236
+  counts: surahs 114 juz 30 quarters 240 pages 604 | juz k == quarter 8(k-1)+1: True | quarters strictly increasing: True
+  CSV `jozz` start != Tanzil juz start: [(4, (3, 92), (3, 93)), (11, (9, 94), (9, 93)), (20, (27, 60), (27, 56)), (21, (29, 45), (29, 46)), (23, (36, 21), (36, 28))]
+  official ۞ present at the Tanzil start of those juz: [True, True, True, True, True] | ۞ present at the CSV-jozz start: [False, False, False, False, False]
+  official ۞ marks: 199 (all at index 0 of the ayah text: True ) | in Tanzil quarter starts: 198 | NOT in Tanzil: [(15, 49)] | Tanzil starts without a mark: 42 (of which ayah 1 of a surah: 41 ; others: [(15, 50)] )
+  199 official marks + 41 surah-initial quarters = 240 (Tanzil quarters: 240 )
+  Tanzil page-start ayah vs official CSV first ayah of page: mismatching pages = 25 | vs QUL (first word of page): mismatching pages = 0
+
+======== 6. Project reference constants vs real data
+  ayah 1:1 first page: profile 1 | CSV 1 | DOCX 1
+  ayah 2:1 first page: profile 2 | CSV 2 | DOCX 2
+  ayah 2:142 first page: profile 22 | CSV 22 | DOCX 22
+  ayah 78:1 first page: profile 582 | CSV 582 | DOCX 582
+  quarter 1: profile 1:1 | Tanzil (1, 1) | official ۞ at that ayah: False
+  quarter 9: profile 2:142 | Tanzil (2, 142) | official ۞ at that ayah: True
+  quarter 17: profile 2:253 | Tanzil (2, 253) | official ۞ at that ayah: True
+  quarter 233: profile 78:1 | Tanzil (78, 1) | official ۞ at that ayah: False

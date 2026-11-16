@@ -1,4 +1,4 @@
-import { SystemClock, type Clock, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
+import { AppError, SystemClock, type Clock, type TransactionContext, type UnitOfWork } from '../../../00-shared-kernel/public';
 import type { OutboxService } from '../../../06-domain-events-outbox/public';
 import { identityError, type IdentityService } from '../../../08-identity-core/public';
 import { RoleAssignment } from '../../domain/entities/role-assignment';
@@ -7,6 +7,9 @@ import type { PermissionRegistry } from '../../domain/services/permission-regist
 import { isAssignableRole, isRoleCode, sortRoles, type RoleCode } from '../../domain/value-objects/role-code';
 import { toRoleAssignmentDto, type RoleAssignmentDto } from '../dto/role-assignment-dto';
 import type { RoleAssignmentRepository } from '../ports/role-assignment-repository';
+
+/** Attempts for a revocation that loses a race (InnoDB deadlock) when the service owns the transaction. */
+const MAX_REVOKE_ATTEMPTS = 3;
 
 export interface AssignRoleInput {
   readonly userId: string;
@@ -96,21 +99,35 @@ export class RoleService {
     if (!isRoleCode(input.roleCode)) throw roleError('INVALID_ROLE');
     const roleCode: RoleCode = input.roleCode;
 
-    return this.inTransaction(tx, async (t) => {
-      if (input.revokedBy !== null) await this.requireUser(input.revokedBy, t);
+    const attempt = (): Promise<RoleAssignmentDto> =>
+      this.inTransaction(tx, async (t) => {
+        if (input.revokedBy !== null) await this.requireUser(input.revokedBy, t);
 
-      // Locks every assignment row of this user, so two concurrent revocations cannot both pass the check.
-      const all = await this.repository.lockAllByUser(input.userId, t);
-      const active = all.filter((a) => a.isActive);
-      const target = active.find((a) => a.roleCode === roleCode);
-      if (!target) throw roleError('ROLE_ASSIGNMENT_NOT_FOUND');
-      if (active.length <= 1) throw roleError('LAST_ACTIVE_ROLE');
+        // Locks every assignment row of this user, so two concurrent revocations cannot both pass the check.
+        const all = await this.repository.lockAllByUser(input.userId, t);
+        const active = all.filter((a) => a.isActive);
+        const target = active.find((a) => a.roleCode === roleCode);
+        if (!target) throw roleError('ROLE_ASSIGNMENT_NOT_FOUND');
+        if (active.length <= 1) throw roleError('LAST_ACTIVE_ROLE');
 
-      target.revoke(input.revokedBy, this.clock);
-      await this.repository.update(target, t);
-      await this.outbox.publishFrom(target, t);
-      return toRoleAssignmentDto(target);
-    });
+        target.revoke(input.revokedBy, this.clock);
+        await this.repository.update(target, t);
+        await this.outbox.publishFrom(target, t);
+        return toRoleAssignmentDto(target);
+      });
+
+    // With the caller's transaction there is nothing to retry here: the caller owns it and receives the retryable 409.
+    if (tx) return attempt();
+    for (let n = 1; ; n++) {
+      try {
+        return await attempt();
+      } catch (error) {
+        // Two revocations of the same user raced and InnoDB rolled this one back. Run it again: once the winner has
+        // committed, the retry reports the true outcome (LAST_ACTIVE_ROLE, or ROLE_ASSIGNMENT_NOT_FOUND).
+        const raced = error instanceof AppError && error.code === 'ROLE_CONCURRENT_MODIFICATION';
+        if (!raced || n >= MAX_REVOKE_ATTEMPTS) throw error;
+      }
+    }
   }
 
   /** The user's active roles in catalog order. Empty for unknown users. */

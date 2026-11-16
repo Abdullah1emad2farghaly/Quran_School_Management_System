@@ -158,6 +158,31 @@ export const organizationApiDoc: ModuleApiDoc = {
     },
     {
       method: 'get',
+      path: '/lookup',
+      operationId: 'getOrganizations',
+      summary: 'The organizations a school submission may be sent to (public)',
+      description:
+        'Public, read-only lookup for the organization selector of the school submission form. Returns ONLY `{ id, name }` of the organizations that may receive school submissions under the existing rule of `POST /schools/submissions` (the organization is ACTIVE and has a country); every other organization is excluded. Ordered by name; paginated like every list (`pageSize` up to 100). `sort` is validated against the whitelist but the order is always by name. It never exposes the code, status, address, administrators or any other organization data. The authenticated `GET /organizations` is unchanged: it still returns only the organizations the caller administers. Organization names are user-entered free text and are returned as stored for `ar` and `en` alike.',
+      authorization: {
+        authentication: 'none',
+        roles: [],
+        scope: 'None.',
+        enforcement: 'Public endpoint: no authentication and no permission. Read-only, and only `{ id, name }` leaves; it is a separate route from the protected `GET /organizations`.',
+        permissionId: null,
+        decision: 'NOT_APPLICABLE',
+        reference: 'docs/SCHOOLS.md (public registration lookups); docs/ORGANIZATION.md',
+      },
+      query: listQueryParameters(ORGANIZATION_LIST_SPEC),
+      success: {
+        status: 200,
+        description: 'A page of selectable organizations.',
+        paginated: true,
+        data: s.object({ id: s.uuid({ description: 'The organization id to submit in the school submission request.' }), name: s.string({ description: 'The organization name.' }) }, ['id', 'name']),
+        example: { id: ORG_ID, name: 'Al-Noor Quran Foundation' },
+      },
+    },
+    {
+      method: 'get',
       path: '/:id',
       operationId: 'getOrganization',
       summary: 'Get one organization',

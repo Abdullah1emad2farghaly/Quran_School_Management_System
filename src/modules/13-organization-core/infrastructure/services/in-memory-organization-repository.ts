@@ -1,4 +1,4 @@
-import type { TransactionContext } from '../../../00-shared-kernel/public';
+import { pageOffset, type PageRequest, type TransactionContext } from '../../../00-shared-kernel/public';
 import type { OrganizationAdminRepository } from '../../application/ports/organization-admin-repository';
 import type { OrganizationRepository } from '../../application/ports/organization-repository';
 import { OrganizationAdminAssignment, type OrganizationAdminAssignmentSnapshot } from '../../domain/entities/organization-admin-assignment';
@@ -50,6 +50,13 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
     return row ? Organization.rehydrate(row) : undefined;
   }
 
+  async listSubmissionEligible(request: PageRequest, _tx?: TransactionContext): Promise<{ items: Organization[]; total: number }> {
+    const eligible = [...this.rows.values()]
+      .filter((r) => r.status === 'ACTIVE' && r.countryId !== null)
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : 1));
+    return { items: eligible.slice(pageOffset(request), pageOffset(request) + request.pageSize).map((r) => Organization.rehydrate(r)), total: eligible.length };
+  }
+
   /** Monotonic like the locked SQL sequence: never repeats, even for concurrent callers (a rolled-back creation leaves a gap here). */
   private lastCode = 0;
 
@@ -77,5 +84,9 @@ export class InMemoryOrganizationAdminRepository implements OrganizationAdminRep
 
   async listActiveOrganizationIdsByUser(userId: string, _tx?: TransactionContext): Promise<string[]> {
     return [...this.rows.values()].filter((r) => r.userId === userId && r.revokedAt === null).map((r) => r.organizationId);
+  }
+
+  async listActiveUserIdsByOrganization(organizationId: string, _tx?: TransactionContext): Promise<string[]> {
+    return [...this.rows.values()].filter((r) => r.organizationId === organizationId && r.revokedAt === null).sort((a, b) => a.assignedAt.getTime() - b.assignedAt.getTime()).map((r) => r.userId);
   }
 }

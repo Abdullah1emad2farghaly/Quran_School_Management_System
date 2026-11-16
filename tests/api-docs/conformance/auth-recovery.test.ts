@@ -64,6 +64,31 @@ describe('Modules 10 and 11 endpoints conform to their OpenAPI documentation (re
     api.conforms(await request(app).post(`${base}/logout-all`).set({ Authorization: 'Bearer not-a-token' })); // 401 invalid token
   });
 
+  it('three-session limit and My devices: success and error responses', async () => {
+    const { app, h } = build();
+    const u = await h.createUser();
+    const login = () => request(app).post(`${base}/login`).send({ phone: u.phone, password: u.password });
+    const first = api.conforms(await login());
+    const second = api.conforms(await login());
+    api.conforms(await login());
+    const limit = api.conforms(await login()); // the fourth device
+    expect(limit.status).toBe(422);
+    expect(limit.body.error.code).toBe('SESSION_LIMIT_REACHED');
+
+    const bearer = { Authorization: `Bearer ${first.body.data.accessToken}` };
+    const list = api.conforms(await request(app).get(`${base}/sessions`).set(bearer));
+    expect(list.status).toBe(200);
+    expect(list.body.data.items).toHaveLength(3);
+    api.conforms(await request(app).get(`${base}/sessions`)); // 401 without a token
+
+    const principal = await h.service.authenticate(second.body.data.accessToken);
+    expect(api.conforms(await request(app).delete(`${base}/sessions/${principal.sessionId}`).set(bearer)).status).toBe(204);
+    expect(api.conforms(await request(app).delete(`${base}/sessions/${principal.sessionId}`).set(bearer)).status).toBe(404); // already ended
+    api.conforms(await request(app).delete(`${base}/sessions/not-a-uuid`).set(bearer)); // 400
+    api.conforms(await request(app).delete(`${base}/sessions/${principal.sessionId}`)); // 401 without a token
+    expect(api.conforms(await login()).status).toBe(200); // the freed slot can be used again
+  });
+
   it('change-password: success and error responses, and the mandatory first-login change', async () => {
     const { app, h } = build();
     const u = await h.createUser({ password: '4567', mustChangePassword: true });
@@ -109,8 +134,25 @@ describe('Modules 10 and 11 endpoints conform to their OpenAPI documentation (re
     }
   });
 
+  it('switch-role: success and error responses', async () => {
+    const { app, h } = build();
+    const u = await h.createUser({ role: 'TEACHER' });
+    await h.roles.assignRole({ userId: u.id, roleCode: 'PARENT', assignedBy: null });
+    const login = api.conforms(await request(app).post(`${base}/login`).send({ phone: u.phone, password: u.password }));
+    expect(login.body.data.activeRole).toBeNull();
+    const bearer = { Authorization: `Bearer ${login.body.data.accessToken}` };
+
+    expect(api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'PARENT' })).body.data.activeRole).toBe('PARENT');
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'PARENT' })); // idempotent
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({})); // 400
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'SCHOOL_MANAGER' })); // 403 ROLE_NOT_ASSIGNED
+    api.conforms(await request(app).post(`${base}/switch-role`).send({ role: 'PARENT' })); // 401
+    await request(app).post(`${base}/logout`).set(bearer);
+    api.conforms(await request(app).post(`${base}/switch-role`).set(bearer).send({ role: 'TEACHER' })); // 401 revoked session
+  });
+
   it('exercised every documented operation of Modules 10 and 11', () => {
-    expect(api.operationCount('10')).toBe(5);
+    expect(api.operationCount('10')).toBe(8);
     expect(api.operationCount('11')).toBe(3);
     api.assertAllExercised('10');
     api.assertAllExercised('11');

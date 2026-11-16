@@ -267,7 +267,7 @@ describe('organization handlers and route registration', () => {
     const limit: RequestHandler = () => undefined;
     const { requirePermission, guards } = fakeGuard();
     const routes = routesOf(createOrganizationRouter({ getService: () => fake().service, requireAuthentication: auth, requirePermission, publicSubmissionLimit: limit }));
-    expect(routes.map((r) => r.key).sort()).toEqual(['GET /', 'GET /:id', 'POST /']);
+    expect(routes.map((r) => r.key).sort()).toEqual(['GET /', 'GET /:id', 'GET /lookup', 'POST /']);
     const byKey = Object.fromEntries(routes.map((r) => [r.key, r.handlers as RequestHandler[]]));
     expect(byKey['POST /']![0]).toBe(limit);
     expect(byKey['POST /']![1]).not.toBe(auth);
@@ -276,5 +276,9 @@ describe('organization handlers and route registration', () => {
     expect(byKey['GET /']!.map((h) => guards.get(h)?.permission).find(Boolean)).toBe(OrganizationPermissions.LIST);
     expect(byKey['GET /:id']!.map((h) => guards.get(h)?.permission).find(Boolean)).toBe(OrganizationPermissions.READ);
     expect(byKey['POST /']!.map((h) => guards.get(h)).find(Boolean)).toBeUndefined();
+    // The public lookup: no authentication and no permission guard (only `{ id, name }` leaves; the protected GET / is unchanged).
+    expect(byKey['GET /lookup']).toHaveLength(1);
+    expect(byKey['GET /lookup']![0]).not.toBe(auth);
+    expect(byKey['GET /lookup']!.map((h) => guards.get(h)).find(Boolean)).toBeUndefined();
   });
 });

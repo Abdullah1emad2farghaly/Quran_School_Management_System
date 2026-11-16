@@ -15,6 +15,7 @@ export {
   type EnsureOrganizationResult,
   type AssignOrganizationCountryResult,
   type CreateOrganizationInput,
+  type OrganizationLookupItemDto,
 } from '../application/services/organization-service';
 export {
   registerOrganizationAuthorization,

@@ -30,5 +30,9 @@ export const object = (properties: Readonly<Record<string, SchemaOrRef>>, requir
 
 export const array = (items: SchemaOrRef, options: { description?: string } = {}): SchemaObject => ({ type: 'array', items, ...options });
 
-/** OpenAPI 3.0 cannot put `nullable` next to a bare `$ref`; this wraps it in `allOf`. */
-export const nullableRef = (name: string): SchemaObject => ({ nullable: true, allOf: [ref(name)] });
+/**
+ * OpenAPI 3.0 cannot put `nullable` next to a bare `$ref`. `allOf` + `nullable` is not valid under strict
+ * validation (Ajv rejects `nullable` without `type`, and `allOf` still rejects `null`), so the value is
+ * either the referenced object or an explicit null.
+ */
+export const nullableRef = (name: string): SchemaObject => ({ oneOf: [ref(name), { type: 'object', nullable: true, enum: [null] }] } as SchemaObject);

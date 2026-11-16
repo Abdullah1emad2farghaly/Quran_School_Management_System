@@ -46,6 +46,17 @@ export const SESSION_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
     message: { ar: 'تعذّر إكمال تسجيل الدخول. أعد المحاولة.', en: 'Sign-in could not be completed. Please try again.' },
   },
   {
+    code: SessionErrorCodes.SESSION_LIMIT_REACHED,
+    message: {
+      ar: 'أنت مسجّل الدخول بالفعل على 3 أجهزة، وهو الحد الأقصى. سجّل الخروج من أحد أجهزتك الحالية ثم حاول مرة أخرى.',
+      en: 'You are already signed in on 3 devices, which is the maximum. Sign out from one of your existing devices, then try again.',
+    },
+  },
+  {
+    code: SessionErrorCodes.SESSION_NOT_FOUND,
+    message: { ar: 'لا توجد جلسة نشطة بهذا المعرّف في حسابك.', en: 'There is no active session with this id in your account.' },
+  },
+  {
     code: SessionErrorCodes.PASSWORD_CHANGE_REQUIRED,
     message: { ar: 'يجب تغيير كلمة المرور الأولية قبل متابعة استخدام النظام.', en: 'You must change your initial password before using the system.' },
   },
@@ -56,5 +67,9 @@ export const SESSION_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
   {
     code: SessionErrorCodes.NEW_PASSWORD_SAME_AS_CURRENT,
     message: { ar: 'كلمة المرور الجديدة يجب أن تختلف عن الحالية.', en: 'The new password must be different from the current one.' },
+  },
+  {
+    code: SessionErrorCodes.ROLE_NOT_ASSIGNED,
+    message: { ar: 'هذا الدور غير مسند إلى حسابك.', en: 'This role is not assigned to your account.' },
   },
 ];

@@ -1,0 +1,31 @@
+import type { ErrorMessageEntry } from '../../../03-error-localization/public';
+import { ExamErrorCodes as C } from '../../domain/errors/exam-errors';
+
+export const EXAM_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
+  { code: C.EXAM_NOT_FOUND, message: { ar: 'الاختبار غير موجود.', en: 'The exam does not exist.' } },
+  { code: C.EXAM_INVALID_START, message: { ar: 'وقت بدء الاختبار غير صالح.', en: 'The exam start time is not valid.' } },
+  { code: C.EXAM_INVALID_END, message: { ar: 'وقت نهاية الاختبار غير صالح. يجب أن يكون بعد وقت البدء.', en: 'The exam end time is not valid. It must be after the start time.' } },
+  { code: C.EXAM_INVALID_QUESTION_COUNT, message: { ar: 'عدد الأسئلة غير صالح. يجب أن يكون عددًا صحيحًا من 1 إلى 200.', en: 'The number of questions is not valid. It must be a whole number from 1 to 200.' } },
+  { code: C.EXAM_INVALID_MAX_SCORE, message: { ar: 'الدرجة العظمى للسؤال غير صالحة. يجب أن تكون رقمًا أكبر من 0 وحتى 1000.', en: 'The maximum score per question is not valid. It must be a number above 0 and up to 1000.' } },
+  { code: C.EXAM_TARGET_REQUIRED, message: { ar: 'يجب تحديد مجموعة واحدة على الأقل أو اختيار المدرسة كلها (وليس الاثنين معًا).', en: 'Choose at least one group, or the whole school (not both).' } },
+  { code: C.EXAM_INVALID_TARGET, message: { ar: 'بعض المجموعات غير صالحة: يجب أن تكون نشطة وتابعة لمدرسة الاختبار.', en: 'Some groups are not valid: they must be active and belong to the exam\'s school.' } },
+  { code: C.EXAM_INVALID_SCORES, message: { ar: 'درجات الأسئلة غير صالحة. يجب إرسال درجة رقمية لكل سؤال من أسئلة الاختبار ({count}).', en: 'The question scores are not valid. Send one numeric score for each of the exam\'s {count} questions.' } },
+  { code: C.EXAM_SCORE_OUT_OF_RANGE, message: { ar: 'درجة السؤال {question} خارج المدى المسموح (من 0 إلى {max}).', en: 'The score of question {question} is out of range (0 to {max}).' } },
+  { code: C.EXAM_INVALID_TRANSITION, message: { ar: 'لا يمكن تنفيذ هذا الإجراء على الاختبار في حالته الحالية.', en: 'This action cannot be performed on the exam in its current status.' } },
+  { code: C.EXAM_START_NOT_IN_FUTURE, message: { ar: 'يجب أن يكون وقت بدء الاختبار في المستقبل.', en: 'The exam start time must be in the future.' } },
+  { code: C.EXAM_CONFIG_LOCKED, message: { ar: 'بعد بدء الاختبار لا يمكن تعديل إعداداته (وقت البدء وعدد الأسئلة والدرجة العظمى والمجموعات). يمكن تعديل وقت النهاية والممتحنين فقط.', en: 'After the exam started its configuration (start time, questions, maximum score, groups) cannot be changed. Only the end time and the examiners can.' } },
+  { code: C.EXAM_START_IMMUTABLE, message: { ar: 'لا يمكن تعديل وقت بدء الاختبار بعد بدئه.', en: 'The start time cannot be changed once the exam started.' } },
+  { code: C.EXAM_END_NOT_IN_FUTURE, message: { ar: 'يجب أن يكون وقت النهاية الجديد في المستقبل تمامًا وبعد وقت البدء.', en: 'The new end time must be strictly in the future and after the start time.' } },
+  { code: C.EXAM_END_TIME_NOT_EDITABLE, message: { ar: 'يمكن تعديل وقت النهاية أثناء الاختبار فقط.', en: 'The end time can only be changed while the exam is in progress.' } },
+  { code: C.EXAM_END_TIME_DEFINED, message: { ar: 'للاختبار وقت نهاية، وسيكتمل تلقائيًا عنده. الإكمال اليدوي للاختبارات بلا وقت نهاية فقط.', en: 'The exam has an end time and completes automatically at it. Manual completion is only for exams without an end time.' } },
+  { code: C.EXAM_EXAMINER_NOT_ELIGIBLE, message: { ar: 'الممتحن يجب أن يكون معلمًا مسجلًا في مدرسة الاختبار نفسها.', en: 'An examiner must be a Teacher registered in the exam\'s school.' } },
+  { code: C.EXAM_EXAMINER_ALREADY_ASSIGNED, message: { ar: 'المعلم معيّن ممتحنًا لهذا الاختبار بالفعل.', en: 'The Teacher is already an examiner of this exam.' } },
+  { code: C.EXAM_EXAMINER_NOT_ASSIGNED, message: { ar: 'المعلم ليس ممتحنًا لهذا الاختبار حاليًا.', en: 'The Teacher is not currently an examiner of this exam.' } },
+  { code: C.EXAM_NOT_EXAMINER, message: { ar: 'لست ممتحنًا معيّنًا لهذا الاختبار.', en: 'You are not an assigned examiner of this exam.' } },
+  { code: C.EXAM_NOT_STARTED, message: { ar: 'لم يبدأ الاختبار بعد.', en: 'The exam has not started yet.' } },
+  { code: C.EXAM_SUBMISSION_CLOSED, message: { ar: 'لا يمكن تسجيل النتائج الآن: يُسمح بتسجيل النتائج أثناء الاختبار فقط.', en: 'Results cannot be recorded now: they can only be recorded while the exam is in progress.' } },
+  { code: C.EXAM_STUDENT_NOT_TARGET, message: { ar: 'الطالب ليس من طلاب هذا الاختبار.', en: 'The student is not one of this exam\'s students.' } },
+  { code: C.EXAM_RESULT_ALREADY_RECORDED, message: { ar: 'تم تسجيل نتيجة هذا الطالب بالفعل ولا يمكن تغييرها.', en: 'This student\'s result was already recorded and cannot be changed.' } },
+  { code: C.EXAM_LOCKED, message: { ar: 'تم إغلاق هذا الاختبار ولا يمكن تعديله.', en: 'This exam is closed and cannot be modified.' } },
+  { code: C.EXAM_CONCURRENT_CHANGE, message: { ar: 'تم تغيير الاختبار في الوقت نفسه من طلب آخر. أعد المحاولة.', en: 'The exam was changed at the same time by another request. Try again.' } },
+];

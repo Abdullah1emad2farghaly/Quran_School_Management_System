@@ -1,4 +1,4 @@
-import type { TransactionContext } from '../../../00-shared-kernel/public';
+import type { PageRequest, TransactionContext } from '../../../00-shared-kernel/public';
 import type { Organization } from '../../domain/entities/organization';
 
 export interface OrganizationRepository {
@@ -15,6 +15,11 @@ export interface OrganizationRepository {
    * the country does not exist (foreign key). This is the ONLY update path of `organizations`.
    */
   assignCountryIfUnset(organizationId: string, countryId: string, updatedAt: Date, tx: TransactionContext): Promise<boolean>;
+  /**
+   * The organizations that may receive a school submission (Module 16 rule: the organization must be ACTIVE and have a country),
+   * ordered by name then id, one page. Read-only; used by the public registration lookup.
+   */
+  listSubmissionEligible(request: PageRequest, tx?: TransactionContext): Promise<{ readonly items: Organization[]; readonly total: number }>;
   /** Next free code sequence (1 for the first organization). */
   nextCodeSequence(tx?: TransactionContext): Promise<number>;
 }

@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type RequestHandler, type Resp
 import { body, param, type ValidationChain } from 'express-validator';
 import { parseListQuery, sendCreated, sendPaginated, sendSuccess, validate, type ListQuerySpec } from '../../../04-validation-api/public';
 import type { RequirePermission } from '../../../12-authorization-engine/public';
+import { PARENT_TARGET_TYPE } from '../../../17-parents/public';
 import { SCHOOL_TARGET_TYPE } from '../../../16-schools/public';
 import { STUDENT_TARGET_TYPE, StudentPermissions } from '../../application/services/student-authorization';
 import { STUDENT_STATUSES } from '../../domain/value-objects/student-status';
@@ -46,6 +47,7 @@ function listRequest(req: Request): StudentListRequest {
  *   POST   /students                      students.student.create             SCHOOL_MANAGER of `schoolId`             register a Student (Parent of the school, global National ID)
  *   GET    /students/mine                 students.student.list-own-children  PARENT                                   the caller's own children (token-derived, no id accepted)
  *   GET    /students/schools/:schoolId    students.student.list               SCHOOL_MANAGER of the school             the Students of the school (paginated, status filter)
+ *   GET    /students/parents/:parentId    students.student.list-by-parent     SCHOOL_MANAGER of a school the Parent is linked to   the Parent's Students, only in the schools the caller manages
  *   GET    /students/:id                  students.student.read               SCHOOL_MANAGER of the school | PARENT of the student | TEACHER of a group the student is in
  *   GET    /students/:id/history          students.student.read-history       SCHOOL_MANAGER of the student's school   the change history
  *   PATCH  /students/:id                  students.student.update             SCHOOL_MANAGER of the student's school   correct the name and/or join date
@@ -63,6 +65,8 @@ export function createStudentRouter(deps: StudentRouterDeps): Router {
   const guard = deps.requirePermission;
   const onStudent = { target: (req: Request) => ({ type: STUDENT_TARGET_TYPE, id: req.params.id as string }) };
   const onSchoolParam = { target: (req: Request) => ({ type: SCHOOL_TARGET_TYPE, id: req.params.schoolId as string }) };
+  const onParentParam = { target: (req: Request) => ({ type: PARENT_TARGET_TYPE, id: req.params.parentId as string }) };
+  const parentIdParam = param('parentId').isUUID().withMessage('INVALID_VALUE');
   const studentId = param('id').isUUID().withMessage('INVALID_VALUE');
   const schoolIdParam = param('schoolId').isUUID().withMessage('INVALID_VALUE');
   const reason = optionalText('reason', 500);
@@ -89,6 +93,14 @@ export function createStudentRouter(deps: StudentRouterDeps): Router {
     validate(schoolIdParam),
     guard(StudentPermissions.LIST, onSchoolParam),
     handle(async (req, res) => sendPaginated(res, await h.listStudentsOfSchool(req.params.schoolId as string, listRequest(req)))),
+  );
+
+  router.get(
+    '/parents/:parentId',
+    auth,
+    validate(parentIdParam),
+    guard(StudentPermissions.LIST_BY_PARENT, onParentParam),
+    handle(async (req, res) => sendPaginated(res, await h.listParentStudents(sessionAuthRequired(req), req.params.parentId as string, listRequest(req)))),
   );
 
   router.get(

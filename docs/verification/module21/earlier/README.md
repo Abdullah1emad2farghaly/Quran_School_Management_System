@@ -1,0 +1,5 @@
+# Earlier Module 21 verification artifacts (preserved, not repeated)
+
+* `Module21-Data-Verification-Report.md`, `verify_module21_sources.py`, `verification_output.txt`: the source investigation. Its findings about the official package (checksum, 114 surahs, 6236 ayahs, CSV == DOCX layout for every ayah, the `jozz` conflicts, the 15:49 marker) stand and were not re-derived. **Its comparisons with other sources are historical: no code and no dataset uses them.**
+* `verify_real_dataset_api.ts`, `real_dataset_api_output.txt`: the first API check. Its limits: in-memory repository only, a placeholder checksum (`'f'.repeat(64)`), sampled responses. It is **superseded by `../verify-module21-real-dataset.ts`** (run with `npm run verify:quran`), which repeats every one of its checks with the real checksums and extends them; the placeholder is gone. (The old script's absolute import paths refer to the build sandbox.)
+* `Module21-Verification-Report-0.28.1-superseded.md`: the previous round's final report, superseded by the 0.29.0 report after the final source decisions.

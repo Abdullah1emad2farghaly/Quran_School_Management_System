@@ -47,7 +47,10 @@ describe('documented authentication matches the real application', () => {
   });
 
   it('never demands a token from a public or optional-login operation', async () => {
-    const openOps = operations.filter((o) => o.operation['x-authorization']?.authentication !== 'required' && o.path !== '/health/ready');
+    // Like /health/ready, the two parameterless public lookups read the database as soon as they run, so this suite (no database) skips them here;
+    // their anonymous access is proven against the real routers in tests/unit/geography/geography-lookup-api.test.ts and tests/unit/organization/organization-lookup.test.ts.
+    const needsDatabase = new Set(['/health/ready', '/geography/countries', '/organizations/lookup']);
+    const openOps = operations.filter((o) => o.operation['x-authorization']?.authentication !== 'required' && !needsDatabase.has(o.path));
     expect(openOps.length).toBeGreaterThan(0);
     for (const o of openOps) {
       const res = await (request(app) as unknown as Record<string, (p: string) => request.Test>)[o.method]!(concretePath(o.path)).send({});

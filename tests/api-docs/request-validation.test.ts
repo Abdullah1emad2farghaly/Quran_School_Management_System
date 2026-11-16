@@ -9,11 +9,23 @@ import { registerAllErrorMessages } from '../../src/app/bootstrap/register-error
 import { buildApiDocument } from '../../src/app/openapi/api-documents';
 import { createAuthRouter } from '../../src/modules/10-sessions-jwt/public';
 import { createRecoveryRouter } from '../../src/modules/11-otp-password-recovery/public';
+import { createGeographyRouter } from '../../src/modules/14-geography/public';
 import { createOrganizationRouter, createSchoolRouter } from '../../src/modules/16-schools/public';
 import { createParentRouter } from '../../src/modules/17-parents/public';
 import { createTeacherRouter } from '../../src/modules/18-teachers/public';
+import { createSubscriptionRouter } from '../../src/modules/33-subscriptions/public';
 import { createStudentRouter } from '../../src/modules/19-students/public';
 import { createGroupRouter } from '../../src/modules/20-groups/public';
+import { createQuranRouter } from '../../src/modules/21-quran-structure/public';
+import { createScheduleRouter } from '../../src/modules/23-group-schedules/public';
+import { createSessionRouter } from '../../src/modules/24-sessions/public';
+import { createAttendanceRouter } from '../../src/modules/26-attendance/public';
+import { createMemorizationRouter } from '../../src/modules/27-memorization/public';
+import { createRevisionRouter } from '../../src/modules/28-revision/public';
+import { createEvaluationRouter } from '../../src/modules/29-evaluations/public';
+import { createExamRouter } from '../../src/modules/30-exams/public';
+import { createNotificationRouter } from '../../src/modules/31-notifications-core/public';
+import { createExcelImportRouter } from '../../src/modules/36-excel-import/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -31,8 +43,21 @@ const stubService = new Proxy({}, {
     throw new AppError('SCHOOL_NOT_FOUND', 'NOT_FOUND');
   },
 });
+/** The Web Push service has ONE synchronous method (`publicKey()`): the generic stub would hand back an un-awaited rejected promise for it. Everything else is asynchronous like the generic stub. */
+const pushStub = new Proxy({}, {
+  get: (_target, property) =>
+    property === 'publicKey'
+      ? () => {
+          reached = true;
+          throw new AppError('SCHOOL_NOT_FOUND', 'NOT_FOUND');
+        }
+      : async () => {
+          reached = true;
+          throw new AppError('SCHOOL_NOT_FOUND', 'NOT_FOUND');
+        },
+});
 const stubAuth: RequestHandler = (req, _res, next) => {
-  req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1', mustChangePassword: false };
+  req.auth = { userId: '3f6b1d52-8a4e-4c1b-9d77-2b6f0c9a1e10', sessionId: 'sess-1', mustChangePassword: false, activeRole: null };
   next();
 };
 const pass: RequestHandler = (_req, _res, next) => next();
@@ -42,14 +67,26 @@ function buildApp() {
   app.use(requestContextMiddleware);
   app.use(express.json({ limit: '1mb' }));
   const getService = (() => stubService) as never;
+  app.use('/geography', createGeographyRouter({ getGeography: getService, getOrganizations: getService } as never));
   app.use('/auth/password-recovery', createRecoveryRouter({ getService } as never));
   app.use('/auth', createAuthRouter({ getService, requireAuthentication: stubAuth } as never));
   app.use('/organizations', createOrganizationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
   app.use('/schools', createSchoolRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass, publicSubmissionLimit: pass } as never));
   app.use('/parents', createParentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/teachers', createTeacherRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getService, getCollectors: getService, getGroups: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/students', createStudentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/groups', createGroupRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/group-schedules', createScheduleRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/attendance', createAttendanceRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/memorization', createMemorizationRouter({ getService, getQuran: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/revision', createRevisionRouter({ getService, getQuran: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/evaluations', createEvaluationRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/exams', createExamRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/notifications', createNotificationRouter({ getNotifications: getService, getPush: (() => pushStub) as never, requireAuthentication: stubAuth } as never));
+  app.use('/excel-imports', createExcelImportRouter({ getService, getSchools: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/sessions', createSessionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
@@ -117,14 +154,22 @@ describe('documented requests agree with the real validators', () => {
     expect(operations.length).toBeGreaterThanOrEqual(21);
     for (const o of operations) {
       const params = (o.operation.parameters ?? []) as OpenAPIV3.ParameterObject[];
-      const query = params.filter((p) => p.in === 'query' && p.example !== undefined).map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(String(p.example))}`).join('&');
-      const url = `${pathWith(o)}${query ? `?${query}` : ''}`;
+      const withExamples = params.filter((p) => p.in === 'query' && p.example !== undefined);
+      const queryOf = (list: OpenAPIV3.ParameterObject[]): string => list.map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(String(p.example))}`).join('&');
+      // Query parameters documented as "Mutually exclusive" (Module 14: countryId / organizationId) must never be sent together: one request per alternative.
+      const exclusive = withExamples.filter((p) => /mutually exclusive/i.test(p.description ?? ''));
+      const queries = exclusive.length > 1 ? exclusive.map((keep) => queryOf(withExamples.filter((p) => !exclusive.includes(p) || p === keep))) : [queryOf(withExamples)];
+      // A multipart file upload (Module 36) cannot be sent as JSON: its own conformance test exercises it with a real file.
+      if ((o.operation.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['multipart/form-data']) continue;
       const examples = Object.entries(((o.operation.requestBody as OpenAPIV3.RequestBodyObject | undefined)?.content?.['application/json']?.examples ?? {}) as Record<string, OpenAPIV3.ExampleObject>);
       const bodies: Array<[string, unknown]> = examples.length > 0 ? examples.map(([name, e]) => [name, e.value]) : [['(no body)', undefined]];
-      for (const [name, body] of bodies) {
-        reached = false;
-        const res = await send(app, o, url, body);
-        expect(reached, `${o.method.toUpperCase()} ${o.path} (${name}) was stopped by validation: ${res.status} ${JSON.stringify(res.body)}`).toBe(true);
+      for (const query of queries) {
+        const url = `${pathWith(o)}${query ? `?${query}` : ''}`;
+        for (const [name, body] of bodies) {
+          reached = false;
+          const res = await send(app, o, url, body);
+          expect(reached, `${o.method.toUpperCase()} ${o.path}${query ? `?${query}` : ''} (${name}) was stopped by validation: ${res.status} ${JSON.stringify(res.body)}`).toBe(true);
+        }
       }
     }
   });
