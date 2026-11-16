@@ -7,7 +7,10 @@ import { registerExamEventHandlers, startExamScheduler, stopExamScheduler } from
 import { registerNotificationEventHandlers, startPushDeliveryScheduler, stopPushDeliveryScheduler } from '../config/notifications';
 import { registerNotificationRuleHandlers, startReminderScheduler, stopReminderScheduler } from '../config/notification-rules';
 import { startOutbox, stopOutbox } from '../config/outbox';
+<<<<<<< HEAD
 import { startRealtime, stopRealtime } from '../config/realtime';
+=======
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 import { registerSessionEventHandlers, startSessionExpiryScheduler, stopSessionExpiryScheduler } from '../config/sessions';
 import { createApp } from './bootstrap/create-app';
 

@@ -7,7 +7,10 @@ import { DEFAULT_NOTIFICATION_LOCALE, NOTIFICATION_LIMITS } from '../../domain/v
 import type { NotificationDto, NotifyInput, NotifyResult } from '../dto/notification-dto';
 import type { AccountLanguageResolver } from '../ports/account-language-resolver';
 import type { NewPushDelivery, NotificationRecord, NotificationRepository } from '../ports/notification-repository';
+<<<<<<< HEAD
 import type { RealtimeNotificationGateway } from '../ports/realtime-gateway';
+=======
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 import type { NotificationTemplate, NotificationTemplateRegistry } from './template-registry';
 
 export interface NotificationServiceDeps {
@@ -18,6 +21,7 @@ export interface NotificationServiceDeps {
   readonly language: AccountLanguageResolver;
   /** False when no VAPID keys are configured: notifications are still created, no push delivery is queued. */
   readonly pushEnabled: boolean;
+<<<<<<< HEAD
   /** Real-time delivery to connected browsers (optional; without it behavior is exactly the Web Push behavior). It never changes what is stored or queued. */
   readonly realtime?: RealtimeNotificationGateway;
   /** Called when a real-time emission fails (it never fails the notification). */
@@ -27,6 +31,10 @@ export interface NotificationServiceDeps {
 /** Waits before checking that a notification created inside a CALLER's transaction has been committed (the service cannot see that commit). Total about 5 seconds. */
 const COMMIT_CHECK_DELAYS_MS: readonly number[] = [50, 250, 700, 1500, 2500];
 
+=======
+}
+
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
 interface Prepared {
   readonly template: NotificationTemplate;
   readonly recipients: readonly string[];
@@ -69,6 +77,7 @@ export class NotificationService {
   async notify(input: NotifyInput, tx?: TransactionContext): Promise<NotifyResult> {
     const prepared = this.prepare(input);
     if (prepared.recipients.length === 0) return { created: [], duplicates: [] };
+<<<<<<< HEAD
     if (tx) {
       // The caller's transaction decides when this becomes visible, so a real-time event is emitted only once the row can be read from outside it.
       const { result, records } = await this.createAll(prepared, tx);
@@ -78,6 +87,9 @@ export class NotificationService {
     const { result, records } = await this.deps.unitOfWork.run((t) => this.createAll(prepared, t));
     this.publishNow(records); // the transaction above has committed
     return result;
+=======
+    return tx ? this.createAll(prepared, tx) : this.deps.unitOfWork.run((t) => this.createAll(prepared, t));
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   }
 
   async list(userId: string, query: ListQuery): Promise<PageResult<NotificationDto>> {
@@ -139,6 +151,7 @@ export class NotificationService {
     return { template, recipients, dedupKey, params: input.params, dataJson };
   }
 
+<<<<<<< HEAD
   /** Emits to the account's live connections right away (the notification is already committed). Never throws. */
   private publishNow(records: readonly NotificationRecord[]): void {
     const gateway = this.deps.realtime;
@@ -189,6 +202,12 @@ export class NotificationService {
     const created: string[] = [];
     const duplicates: string[] = [];
     const records: NotificationRecord[] = [];
+=======
+  private async createAll(p: Prepared, tx: TransactionContext): Promise<NotifyResult> {
+    const { repository, clock, language, pushEnabled } = this.deps;
+    const created: string[] = [];
+    const duplicates: string[] = [];
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
     for (const recipient of p.recipients) {
       const now = clock.now();
       // 1. The once-only key FIRST: a duplicate (retried event, repeated reminder, or a notification the user already deleted) creates nothing.
@@ -217,8 +236,13 @@ export class NotificationService {
         if (deliveries.length > 0) await repository.insertDeliveries(deliveries, tx);
       }
       created.push(recipient);
+<<<<<<< HEAD
       records.push(record);
     }
     return { result: { created, duplicates }, records };
+=======
+    }
+    return { created, duplicates };
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
   }
 }

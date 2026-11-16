@@ -641,6 +641,7 @@ Requested by the project owner. **Verified:** `npm test` 205 files / 2363 passed
 - **Tests:** new `tests/integration/active-role.test.ts` (23) and `tests/db/auth-session-active-role.test.ts` (9, real MariaDB); existing tests that used a two-role account without choosing a role now select it; the boundary, conformance and request-validation tests were extended for the new operations (the generic validation test now sends mutually exclusive query parameters one at a time).
 - **Docs:** OpenAPI (`AuthTokens.activeRole`, `ActiveRoleResult`, `switchRole`, `listParentStudents`), `SESSIONS.md`, `AUTHORIZATION.md`.
 
+<<<<<<< HEAD
 ## 0.47.0 — Real-time notifications over Socket.IO (backend only; IMPLEMENTED, NOT verified: no network or database in the authoring environment)
 Requested by the project owner. Module 31 status is unchanged (COMPLETED); this is an additive channel. **Not run:** `npm install` (so `socket.io` and `socket.io-client` are NOT installed and `package-lock.json` is NOT updated), typecheck, build, `npm test`, `npm run api:verify`, `npm run test:db`.
 - **New dependencies (`package.json`):** `socket.io ^4.8.1` (dependency), `socket.io-client ^4.8.1` (devDependency, integration test only). Run `npm install` to install them and refresh the lock file.
@@ -652,3 +653,5 @@ Requested by the project owner. Module 31 status is unchanged (COMPLETED); this 
 - **Configuration:** `SOCKET_IO_ENABLED`, `SOCKET_IO_PATH`, `SOCKET_IO_PING_INTERVAL_MS`, `SOCKET_IO_PING_TIMEOUT_MS`, `SOCKET_IO_MAX_CONNECTIONS_PER_USER` (`.env.example`, `docs/CONFIGURATION.md`). Composition: `src/config/realtime.ts`, `src/config/notifications.ts`; `src/app/server.ts` starts it on the existing HTTP server and stops it on shutdown.
 - **Tests written (not executed):** `tests/unit/notifications/realtime.test.ts`, `tests/unit/configuration/config-realtime.test.ts`, `tests/integration/realtime-notifications.test.ts` (real Socket.IO server and clients).
 - **Docs:** `docs/NOTIFICATIONS.md` (new section with behaviour, client sketch and limits).
+=======
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc

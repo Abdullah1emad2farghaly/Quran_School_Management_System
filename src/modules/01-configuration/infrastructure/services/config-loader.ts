@@ -255,7 +255,10 @@ export function loadConfig(source: EnvSource): AppConfig {
     otp,
     apiDocs,
     push,
+<<<<<<< HEAD
     realtime,
+=======
+>>>>>>> a54dc5556dea92ae5f6404ebe5d964eb0b936ccc
     redis,
     files,
   });
