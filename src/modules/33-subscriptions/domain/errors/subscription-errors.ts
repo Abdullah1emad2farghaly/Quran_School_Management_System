@@ -19,8 +19,8 @@ export const SubscriptionErrorCodes = {
   SUBSCRIPTION_ALREADY_PAID: 'SUBSCRIPTION_ALREADY_PAID',
   /** Master Specification §59: a newer month cannot be paid until every older month is PAID or WAIVED. */
   OLDER_UNPAID_SUBSCRIPTIONS_EXIST: 'OLDER_UNPAID_SUBSCRIPTIONS_EXIST',
-  /** PAID -> UNPAID is only possible for the CURRENT calendar month (Africa/Cairo); every other month is refused whatever its status. */
-  SUBSCRIPTION_MONTH_NOT_CURRENT: 'SUBSCRIPTION_MONTH_NOT_CURRENT',
+  /** A PAID <-> UNPAID transition was requested outside Module 34's payment workflow (no transaction or no payment id). Internal contract misuse, never reachable over HTTP. */
+  SUBSCRIPTION_TRANSITION_NOT_ALLOWED: 'SUBSCRIPTION_TRANSITION_NOT_ALLOWED',
   /** Only a PAID subscription can be changed to UNPAID (a WAIVED one cannot). */
   SUBSCRIPTION_NOT_PAID: 'SUBSCRIPTION_NOT_PAID',
   /** The subscription is already UNPAID: an unnecessary transition. */
@@ -55,7 +55,7 @@ const KIND: Record<SubscriptionErrorCode, ErrorKind> = {
   SUBSCRIPTION_NOT_UNPAID: 'BUSINESS_RULE',
   SUBSCRIPTION_ALREADY_PAID: 'CONFLICT',
   OLDER_UNPAID_SUBSCRIPTIONS_EXIST: 'BUSINESS_RULE',
-  SUBSCRIPTION_MONTH_NOT_CURRENT: 'BUSINESS_RULE',
+  SUBSCRIPTION_TRANSITION_NOT_ALLOWED: 'FORBIDDEN',
   SUBSCRIPTION_NOT_PAID: 'BUSINESS_RULE',
   SUBSCRIPTION_ALREADY_UNPAID: 'CONFLICT',
   NEWER_PAID_SUBSCRIPTIONS_EXIST: 'BUSINESS_RULE',

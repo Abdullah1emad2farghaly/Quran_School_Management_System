@@ -10,6 +10,14 @@ declare module 'express-serve-static-core' {
   }
 }
 
+const MAX_USER_AGENT_LENGTH = 255;
+/** Header text for the audit trail: control characters removed, trimmed, truncated; undefined when empty. */
+export function sanitizeUserAgent(raw: string | undefined): string | undefined {
+  // eslint-disable-next-line no-control-regex
+  const clean = (raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, MAX_USER_AGENT_LENGTH);
+  return clean === '' ? undefined : clean;
+}
+
 export function requestContextMiddleware(req: Request, res: Response, next: NextFunction): void {
   const requestId = resolveRequestId(req.header('x-request-id') ?? req.header('x-correlation-id'));
   // Explicit user preference is added when the identity modules exist.
@@ -22,5 +30,7 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
   res.setHeader('X-Request-Id', requestId);
   res.setHeader('Content-Language', locale);
   res.vary('Accept-Language');
-  requestContext.run({ requestId, locale }, next);
+  const ipAddress = typeof req.ip === 'string' && req.ip !== '' ? req.ip.slice(0, 64) : undefined;
+  const userAgent = sanitizeUserAgent(req.header('user-agent'));
+  requestContext.run({ requestId, locale, ...(ipAddress ? { ipAddress } : {}), ...(userAgent ? { userAgent } : {}) }, next);
 }

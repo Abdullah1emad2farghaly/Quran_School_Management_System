@@ -103,15 +103,12 @@ export class Subscription extends AggregateRoot<string> {
   }
 
   /**
-   * PAID -> UNPAID, only during the subscription's own calendar month (`currentMonth`, Africa/Cairo, taken from the server clock by the caller). Checks in this order:
-   *  1. the month is not the current one (a past month, or an impossible future one) -> SUBSCRIPTION_MONTH_NOT_CURRENT, whatever the status;
-   *  2. already UNPAID -> SUBSCRIPTION_ALREADY_UNPAID (an unnecessary transition);
-   *  3. any other status (WAIVED) -> SUBSCRIPTION_NOT_PAID.
-   * The paid audit columns are cleared (the database CHECK requires an UNPAID row to have none); the history of who paid and who reverted lives in the outbox events
-   * `SubscriptionPaid` and `SubscriptionMarkedUnpaid`. This is a status correction, NOT the payment reversal workflow of Module 34, and it never publishes `SubscriptionPaid`.
+   * PAID -> UNPAID for the payment REVERSAL workflow of Module 34 (Master Specification §60). It has NO current-month restriction: a reversal is a
+   * recorded, audited correction of a payment (reason, actor, timestamp), owned by Module 34. Only a PAID subscription can be reverted (already UNPAID ->
+   * SUBSCRIPTION_ALREADY_UNPAID, WAIVED -> SUBSCRIPTION_NOT_PAID). The paid audit columns are cleared (the database CHECK requires it); the history lives in Module 34's payment row
+   * and in the outbox events. It publishes `SubscriptionMarkedUnpaid` (never `SubscriptionPaid`).
    */
-  markUnpaid(actorId: string, currentMonth: string, clock: Clock): void {
-    if (this.state.month !== currentMonth) throw subscriptionError('SUBSCRIPTION_MONTH_NOT_CURRENT');
+  revertPayment(actorId: string, clock: Clock): void {
     if (this.state.status === 'UNPAID') throw subscriptionError('SUBSCRIPTION_ALREADY_UNPAID');
     if (this.state.status !== 'PAID') throw subscriptionError('SUBSCRIPTION_NOT_PAID');
     this.state = { ...this.state, status: 'UNPAID', paidAt: null, paidBy: null, updatedAt: clock.now() };

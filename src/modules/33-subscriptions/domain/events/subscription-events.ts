@@ -2,9 +2,9 @@
  * Subscription domain events (outbox, same transaction as the change). Payloads carry identifiers ONLY: no names, phones or amounts.
  *  - SubscriptionsCreated:  a successful BULK creation for a school and month (`batchId` identifies the run; the subscriptions are read through the public contract).
  *  - SubscriptionCreated:   ONE individual subscription created after the bulk creation (a student who joined later).
- *  - SubscriptionPaid:      a subscription moved UNPAID -> PAID through the `markPaid` contract.
+ *  - SubscriptionPaid:      a subscription moved UNPAID -> PAID inside Module 34's payment workflow (state event only; the Parent notification is triggered by Module 34's `PaymentRecorded`).
  *  - SubscriptionWaived:    a subscription moved UNPAID -> WAIVED by the School Manager.
- *  - SubscriptionMarkedUnpaid: a PAID subscription of the CURRENT month was changed back to UNPAID (history only: no module notifies anyone about it, and it is NOT `SubscriptionPaid`).
+ *  - SubscriptionMarkedUnpaid: a PAID subscription went back to UNPAID because Module 34 reversed its payment (history only: no module notifies anyone about it, and it is NOT `SubscriptionPaid`).
  *  - CollectorSchoolLinked / CollectorSchoolLinkRemoved: the Subscription Collector-to-School relationship (with history).
  */
 export const SubscriptionEventTypes = {

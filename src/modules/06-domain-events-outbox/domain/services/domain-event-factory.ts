@@ -29,7 +29,7 @@ export function assertValidDomainEvent(event: DomainEvent): void {
 }
 
 /**
- * Creates a domain event with a new eventId. Metadata (requestId, actorUserId)
+ * Creates a domain event with a new eventId. Metadata (requestId, actorUserId, ipAddress, userAgent)
  * is taken from the current request context unless provided.
  */
 export function createDomainEvent<TPayload>(
@@ -40,6 +40,8 @@ export function createDomainEvent<TPayload>(
   const metadata: DomainEventMetadata = input.metadata ?? {
     ...(context?.requestId ? { requestId: context.requestId } : {}),
     ...(context?.actorUserId ? { actorUserId: context.actorUserId } : {}),
+    ...(context?.ipAddress ? { ipAddress: context.ipAddress } : {}),
+    ...(context?.userAgent ? { userAgent: context.userAgent } : {}),
   };
   const event: DomainEvent<TPayload> = {
     eventId: newUuid(),

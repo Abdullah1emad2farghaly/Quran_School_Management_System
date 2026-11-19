@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AppError } from '../../../src/modules/00-shared-kernel/public';
+import { AppError, newUuid } from '../../../src/modules/00-shared-kernel/public';
 import { createSubscriptionsHarness } from '../../helpers/subscriptions-harness';
 
 const codeOf = (p: Promise<unknown>) => p.then(() => 'NO_ERROR', (e: unknown) => (e instanceof AppError ? e.code : `NOT_APP_ERROR:${String(e)}`));
@@ -162,7 +162,7 @@ describe('waiving', () => {
     const [a, b] = (await t.subscriptions.listSubscriptionsOfSchool({ schoolId: school.id, page: { page: 1, pageSize: 5 } })).items;
     await t.subscriptions.waiveSubscription(a!.id, manager.id);
     expect(await codeOf(t.subscriptions.waiveSubscription(a!.id, manager.id))).toBe('SUBSCRIPTION_NOT_UNPAID');
-    await t.subscriptions.markPaid(b!.id, manager.id);
+    await t.payViaWorkflow(b!.id, manager.id);
     expect(await codeOf(t.subscriptions.waiveSubscription(b!.id, manager.id))).toBe('SUBSCRIPTION_NOT_UNPAID');
     expect(await codeOf(t.subscriptions.waiveSubscription('00000000-0000-4000-8000-000000000000', manager.id))).toBe('SUBSCRIPTION_NOT_FOUND');
   });
@@ -181,21 +181,21 @@ async function threeMonths() {
   return { ...s, ids, student: students[0]! };
 }
 
-describe('the OLDEST-UNPAID RULE (Master Specification §59) behind markPaid', () => {
+describe('the OLDEST-UNPAID RULE (Master Specification §59) behind the payment transition contract', () => {
   it('refuses to pay a newer month while ANY older month is still UNPAID', async () => {
     const { t, manager, ids } = await threeMonths();
-    expect(await codeOf(t.subscriptions.markPaid(ids['2026-10']!, manager.id))).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST');
-    expect(await codeOf(t.subscriptions.markPaid(ids['2026-11']!, manager.id))).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST');
+    expect(await codeOf(t.payViaWorkflow(ids['2026-10']!, manager.id))).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST');
+    expect(await codeOf(t.payViaWorkflow(ids['2026-11']!, manager.id))).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST');
     expect(t.events('SubscriptionPaid')).toHaveLength(0);
     expect(t.subscriptionRepo.rows.get(ids['2026-11']!)!.status).toBe('UNPAID');
   });
 
   it('allows the OLDEST unpaid month first, then the next, in order', async () => {
     const { t, manager, ids } = await threeMonths();
-    expect((await t.subscriptions.markPaid(ids['2026-09']!, manager.id)).status).toBe('PAID');
-    expect(await codeOf(t.subscriptions.markPaid(ids['2026-11']!, manager.id))).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST'); // October is still unpaid
-    expect((await t.subscriptions.markPaid(ids['2026-10']!, manager.id)).status).toBe('PAID');
-    expect((await t.subscriptions.markPaid(ids['2026-11']!, manager.id)).status).toBe('PAID');
+    expect((await t.payViaWorkflow(ids['2026-09']!, manager.id)).status).toBe('PAID');
+    expect(await codeOf(t.payViaWorkflow(ids['2026-11']!, manager.id))).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST'); // October is still unpaid
+    expect((await t.payViaWorkflow(ids['2026-10']!, manager.id)).status).toBe('PAID');
+    expect((await t.payViaWorkflow(ids['2026-11']!, manager.id)).status).toBe('PAID');
     expect(t.events('SubscriptionPaid')).toHaveLength(3);
   });
 
@@ -203,14 +203,14 @@ describe('the OLDEST-UNPAID RULE (Master Specification §59) behind markPaid', (
     const { t, manager, ids } = await threeMonths();
     await t.subscriptions.waiveSubscription(ids['2026-09']!, manager.id);
     await t.subscriptions.waiveSubscription(ids['2026-10']!, manager.id);
-    expect((await t.subscriptions.markPaid(ids['2026-11']!, manager.id)).status).toBe('PAID');
+    expect((await t.payViaWorkflow(ids['2026-11']!, manager.id)).status).toBe('PAID');
   });
 
   it('a mix of PAID and WAIVED older months is enough', async () => {
     const { t, manager, ids } = await threeMonths();
-    await t.subscriptions.markPaid(ids['2026-09']!, manager.id);
+    await t.payViaWorkflow(ids['2026-09']!, manager.id);
     await t.subscriptions.waiveSubscription(ids['2026-10']!, manager.id);
-    expect((await t.subscriptions.markPaid(ids['2026-11']!, manager.id)).status).toBe('PAID');
+    expect((await t.payViaWorkflow(ids['2026-11']!, manager.id)).status).toBe('PAID');
   });
 
   it('a newer month never blocks an older one, and only the SAME student\'s months count', async () => {
@@ -219,9 +219,9 @@ describe('the OLDEST-UNPAID RULE (Master Specification §59) behind markPaid', (
     const other = await t.newStudent(school.id, manager.id);
     await t.subscriptions.createIndividualSubscription(school.id, other.id, manager.id);
     const otherSub = (await t.subscriptions.listSubscriptionsOfSchool({ schoolId: school.id, studentId: other.id, page: { page: 1, pageSize: 5 } })).items[0]!;
-    expect((await t.subscriptions.markPaid(otherSub.id, manager.id)).status).toBe('PAID');
+    expect((await t.payViaWorkflow(otherSub.id, manager.id)).status).toBe('PAID');
     // the first student's oldest month can be paid even though newer ones exist
-    expect((await t.subscriptions.markPaid(ids['2026-09']!, manager.id)).status).toBe('PAID');
+    expect((await t.payViaWorkflow(ids['2026-09']!, manager.id)).status).toBe('PAID');
   });
 
   it('a month the student never had a subscription for does not block (only existing older months count)', async () => {
@@ -235,26 +235,26 @@ describe('the OLDEST-UNPAID RULE (Master Specification §59) behind markPaid', (
     t.setNow('2026-11-10T09:00:00Z');
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
     const [novSub] = (await t.subscriptions.listSubscriptionsOfSchool({ schoolId: school.id, studentId: late.id, month: '2026-11', page: { page: 1, pageSize: 5 } })).items;
-    expect((await t.subscriptions.markPaid(novSub!.id, manager.id)).status).toBe('PAID'); // no Sep/Oct rows for `late`: nothing older is unpaid
+    expect((await t.payViaWorkflow(novSub!.id, manager.id)).status).toBe('PAID'); // no Sep/Oct rows for `late`: nothing older is unpaid
   });
 
-  it('one successful payment per subscription: a second markPaid is refused and publishes nothing', async () => {
+  it('one successful payment per subscription: a second payment transition is refused and publishes nothing', async () => {
     const { t, manager, ids } = await threeMonths();
-    await t.subscriptions.markPaid(ids['2026-09']!, manager.id);
-    expect(await codeOf(t.subscriptions.markPaid(ids['2026-09']!, manager.id))).toBe('SUBSCRIPTION_ALREADY_PAID');
+    await t.payViaWorkflow(ids['2026-09']!, manager.id);
+    expect(await codeOf(t.payViaWorkflow(ids['2026-09']!, manager.id))).toBe('SUBSCRIPTION_ALREADY_PAID');
     expect(t.events('SubscriptionPaid')).toHaveLength(1);
   });
 
   it('a WAIVED subscription cannot be paid, and an unknown one is not found', async () => {
     const { t, manager, ids } = await threeMonths();
     await t.subscriptions.waiveSubscription(ids['2026-09']!, manager.id);
-    expect(await codeOf(t.subscriptions.markPaid(ids['2026-09']!, manager.id))).toBe('SUBSCRIPTION_NOT_UNPAID');
-    expect(await codeOf(t.subscriptions.markPaid('00000000-0000-4000-8000-000000000000', manager.id))).toBe('SUBSCRIPTION_NOT_FOUND');
+    expect(await codeOf(t.payViaWorkflow(ids['2026-09']!, manager.id))).toBe('SUBSCRIPTION_NOT_UNPAID');
+    expect(await codeOf(t.payViaWorkflow('00000000-0000-4000-8000-000000000000', manager.id))).toBe('SUBSCRIPTION_NOT_FOUND');
   });
 
   it('publishes SubscriptionPaid with identifiers only (no name, no amount) and records who and when', async () => {
     const { t, school, manager, student, ids } = await threeMonths();
-    await t.subscriptions.markPaid(ids['2026-09']!, manager.id);
+    await t.payViaWorkflow(ids['2026-09']!, manager.id);
     const [event] = t.events('SubscriptionPaid');
     expect(JSON.parse(event!.payload)).toEqual({ subscriptionId: ids['2026-09'], studentId: student.id, schoolId: school.id, organizationId: t.org.id, month: '2026-09', actorId: manager.id });
     const row = t.subscriptionRepo.rows.get(ids['2026-09']!)!;
@@ -265,7 +265,7 @@ describe('the OLDEST-UNPAID RULE (Master Specification §59) behind markPaid', (
   it('joins the CALLER\'S transaction when one is given (Module 34 pays and marks in one unit of work), and rolls back with it', async () => {
     const { t, manager, ids } = await threeMonths();
     const failing = t.unitOfWork.run(async (tx) => {
-      await t.subscriptions.markPaid(ids['2026-09']!, manager.id, tx);
+      await t.paymentTransitions.applyPaymentRecorded({ subscriptionId: ids['2026-09']!, paymentId: newUuid(), actorId: manager.id }, tx);
       throw new Error('payment insert failed');
     });
     await expect(failing).rejects.toThrow('payment insert failed');
@@ -274,10 +274,29 @@ describe('the OLDEST-UNPAID RULE (Master Specification §59) behind markPaid', (
   });
 });
 
+describe('the transition contract is usable ONLY inside a payment workflow', () => {
+  it('refuses a call without a transaction or without a Module 34 payment id, changing nothing', async () => {
+    const { t, manager, ids } = await threeMonths();
+    const id = ids['2026-09']!;
+    const noTx = t.paymentTransitions.applyPaymentRecorded({ subscriptionId: id, paymentId: newUuid(), actorId: manager.id }, undefined as never);
+    expect(await codeOf(noTx)).toBe('SUBSCRIPTION_TRANSITION_NOT_ALLOWED');
+    const badId = t.unitOfWork.run((tx) => t.paymentTransitions.applyPaymentRecorded({ subscriptionId: id, paymentId: 'not-a-uuid', actorId: manager.id }, tx));
+    expect(await codeOf(badId)).toBe('SUBSCRIPTION_TRANSITION_NOT_ALLOWED');
+    expect(await codeOf(t.unitOfWork.run((tx) => t.paymentTransitions.applyPaymentReversed({ subscriptionId: id, paymentId: 'x', actorId: manager.id }, tx)))).toBe('SUBSCRIPTION_TRANSITION_NOT_ALLOWED');
+    expect(t.subscriptionRepo.rows.get(id)!.status).toBe('UNPAID');
+    expect(t.events('SubscriptionPaid')).toHaveLength(0);
+  });
+
+  it('SubscriptionService has no way to pay, un-pay or reverse (it only stores, reads, creates and waives)', async () => {
+    const { t } = await threeMonths();
+    for (const name of ['markPaid', 'markUnpaid', 'reversePaid', 'applyPaymentRecorded', 'applyPaymentReversed']) expect((t.subscriptions as unknown as Record<string, unknown>)[name]).toBeUndefined();
+  });
+});
+
 describe('reads', () => {
   it('lists newest month first by default, filters by month, status and student, and shows the student name', async () => {
     const { t, school, manager, ids, student } = await threeMonths();
-    await t.subscriptions.markPaid(ids['2026-09']!, manager.id);
+    await t.payViaWorkflow(ids['2026-09']!, manager.id);
     const all = await t.subscriptions.listSubscriptionsOfSchool({ schoolId: school.id, page: { page: 1, pageSize: 10 } });
     expect(all.items.map((s) => s.month)).toEqual(['2026-11', '2026-10', '2026-09']);
     expect(all.items[0]!.studentName).toBe(student.fullName);
@@ -288,7 +307,7 @@ describe('reads', () => {
 
   it('exposes the read-only lookups other modules use (scope, batch, unpaid of a month)', async () => {
     const { t, school, manager, ids } = await threeMonths();
-    await t.subscriptions.markPaid(ids['2026-09']!, manager.id);
+    await t.payViaWorkflow(ids['2026-09']!, manager.id);
     expect(await t.subscriptions.findScopeById(ids['2026-10']!)).toMatchObject({ schoolId: school.id, organizationId: t.org.id });
     expect(await t.subscriptions.findById('00000000-0000-4000-8000-000000000000')).toBeUndefined();
     expect((await t.subscriptions.listUnpaidOfSchoolMonth(school.id, '2026-09')).length).toBe(0);

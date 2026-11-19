@@ -6,6 +6,10 @@ export interface RequestContext {
   locale: Locale;
   /** Set once the caller is authenticated (identity modules). Used by logs/audits/events. */
   actorUserId?: string;
+  /** Client address (`req.ip`, which honours the configured trusted proxies). Carried into event metadata for the audit trail. */
+  ipAddress?: string;
+  /** Sanitized, truncated `User-Agent` header. */
+  userAgent?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

@@ -74,3 +74,7 @@ Unit: `tests/unit/groups/*` (domain, service, authorization matrix including the
 1. Record the approved decisions in `docs/MASTER-SPECIFICATION.md` (only you decide when the specification is amended).
 2. Technical defaults, easy to change: an `INACTIVE` student keeps the assignment; a Parent sees only the name and the Teacher's name; a Teacher listing of students is by `assignedAt`.
 3. Module 21 will link `startingSurah` to the Quran structure. The schedule is Module 23 (`docs/GROUP-SCHEDULES.md`).
+
+
+## Read-only contract for Module 37 (release 0.51.0, owner-approved 2026-11-17)
+`GroupService.listCurrentGroupIdsOfTeacherUser(userId, tx?)` (also in `GroupLookup`): the ids of the groups the Teacher of that verified user id CURRENTLY teaches, i.e. their ACTIVE groups (the same set as `listOwnGroups`; archived groups and groups handed to another Teacher are excluded). A user without a Teacher record gets an empty list. It changes nothing, exposes no repository and no group data (ids only). Module 37 uses it to resolve a Teacher's reporting scope; the Teacher's students are those groups' current students. No group assignment business rule changed. Tests: `tests/unit/groups/group-service.test.ts`.

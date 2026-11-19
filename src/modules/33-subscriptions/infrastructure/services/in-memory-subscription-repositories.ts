@@ -1,6 +1,6 @@
 import type { TransactionContext } from '../../../00-shared-kernel/public';
 import type { CollectorLinkRepository } from '../../application/ports/collector-link-repository';
-import type { SubscriptionListQuery, SubscriptionRepository } from '../../application/ports/subscription-repository';
+import type { SubscriptionListQuery, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../../application/ports/subscription-repository';
 import { CollectorSchoolLink, type CollectorSchoolLinkSnapshot } from '../../domain/entities/collector-school-link';
 import { Subscription, type SubscriptionSnapshot } from '../../domain/entities/subscription';
 import { SubscriptionBatch, type SubscriptionBatchSnapshot } from '../../domain/entities/subscription-batch';
@@ -81,6 +81,19 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
     return [...this.rows.values()].filter((r) => r.schoolId === schoolId && r.month === month && r.status === 'UNPAID').sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1)).map((r) => Subscription.rehydrate(r));
   }
 
+  async countByStatus(query: SubscriptionStatusCountQuery, _tx?: TransactionContext): Promise<SubscriptionStatusCount[]> {
+    const schools = new Set(query.schoolIds);
+    const totals = new Map<string, SubscriptionStatusCount>();
+    for (const r of this.rows.values()) {
+      if (!schools.has(r.schoolId)) continue;
+      if (query.fromMonth !== undefined && r.month < query.fromMonth) continue;
+      if (query.toMonth !== undefined && r.month > query.toMonth) continue;
+      const key = `${r.schoolId}|${r.month}|${r.status}`;
+      totals.set(key, { schoolId: r.schoolId, month: r.month, status: r.status, count: (totals.get(key)?.count ?? 0) + 1 });
+    }
+    return [...totals.values()].sort((a, b) => (a.schoolId < b.schoolId ? -1 : a.schoolId > b.schoolId ? 1 : a.month < b.month ? -1 : a.month > b.month ? 1 : a.status < b.status ? -1 : a.status > b.status ? 1 : 0));
+  }
+
   snapshot(): { rows: Array<[string, SubscriptionSnapshot]>; batches: Array<[string, SubscriptionBatchSnapshot]> } {
     return { rows: [...this.rows], batches: [...this.batchRows] };
   }
@@ -138,3 +151,4 @@ export class InMemoryCollectorLinkRepository implements CollectorLinkRepository 
     saved.forEach(([k, v]) => this.rows.set(k, v));
   }
 }
+

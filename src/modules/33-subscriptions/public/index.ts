@@ -1,15 +1,16 @@
 // Public contract of Module 33 (Subscriptions): the Subscription (Student + Month + Status: PAID / UNPAID / WAIVED), the monthly bulk creation (current Africa/Cairo month),
-// individual creation for late joiners, waiving (School Manager), the Oldest-Unpaid Rule (Master Specification §59) behind the `markPaid` application contract that Module 34
-// (Payments) calls (never an HTTP operation), and the Subscription Collector-to-School assignment with history (Teacher-link conventions).
-// Other modules depend on `SubscriptionLookup` / `CollectorDirectory` (read-only) and, for payments only, `SubscriptionPayments`. Permissions are registered through the Module 12 engine.
-export { SubscriptionService, type SubscriptionLookup, type SubscriptionPayments, type SubscriptionServiceDeps, type ListSubscriptionsInput } from '../application/services/subscription-service';
+// individual creation for late joiners, waiving (School Manager), and the Subscription Collector-to-School assignment with history (Teacher-link conventions).
+// Module 33 stores and exposes the status; it exposes NO payment operation. PAID <-> UNPAID transitions (and the Oldest-Unpaid Rule §59 that guards them) live behind the controlled internal
+// contract `SubscriptionPaymentTransitions`, which only Module 34's payment workflow receives (never an HTTP operation). Other modules depend on `SubscriptionLookup` / `CollectorDirectory` (read-only). Permissions are registered through the Module 12 engine.
+export { SubscriptionService, type SubscriptionLookup, type SubscriptionServiceDeps, type ListSubscriptionsInput } from '../application/services/subscription-service';
+export { SubscriptionPaymentTransitions, type SubscriptionPayments, type SubscriptionPaymentTransitionsDeps, type PaymentTransitionInput } from '../application/services/subscription-payment-transitions';
 export { SubscriptionGroupService, type SubscriptionGroupServiceDeps } from '../application/services/subscription-group-service';
 export { CollectorService, type CollectorDirectory, type CollectorServiceDeps, type RegisterCollectorInput, type CollectorRegistrationResult } from '../application/services/collector-service';
 export { SubscriptionPermissions, SUBSCRIPTION_SCHOOL_TARGET_TYPE, SUBSCRIPTION_TARGET_TYPE, registerSubscriptionAuthorization, type SubscriptionAuthorizationDeps } from '../application/services/subscription-authorization';
 export { SUBSCRIPTION_ERROR_MESSAGES } from '../application/services/subscription-error-messages';
 export type { GroupSubscriptionSummaryDto, GroupStudentSubscriptionDto } from '../application/dto/subscription-dto';
 export type { SubscriptionDto, SubscriptionViewDto, SubscriptionScopeDto, SubscriptionBatchDto, BulkCreationResultDto, CollectorDto, CollectorSchoolLinkDto } from '../application/dto/subscription-dto';
-export type { SubscriptionRepository, SubscriptionListQuery } from '../application/ports/subscription-repository';
+export type { SubscriptionRepository, SubscriptionListQuery, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../application/ports/subscription-repository';
 export type { CollectorLinkRepository } from '../application/ports/collector-link-repository';
 export type { StudentRoster, RosterStudent } from '../application/ports/student-roster';
 export type { SchoolGroupRoster, RosterGroup, RosterGroupStudent } from '../application/ports/school-group-roster';

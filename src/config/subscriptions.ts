@@ -6,6 +6,7 @@ import {
   SequelizeCollectorLinkRepository,
   SequelizeSubscriptionRepository,
   SubscriptionGroupService,
+  SubscriptionPaymentTransitions,
   SubscriptionService,
   registerSubscriptionAuthorization,
 } from '../modules/33-subscriptions/public';
@@ -22,6 +23,7 @@ import { getTeacherService } from './teachers';
 
 let collectors: CollectorService | undefined;
 let subscriptions: SubscriptionService | undefined;
+let paymentTransitions: SubscriptionPaymentTransitions | undefined;
 let groupSummaries: SubscriptionGroupService | undefined;
 
 /**
@@ -46,8 +48,8 @@ export function getCollectorService(): CollectorService {
 }
 
 /**
- * Inject into other modules read-only (`SubscriptionLookup`); Module 34 (Payments) will receive it as `SubscriptionPayments` (`markPaid`).
- * Writes over HTTP are protected at the routes by the Authorization Engine; `markPaid` is deliberately not an HTTP operation.
+ * Inject into other modules read-only (`SubscriptionLookup`). It has NO payment operation: PAID <-> UNPAID transitions are reachable only through `getSubscriptionPaymentTransitions()`,
+ * which is given to Module 34's payment workflow alone. Writes over HTTP are protected at the routes by the Authorization Engine.
  */
 export function getSubscriptionService(): SubscriptionService {
   if (!subscriptions) {
@@ -61,6 +63,21 @@ export function getSubscriptionService(): SubscriptionService {
     });
   }
   return subscriptions;
+}
+
+/**
+ * The controlled internal contract that moves a subscription between UNPAID and PAID (approved: Module 34 exclusively owns those transitions). It is not an HTTP operation and must be
+ * injected ONLY into Module 34's payment workflow (an architecture test checks who imports it).
+ */
+export function getSubscriptionPaymentTransitions(): SubscriptionPaymentTransitions {
+  if (!paymentTransitions) {
+    paymentTransitions = new SubscriptionPaymentTransitions({
+      subscriptions: new SequelizeSubscriptionRepository(getSequelize()),
+      outbox: getOutboxService(),
+      clock: new SystemClock(),
+    });
+  }
+  return paymentTransitions;
 }
 
 /** Read-only group-based subscription statistics (reads Module 20's groups through its public service; creates and stores no group data). */

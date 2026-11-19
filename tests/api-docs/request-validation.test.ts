@@ -14,6 +14,8 @@ import { createOrganizationRouter, createSchoolRouter } from '../../src/modules/
 import { createParentRouter } from '../../src/modules/17-parents/public';
 import { createTeacherRouter } from '../../src/modules/18-teachers/public';
 import { createSubscriptionRouter } from '../../src/modules/33-subscriptions/public';
+import { createPaymentRouter } from '../../src/modules/34-payments-collection/public';
+import { createAuditRouter } from '../../src/modules/35-history-audit/public';
 import { createStudentRouter } from '../../src/modules/19-students/public';
 import { createGroupRouter } from '../../src/modules/20-groups/public';
 import { createQuranRouter } from '../../src/modules/21-quran-structure/public';
@@ -26,6 +28,7 @@ import { createEvaluationRouter } from '../../src/modules/29-evaluations/public'
 import { createExamRouter } from '../../src/modules/30-exams/public';
 import { createNotificationRouter } from '../../src/modules/31-notifications-core/public';
 import { createExcelImportRouter } from '../../src/modules/36-excel-import/public';
+import { createReportRouter } from '../../src/modules/38-report-modules/public';
 import { dereference } from './support/schema-validation';
 import { operationsOf, type OperationRef } from './support/lint';
 
@@ -75,6 +78,8 @@ function buildApp() {
   app.use('/parents', createParentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/teachers', createTeacherRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/subscriptions', createSubscriptionRouter({ getSubscriptions: getService, getCollectors: getService, getGroups: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/payments', createPaymentRouter({ getPayments: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/audit-logs', createAuditRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/students', createStudentRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/groups', createGroupRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/quran', createQuranRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
@@ -86,6 +91,7 @@ function buildApp() {
   app.use('/exams', createExamRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use('/notifications', createNotificationRouter({ getNotifications: getService, getPush: (() => pushStub) as never, requireAuthentication: stubAuth } as never));
   app.use('/excel-imports', createExcelImportRouter({ getService, getSchools: getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
+  app.use('/reports', createReportRouter({ getReports: getService, requireAuthentication: stubAuth } as never));
   app.use('/sessions', createSessionRouter({ getService, requireAuthentication: stubAuth, requirePermission: () => pass } as never));
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -1,6 +1,7 @@
 import { closeDatabase } from '../config/database';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import { registerAuditEventHandlers } from '../config/audit';
 import { registerAttendanceEventHandlers } from '../config/attendance';
 import { registerClassSessionEventHandlers, startClassSessionScheduler, stopClassSessionScheduler } from '../config/class-sessions';
 import { registerExamEventHandlers, startExamScheduler, stopExamScheduler } from '../config/exams';
@@ -23,6 +24,7 @@ registerAttendanceEventHandlers();
 registerExamEventHandlers();
 registerNotificationEventHandlers();
 registerNotificationRuleHandlers();
+registerAuditEventHandlers();
 startOutbox();
 startClassSessionScheduler();
 startExamScheduler();

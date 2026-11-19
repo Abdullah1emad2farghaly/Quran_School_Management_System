@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import type { TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { SubscriptionListQuery, SubscriptionRepository } from '../../../../application/ports/subscription-repository';
+import type { SubscriptionListQuery, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../../../../application/ports/subscription-repository';
 import { Subscription } from '../../../../domain/entities/subscription';
 import { SubscriptionBatch } from '../../../../domain/entities/subscription-batch';
 import { subscriptionError } from '../../../../domain/errors/subscription-errors';
@@ -176,6 +176,29 @@ export class SequelizeSubscriptionRepository implements SubscriptionRepository {
   }
   listUnpaidOfSchoolMonth(schoolId: string, month: string, tx?: TransactionContext): Promise<Subscription[]> {
     return this.subs(`${SELECT} WHERE s.school_id = :schoolId AND s.month = :month AND s.status = 'UNPAID' ORDER BY s.created_at, s.id`, { schoolId, month }, tx);
+  }
+
+  async countByStatus(query: SubscriptionStatusCountQuery, tx?: TransactionContext): Promise<SubscriptionStatusCount[]> {
+    const ids = [...new Set(query.schoolIds)];
+    const found: SubscriptionStatusCount[] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const replacements: Record<string, unknown> = { ids: ids.slice(i, i + IN_CHUNK) };
+      let bounds = '';
+      if (query.fromMonth !== undefined) {
+        bounds += ' AND s.month >= :fromMonth';
+        replacements.fromMonth = query.fromMonth;
+      }
+      if (query.toMonth !== undefined) {
+        bounds += ' AND s.month <= :toMonth';
+        replacements.toMonth = query.toMonth;
+      }
+      const rows = await this.db.query<{ schoolId: string; month: string; status: string; total: number | string }>(
+        `SELECT s.school_id AS schoolId, s.month AS month, s.status AS status, COUNT(*) AS total FROM subscriptions s WHERE s.school_id IN (:ids)${bounds} GROUP BY s.school_id, s.month, s.status ORDER BY s.school_id, s.month, s.status`,
+        { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) },
+      );
+      for (const r of rows) found.push({ schoolId: r.schoolId, month: r.month, status: r.status as SubscriptionStatusCount['status'], count: Number(r.total) });
+    }
+    return found;
   }
 
   // ---------------------------------------------------------------------------------------------- mapping

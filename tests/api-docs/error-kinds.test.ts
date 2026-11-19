@@ -14,6 +14,8 @@ import { schoolError, SchoolErrorCodes } from '../../src/modules/16-schools/doma
 import { parentError, ParentErrorCodes } from '../../src/modules/17-parents/domain/errors/parent-errors';
 import { teacherError, TeacherErrorCodes } from '../../src/modules/18-teachers/domain/errors/teacher-errors';
 import { subscriptionError, SubscriptionErrorCodes } from '../../src/modules/33-subscriptions/domain/errors/subscription-errors';
+import { auditError, AuditErrorCodes } from '../../src/modules/35-history-audit/public';
+import { paymentError, PaymentErrorCodes } from '../../src/modules/34-payments-collection/domain/errors/payment-errors';
 import { studentError, StudentErrorCodes } from '../../src/modules/19-students/domain/errors/student-errors';
 import { groupError, GroupErrorCodes } from '../../src/modules/20-groups/domain/errors/group-errors';
 import { quranError, QuranErrorCodes } from '../../src/modules/21-quran-structure/domain/errors/quran-errors';
@@ -21,6 +23,7 @@ import { scheduleError, ScheduleErrorCodes } from '../../src/modules/23-group-sc
 import { classSessionError, ClassSessionErrorCodes } from '../../src/modules/24-sessions/public';
 import { smartGuardError, SmartGuardErrorCodes } from '../../src/modules/25-smart-guard/public';
 import { attendanceError, AttendanceErrorCodes } from '../../src/modules/26-attendance/public';
+import { ReportErrorCodes, reportError } from '../../src/modules/37-reports-core/public';
 import { rangeError, QuranRangeErrorCodes } from '../../src/modules/22-quran-range-engine/public';
 import { memorizationError, MemorizationErrorCodes } from '../../src/modules/27-memorization/public';
 import { revisionError, RevisionErrorCodes } from '../../src/modules/28-revision/public';
@@ -44,6 +47,8 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [ParentErrorCodes, parentError as Factory],
   [TeacherErrorCodes, teacherError as Factory],
   [SubscriptionErrorCodes, subscriptionError as Factory],
+  [PaymentErrorCodes, paymentError as Factory],
+  [AuditErrorCodes, auditError as Factory],
   [StudentErrorCodes, studentError as Factory],
   [GroupErrorCodes, groupError as Factory],
   [QuranErrorCodes, quranError as Factory],
@@ -59,6 +64,7 @@ const SOURCES: ReadonlyArray<readonly [Record<string, string>, Factory]> = [
   [NotificationErrorCodes, notificationError as Factory],
   [FileErrorCodes, ((code: never) => fileError(code)) as Factory],
   [ImportErrorCodes, ((code: never) => importError(code)) as Factory],
+  [ReportErrorCodes, reportError as Factory],
 ];
 
 /** The status each module-owned code REALLY answers: taken from the module's own error factory, never retyped. */

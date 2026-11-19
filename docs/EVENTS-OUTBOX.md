@@ -17,7 +17,7 @@ await unitOfWork.run(async (tx) => {
   // or: await outbox.publish([createDomainEvent({ eventType: 'StudentEnrolled', aggregateType: 'Student', aggregateId: id, payload: { ... } })], tx);
 });
 ```
-`createDomainEvent` assigns a UUID `eventId`, the time, and metadata (`requestId`, `actorUserId`) from the request context. Payloads must be JSON (max 256 KB) and must never contain passwords, OTPs, or tokens. Event/aggregate types use letters, digits, `_` and `.`.
+`createDomainEvent` assigns a UUID `eventId`, the time, and metadata (`requestId`, `actorUserId`, and since 0.48.0 `ipAddress` and `userAgent`, all optional) from the request context. Payloads must be JSON (max 256 KB) and must never contain passwords, OTPs, or tokens. Event/aggregate types use letters, digits, `_` and `.`.
 
 ## Handling
 ```ts
@@ -47,5 +47,9 @@ Use `InMemoryOutboxStore` (same claim semantics) with `OutboxService`/`OutboxPro
 ## Module 33 events (Subscriptions)
 `SubscriptionsCreated` (aggregate `SubscriptionBatch`; payload `batchId, schoolId, organizationId, month, count, actorId`), `SubscriptionCreated`, `SubscriptionPaid`, `SubscriptionWaived` (aggregate `Subscription`; payload `subscriptionId, studentId, schoolId, organizationId, month, actorId`), `CollectorSchoolLinked`, `CollectorSchoolLinkRemoved` (aggregate `CollectorSchoolLink`; payload `linkId, userId, schoolId, organizationId, actorId`). Identifiers only. Consumed by Module 32 (`notification-rules.subscriptions-created`, `…subscription-created-schedule`, `…subscription-paid`, `…subscription-waived`).
 
-**0.43.1:** new event `SubscriptionMarkedUnpaid` (aggregate `Subscription`; payload `subscriptionId, studentId, schoolId, organizationId, month, actorId`), published when a PAID subscription of the current Africa/Cairo month is changed back to UNPAID. It is NOT `SubscriptionPaid`, nobody consumes it yet (history only), and Module 32 reacts to it with no notification. `SubscriptionPaid` is still published exactly once per successful UNPAID → PAID transition (also after a revert and a second payment).
+**0.43.1:** new event `SubscriptionMarkedUnpaid` (aggregate `Subscription`; payload `subscriptionId, studentId, schoolId, organizationId, month, actorId`), published when a PAID subscription goes back to UNPAID (since 0.51.0 only because Module 34 reversed its payment; the former current-month correction was removed). It is NOT `SubscriptionPaid`, nobody consumes it yet (history only), and Module 32 reacts to it with no notification. `SubscriptionPaid` is still published exactly once per successful UNPAID → PAID transition (also after a revert and a second payment).
+**0.49.0 (Module 34):** new events `PaymentRecorded` and `PaymentReversed` (aggregate `Payment`; payload `paymentId, subscriptionId, studentId, schoolId, organizationId, month, method, actorId`; `PaymentReversed` adds `previousStatus, status, reason`). Published in the same transaction as the payment. Both are audited (Module 35). `PaymentReversed` notifies nobody. **Since 0.51.0 `PaymentRecorded` is what notifies the Parent (only; Module 32 rule B, once per payment)**; Module 33's `SubscriptionPaid` is a state event that only cancels the pending 3-day reminder. `SubscriptionMarkedUnpaid` is now also published by a payment reversal.
 
+
+## Audit consumer (Module 35)
+The handler `audit.record-domain-event` records every event in the audit catalog (`docs/AUDIT.md`). It is idempotent on `eventId`; a failure is retried by the outbox like any handler failure.

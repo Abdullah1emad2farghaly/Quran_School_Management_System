@@ -72,7 +72,7 @@ const groupStudentSchema = s.object(
     studentId: s.uuid(),
     studentName: s.string({ example: 'عمر أحمد محمد' }),
     month: s.string({ example: '2026-11' }),
-    subscriptionId: s.uuid({ nullable: true, description: 'The subscription of the month, or null when the student has none (use it for the mark-paid / mark-unpaid / waive calls).' }),
+    subscriptionId: s.uuid({ nullable: true, description: 'The subscription of the month, or null when the student has none (use it for the waive call and for recording a payment in Module 34).' }),
     // In OpenAPI 3.0 a nullable enum must list `null` itself, which the `s.string` helper cannot express, so this property is written out (as in Module 24).
     status: { type: 'string', nullable: true, enum: ['PAID', 'UNPAID', 'WAIVED', null], description: 'The subscription status for the month; null when there is no record (never inferred as UNPAID).' },
     hasSubscription: s.boolean(),
@@ -97,7 +97,7 @@ export const subscriptionApiDoc: ModuleApiDoc = {
   mountPath: '/subscriptions',
   tag: {
     name: 'Subscriptions',
-    description: 'Monthly subscriptions (Student + Month + Status: PAID / UNPAID / WAIVED), the manual bulk creation for the current Africa/Cairo month, the Oldest-Unpaid Rule (enforced by the `markPaid` contract, exposed by `mark-paid` and also meant for Module 34), a PAID -> UNPAID status correction for the current month only, waiving by the School Manager, the group-based subscription statistics, and the Subscription Collector-to-School assignment. No payment is collected and no amount is stored here (Module 34).',
+    description: 'Monthly subscriptions (Student + Month + Status: PAID / UNPAID / WAIVED), the manual bulk creation for the current Africa/Cairo month, waiving by the School Manager, the group-based subscription statistics, and the Subscription Collector-to-School assignment. This module stores and exposes the status only: it exposes NO operation that pays, un-pays or reverses a subscription. PAID <-> UNPAID changes happen only through Module 34 (`/payments`), which preserves the Oldest-Unpaid Rule. No amount is stored.',
   },
   operations: [
     {
@@ -256,40 +256,6 @@ export const subscriptionApiDoc: ModuleApiDoc = {
         { status: 404, codes: ['SUBSCRIPTION_NOT_FOUND'], description: 'The subscription does not exist.' },
         { status: 409, codes: ['SUBSCRIPTION_CONCURRENT_MODIFICATION'], description: 'A concurrent update could not be resolved; retry.' },
         { status: 422, codes: ['SUBSCRIPTION_NOT_UNPAID'], description: 'Only an UNPAID subscription can be waived.' },
-      ],
-    },
-    {
-      method: 'post',
-      path: '/:id/mark-paid',
-      operationId: 'markSubscriptionPaid',
-      summary: 'Mark an UNPAID subscription as PAID',
-      description:
-        'Exposes the `markPaid` application contract. UNPAID -> PAID only, applying the Oldest-Unpaid Rule (Master Specification §59) exactly: a newer month cannot be paid until every older month of the same student is PAID or WAIVED (`422 OLDER_UNPAID_SUBSCRIPTIONS_EXIST`). A WAIVED subscription is `422 SUBSCRIPTION_NOT_UNPAID`; an already PAID one is `409 SUBSCRIPTION_ALREADY_PAID`. The student\'s subscriptions are locked, so concurrent calls are safe: exactly one wins. Publishes `SubscriptionPaid` exactly once in the same transaction; the student\'s Parent (only) is notified through Modules 31/32. No amount is stored and no payment is collected here (Module 34).',
-      authorization: managerOrCollector(SubscriptionPermissions.MARK_PAID, 'The subscription\'s school (loaded server-side).'),
-      pathParams: subscriptionIdParam,
-      success: { status: 200, description: 'The paid subscription.', data: ref('Subscription'), example: subscriptionExample({ status: 'PAID', paidAt: '2026-11-09T08:00:00.000Z' }) },
-      errors: [
-        NOT_ALLOWED,
-        { status: 404, codes: ['SUBSCRIPTION_NOT_FOUND'], description: 'The subscription does not exist.' },
-        { status: 409, codes: ['SUBSCRIPTION_ALREADY_PAID', 'SUBSCRIPTION_CONCURRENT_MODIFICATION'], description: 'Already PAID (one successful payment per subscription), or a concurrent update could not be resolved; retry.' },
-        { status: 422, codes: ['SUBSCRIPTION_NOT_UNPAID', 'OLDER_UNPAID_SUBSCRIPTIONS_EXIST'], description: 'The subscription is WAIVED, or an older month of the student is neither PAID nor WAIVED.' },
-      ],
-    },
-    {
-      method: 'post',
-      path: '/:id/mark-unpaid',
-      operationId: 'markSubscriptionUnpaid',
-      summary: 'Change a PAID subscription of the CURRENT month back to UNPAID',
-      description:
-        'PAID -> UNPAID only, and ONLY for a subscription whose month is the current calendar month in Africa/Cairo (the server clock decides; the client cannot). A subscription of any other month (a past month, however it is stored) is `422 SUBSCRIPTION_MONTH_NOT_CURRENT`, checked first regardless of status. Already UNPAID is `409 SUBSCRIPTION_ALREADY_UNPAID`; WAIVED is `422 SUBSCRIPTION_NOT_PAID`. The Oldest-Unpaid Rule (§59) is preserved: the changed month is the newest month a student can have, the student\'s subscriptions are locked like in mark-paid, and a newer PAID month would refuse the change (`422 NEWER_PAID_SUBSCRIPTIONS_EXIST`). Publishes `SubscriptionMarkedUnpaid` (never `SubscriptionPaid`) in the same transaction; nobody is notified. This is a status correction, not the payment reversal workflow of Module 34 (no reason is recorded).',
-      authorization: managerOrCollector(SubscriptionPermissions.MARK_UNPAID, 'The subscription\'s school (loaded server-side).'),
-      pathParams: subscriptionIdParam,
-      success: { status: 200, description: 'The subscription, now UNPAID.', data: ref('Subscription'), example: subscriptionExample() },
-      errors: [
-        NOT_ALLOWED,
-        { status: 404, codes: ['SUBSCRIPTION_NOT_FOUND'], description: 'The subscription does not exist.' },
-        { status: 409, codes: ['SUBSCRIPTION_ALREADY_UNPAID', 'SUBSCRIPTION_CONCURRENT_MODIFICATION'], description: 'Already UNPAID, or a concurrent update could not be resolved; retry.' },
-        { status: 422, codes: ['SUBSCRIPTION_MONTH_NOT_CURRENT', 'SUBSCRIPTION_NOT_PAID', 'NEWER_PAID_SUBSCRIPTIONS_EXIST'], description: 'The subscription is not of the current Africa/Cairo month, it is WAIVED, or a newer month of the student is PAID.' },
       ],
     },
   ],

@@ -326,6 +326,23 @@ describe('reads', () => {
     expect((await t.groups.listOwnGroups(manager.id, page)).items).toEqual([]);
   });
 
+  it('listCurrentGroupIdsOfTeacherUser (read-only, for Module 37) returns ONLY the ACTIVE groups of that Teacher: not archived, not other Teachers\', nothing for a non-Teacher, and it changes nothing', async () => {
+    const { t, school, manager, teacher } = await setup();
+    const mine = await t.newGroup(school.id, manager.id, { teacherId: teacher.id });
+    const other = await t.newGroup(school.id, manager.id, { teacherId: teacher.id });
+    const archived = await t.newGroup(school.id, manager.id, { teacherId: teacher.id });
+    await t.groups.archiveGroup(archived.id, null, manager.id);
+    await t.newGroup(school.id, manager.id); // no Teacher
+    expect((await t.groups.listCurrentGroupIdsOfTeacherUser(teacher.userId)).sort()).toEqual([mine.id, other.id].sort());
+    expect(await t.groups.listCurrentGroupIdsOfTeacherUser(manager.id)).toEqual([]);
+    expect(await t.groups.listCurrentGroupIdsOfTeacherUser('00000000-0000-4000-8000-000000000000')).toEqual([]);
+    // a group handed to another Teacher is no longer the first Teacher's (currently assigned only)
+    const teacher2 = await t.newTeacher(school.id, manager.id, 'سعيد حسن محمود');
+    await t.groups.assignTeacher(other.id, teacher2.id, manager.id);
+    expect(await t.groups.listCurrentGroupIdsOfTeacherUser(teacher.userId)).toEqual([mine.id]);
+    expect(await t.groups.listCurrentGroupIdsOfTeacherUser(teacher2.userId)).toEqual([other.id]);
+  });
+
   it('exposes the lookups other modules use', async () => {
     const { t, school, manager, teacher, parent } = await setup();
     const g = await t.newGroup(school.id, manager.id, { teacherId: teacher.id });

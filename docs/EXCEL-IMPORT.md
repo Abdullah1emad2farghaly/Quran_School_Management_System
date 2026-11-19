@@ -1,6 +1,6 @@
 # Module 36 — Excel Import
 
-Status: **IMPLEMENTED, NOT verified on the owner's machine** (see `docs/MODULE-36-NOTES.md` for what was and was not run).
+Status: **IMPLEMENTED; locally verified by the project owner (confirmed 2026-11-17; no counts were provided, none are recorded here).** (`docs/MODULE-36-NOTES.md` records what was run in the authoring environment.)
 Source of truth: Master Specification §73-§79, plus the decisions the project owner approved on **2026-11-10** (recorded below).
 
 ## What it does

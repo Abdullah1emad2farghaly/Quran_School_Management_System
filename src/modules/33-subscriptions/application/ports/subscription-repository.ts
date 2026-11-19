@@ -44,4 +44,20 @@ export interface SubscriptionRepository {
   listByStudentsMonth(studentIds: readonly string[], month: string, tx?: TransactionContext): Promise<Subscription[]>;
   listByBatch(batchId: string, tx?: TransactionContext): Promise<Subscription[]>;
   listUnpaidOfSchoolMonth(schoolId: string, month: string, tx?: TransactionContext): Promise<Subscription[]>;
+  /** Read-only aggregate for reports (Module 38): how many subscriptions each school has per billing month and status. `fromMonth` / `toMonth` (`YYYY-MM`, inclusive) are optional bounds. */
+  countByStatus(query: SubscriptionStatusCountQuery, tx?: TransactionContext): Promise<SubscriptionStatusCount[]>;
+}
+
+export interface SubscriptionStatusCountQuery {
+  readonly schoolIds: readonly string[];
+  readonly fromMonth?: string;
+  readonly toMonth?: string;
+}
+
+export interface SubscriptionStatusCount {
+  readonly schoolId: string;
+  /** `YYYY-MM` (Africa/Cairo). */
+  readonly month: string;
+  readonly status: SubscriptionStatus;
+  readonly count: number;
 }

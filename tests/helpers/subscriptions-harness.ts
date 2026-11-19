@@ -1,3 +1,4 @@
+import { newUuid } from '../../src/modules/00-shared-kernel/public';
 import { GroupService, InMemoryGroupRepository } from '../../src/modules/20-groups/public';
 import {
   CollectorService,
@@ -6,9 +7,11 @@ import {
   PublicSchoolGroupRoster,
   PublicStudentRoster,
   SubscriptionGroupService,
+  SubscriptionPaymentTransitions,
   SubscriptionService,
   registerSubscriptionAuthorization,
 } from '../../src/modules/33-subscriptions/public';
+import type { RollbackStore } from './schools-api-harness';
 import { createStudentsHarness } from './students-harness';
 
 /** Mid-month Cairo noon: 2026-11-10 11:00 Cairo (UTC+2). */
@@ -20,11 +23,11 @@ export const COLLECTOR_NAME = 'محمود سعيد علي';
  * (subscriptions and Subscription Collectors). The Module 33 clock is separately controllable (`setNow`) so month boundaries in Africa/Cairo can be tested; its unit of
  * work rolls the subscription stores back together with everything else when the work throws.
  */
-export async function createSubscriptionsHarness() {
+export async function createSubscriptionsHarness(options: { extraStores?: readonly RollbackStore[] } = {}) {
   const subscriptionRepo = new InMemorySubscriptionRepository();
   const collectorLinks = new InMemoryCollectorLinkRepository();
   const groupRepo = new InMemoryGroupRepository();
-  const t = await createStudentsHarness({ extraStores: [subscriptionRepo, collectorLinks, groupRepo] });
+  const t = await createStudentsHarness({ extraStores: [subscriptionRepo, collectorLinks, groupRepo, ...(options.extraStores ?? [])] });
 
   let current = new Date(DEFAULT_NOW);
   const clock = { now: () => current };
@@ -40,6 +43,11 @@ export async function createSubscriptionsHarness() {
     outbox: t.h.outbox,
     clock,
   });
+  /** Module 33's controlled PAID <-> UNPAID contract (only Module 34's payment workflow receives it in production). Tests that need a paid subscription use it with a payment id and a transaction. */
+  const paymentTransitions = new SubscriptionPaymentTransitions({ subscriptions: subscriptionRepo, outbox: t.h.outbox, clock });
+  /** Test shortcuts that change a status the way production does: through the controlled contract, inside a transaction, with a payment id (no payment row is stored here). */
+  const payViaWorkflow = (subscriptionId: string, actorId: string) => t.unitOfWork.run((tx) => paymentTransitions.applyPaymentRecorded({ subscriptionId, paymentId: newUuid(), actorId }, tx));
+  const reverseViaWorkflow = (subscriptionId: string, actorId: string) => t.unitOfWork.run((tx) => paymentTransitions.applyPaymentReversed({ subscriptionId, paymentId: newUuid(), actorId }, tx));
   // The REAL Module 20 groups (in-memory store): Module 33 reads them only through the public GroupService.
   const groups = new GroupService({ groups: groupRepo, schools: t.service, teachers: t.teachers, students: t.students, unitOfWork: t.unitOfWork, outbox: t.h.outbox, clock: t.h.clock });
   const groupSummaries = new SubscriptionGroupService({ subscriptions: subscriptionRepo, groups: new PublicSchoolGroupRoster(groups), schools: t.service, unitOfWork: t.unitOfWork, clock });
@@ -81,5 +89,5 @@ export async function createSubscriptionsHarness() {
   };
   const events = (type?: string) => t.h.store.messages.filter((m) => m.aggregateType.startsWith('Subscription') || m.aggregateType === 'CollectorSchoolLink').filter((m) => !type || m.eventType === type);
 
-  return { ...t, subscriptionRepo, collectorLinks, groupRepo, groups, groupSummaries, newGroup, newStudentInGroup, subscriptions, collectors, setNow, clock, newStudent, newCollector, events };
+  return { ...t, subscriptionRepo, collectorLinks, groupRepo, groups, groupSummaries, newGroup, newStudentInGroup, subscriptions, paymentTransitions, payViaWorkflow, reverseViaWorkflow, collectors, setNow, clock, newStudent, newCollector, events };
 }

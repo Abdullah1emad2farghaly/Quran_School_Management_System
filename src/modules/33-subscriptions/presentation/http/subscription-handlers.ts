@@ -5,7 +5,7 @@ import type { SubscriptionService } from '../../application/services/subscriptio
 import type { SubscriptionStatus } from '../../domain/value-objects/subscription-status';
 import { serializeBulkResult, serializeCollector, serializeCollectorLink, serializeGroupStudent, serializeGroupSummary, serializeSubscription } from './subscription-serializer';
 
-export type SubscriptionHandlerService = Pick<SubscriptionService, 'createMonthlySubscriptions' | 'createIndividualSubscription' | 'listSubscriptionsOfSchool' | 'getSubscription' | 'waiveSubscription' | 'markPaid' | 'markUnpaid'>;
+export type SubscriptionHandlerService = Pick<SubscriptionService, 'createMonthlySubscriptions' | 'createIndividualSubscription' | 'listSubscriptionsOfSchool' | 'getSubscription' | 'waiveSubscription'>;
 export type GroupHandlerService = Pick<SubscriptionGroupService, 'listGroupSummaries' | 'listGroupStudents'>;
 export type CollectorHandlerService = Pick<CollectorService, 'registerCollector' | 'listCollectorsOfSchool' | 'removeSchoolLink' | 'getOwnProfile'>;
 
@@ -46,12 +46,6 @@ export function createSubscriptionHandlers(getSubscriptions: () => SubscriptionH
     get: async (subscriptionId: string) => serializeSubscription(await getSubscriptions().getSubscription(subscriptionId)),
 
     waive: async (subscriptionId: string, actorId: string) => serializeSubscription(await getSubscriptions().waiveSubscription(subscriptionId, actorId)),
-
-    /** UNPAID -> PAID through the `markPaid` contract (Oldest-Unpaid Rule §59 is enforced there). */
-    markPaid: async (subscriptionId: string, actorId: string) => serializeSubscription(await getSubscriptions().markPaid(subscriptionId, actorId)),
-
-    /** PAID -> UNPAID, current Africa/Cairo month only (see `SubscriptionService.markUnpaid`). */
-    markUnpaid: async (subscriptionId: string, actorId: string) => serializeSubscription(await getSubscriptions().markUnpaid(subscriptionId, actorId)),
 
     listGroups: async (schoolId: string, month: string | undefined, direction: 'asc' | 'desc', page: PageRequest) => {
       const result = await getGroups().listGroupSummaries(schoolId, { ...(month !== undefined ? { month } : {}), direction, page });

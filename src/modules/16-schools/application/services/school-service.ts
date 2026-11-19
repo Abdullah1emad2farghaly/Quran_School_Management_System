@@ -168,6 +168,18 @@ export class SchoolService {
     return this.managers.listActiveSchoolIdsByUser(userId, tx);
   }
 
+  /** Every school of the given organizations, in any status. Read-only, for reports (Module 38): the caller has already proven the organizations lie inside the requester's scope. */
+  async listSchoolIdsOfOrganizations(organizationIds: readonly string[], tx?: TransactionContext): Promise<string[]> {
+    const ids = [...new Set(organizationIds)];
+    if (ids.length === 0) return [];
+    const found: string[] = [];
+    for (let page = 1; ; page += 1) {
+      const { items, total } = await this.repository.list({ organizationIds: ids, sort: 'createdAt', direction: 'asc', page: { page, pageSize: 100 } }, tx);
+      found.push(...items.map((school) => school.snapshot.id));
+      if (items.length === 0 || found.length >= total) return found;
+    }
+  }
+
   async getActiveManagerUserId(schoolId: string, tx?: TransactionContext): Promise<string | undefined> {
     return (await this.managers.findActiveBySchool(schoolId, tx))?.userId;
   }
@@ -470,5 +482,5 @@ export class SchoolService {
 /** What downstream modules (Parents 17, Teachers 18, Groups 20...) should depend on (read-only). */
 export type SchoolLookup = Pick<
   SchoolService,
-  'findById' | 'getById' | 'findByCode' | 'isSchoolManager' | 'listManagedSchoolIds' | 'getActiveManagerUserId' | 'listManagerHistory' | 'listStatusHistory' | 'listGpsHistory'
+  'findById' | 'getById' | 'findByCode' | 'isSchoolManager' | 'listManagedSchoolIds' | 'listSchoolIdsOfOrganizations' | 'getActiveManagerUserId' | 'listManagerHistory' | 'listStatusHistory' | 'listGpsHistory'
 >;

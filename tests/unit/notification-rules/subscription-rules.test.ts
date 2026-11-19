@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { REMINDER_KINDS } from '../../../src/modules/32-notification-rules/public';
 import { SubscriptionEventTypes } from '../../../src/modules/33-subscriptions/public';
+import { PaymentEventTypes } from '../../../src/modules/34-payments-collection/public';
 import { createRulesHarness, ids, type RulesHarness } from '../../helpers/notification-rules-harness';
 
 const COLLECTOR_1 = 'c0000000-0000-4000-8000-000000000001';
@@ -16,6 +17,8 @@ let w: RulesHarness;
 const jumpTo = (instant: Date) => w.h.advance(instant.getTime() - w.h.clock.now().getTime());
 const setStatus = (id: string, status: string) => w.subscriptions.subscriptions.set(id, { ...w.subscriptions.subscriptions.get(id)!, status });
 const batchEvent = () => ({ batchId: BATCH, schoolId: ids.school, organizationId: ids.org, month: MONTH, count: 3, actorId: ids.manager1 });
+const payId = (n: number): string => `00000000-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`;
+const paymentEvent = (n: number, studentId: string, paymentNo = n) => ({ paymentId: payId(paymentNo), subscriptionId: subId(n), studentId, schoolId: ids.school, organizationId: ids.org, month: MONTH, method: 'CASH', actorId: ids.manager1 });
 const paidEvent = (n: number, studentId: string) => ({ subscriptionId: subId(n), studentId, schoolId: ids.school, organizationId: ids.org, month: MONTH, actorId: ids.manager1 });
 const kinds = (n: number) => [REMINDER_KINDS.SUBSCRIPTION_UNPAID_3D, subId(n)] as const;
 
@@ -81,9 +84,9 @@ describe('A. monthly bulk creation (SubscriptionsCreated)', () => {
   });
 });
 
-describe('B. payment recorded (SubscriptionPaid): the Parent only', () => {
+describe('B. payment recorded (Module 34 PaymentRecorded): the Parent only', () => {
   it('tells the student\'s Parent about that child only; no Collector, no School Manager, no other Parent', async () => {
-    await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
+    await w.deliver(PaymentEventTypes.PAYMENT_RECORDED, paymentEvent(1, ids.studentA));
     const [n] = w.notificationsOf(ids.parentA);
     expect(w.notificationsOf(ids.parentA)).toHaveLength(1);
     expect(n?.body).toContain('Ali Ahmed');
@@ -94,8 +97,9 @@ describe('B. payment recorded (SubscriptionPaid): the Parent only', () => {
 
   it('is sent once even when the event is redelivered, and cancels the pending 3-day reminder', async () => {
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTIONS_CREATED, batchEvent());
-    const event = await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
+    const event = await w.deliver(PaymentEventTypes.PAYMENT_RECORDED, paymentEvent(1, ids.studentA));
     await w.redeliver(event);
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA)); // the status change of the same payment: cancels the reminder, notifies nobody
     expect(w.notificationsOf(ids.parentA)).toHaveLength(1);
     expect((await w.state.findReminder(...kinds(1)))?.state).toBe('SUPPRESSED');
     expect((await w.state.findReminder(...kinds(2)))?.state).toBe('PENDING');
@@ -103,8 +107,16 @@ describe('B. payment recorded (SubscriptionPaid): the Parent only', () => {
 
   it('a student without a Parent account is skipped quietly', async () => {
     w.students.map.set(ids.studentA, { ...w.students.map.get(ids.studentA)!, parentUserIds: [] });
+    await w.deliver(PaymentEventTypes.PAYMENT_RECORDED, paymentEvent(1, ids.studentA));
+    expect(w.allNotifications()).toHaveLength(0);
+  });
+
+  it('the SubscriptionPaid status change alone notifies nobody (only the payment workflow notifies the Parent) but still cancels the 3-day reminder', async () => {
+    await w.deliver(SubscriptionEventTypes.SUBSCRIPTIONS_CREATED, batchEvent());
+    w.h.repository.notifications.clear();
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
     expect(w.allNotifications()).toHaveLength(0);
+    expect((await w.state.findReminder(...kinds(1)))?.state).toBe('SUPPRESSED');
   });
 
   it('a waived subscription cancels its pending 3-day reminder and notifies nobody', async () => {
@@ -115,7 +127,7 @@ describe('B. payment recorded (SubscriptionPaid): the Parent only', () => {
   });
 });
 
-describe('B2. PAID -> UNPAID (SubscriptionMarkedUnpaid) and a second payment: existing behavior is preserved', () => {
+describe('B2. payment reversal (SubscriptionMarkedUnpaid) and a second payment', () => {
   it('SubscriptionMarkedUnpaid notifies nobody and changes no reminder', async () => {
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTIONS_CREATED, batchEvent());
     const reminders = JSON.stringify([...w.state.reminders]);
@@ -125,11 +137,13 @@ describe('B2. PAID -> UNPAID (SubscriptionMarkedUnpaid) and a second payment: ex
     expect(JSON.stringify([...w.state.reminders])).toBe(reminders);
   });
 
-  it('pay, change back, pay again: the Parent (only) is told ONCE per subscription (the once-only key is per subscription), nobody else', async () => {
+  it('pay, reverse, pay again: the Parent (only) is told once PER PAYMENT (the once-only key is per payment), nobody else', async () => {
+    await w.deliver(PaymentEventTypes.PAYMENT_RECORDED, paymentEvent(1, ids.studentA, 1));
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_MARKED_UNPAID, paidEvent(1, ids.studentA));
+    await w.deliver(PaymentEventTypes.PAYMENT_RECORDED, paymentEvent(1, ids.studentA, 2));
     await w.deliver(SubscriptionEventTypes.SUBSCRIPTION_PAID, paidEvent(1, ids.studentA));
-    expect(w.notificationsOf(ids.parentA)).toHaveLength(1);
+    expect(w.notificationsOf(ids.parentA)).toHaveLength(2);
     for (const other of [ids.parentB, COLLECTOR_1, COLLECTOR_2, ids.manager1]) expect(w.notificationsOf(other)).toHaveLength(0);
   });
 

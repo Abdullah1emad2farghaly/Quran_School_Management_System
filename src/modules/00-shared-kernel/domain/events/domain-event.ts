@@ -5,6 +5,10 @@
 export interface DomainEventMetadata {
   readonly requestId?: string;
   readonly actorUserId?: string;
+  /** Client address of the request that caused the event (additive; used by History & Audit, Module 35). Absent for system-originated events. */
+  readonly ipAddress?: string;
+  /** User agent of that request, sanitized and truncated (additive; used by Module 35). */
+  readonly userAgent?: string;
 }
 
 export interface DomainEvent<TPayload = unknown> {

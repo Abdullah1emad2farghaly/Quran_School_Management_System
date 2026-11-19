@@ -1,6 +1,7 @@
 import type { DomainEvent } from '../../../00-shared-kernel/public';
 import { businessDateOf } from '../../../00-shared-kernel/public';
 import type { EventHandler } from '../../../06-domain-events-outbox/public';
+import { PaymentEventTypes, type PaymentRecordedPayload } from '../../../34-payments-collection/public';
 import { SubscriptionEventTypes, type SubscriptionBatchEventPayload, type SubscriptionEventPayload } from '../../../33-subscriptions/public';
 import { dedupKeys } from '../../domain/value-objects/dedup-keys';
 import { REMINDER_KINDS, firstUnpaidReminderDueAt, monthEndReminderDueAt } from '../../domain/value-objects/reminder-rules';
@@ -13,7 +14,9 @@ import { idOf, notifyParentsOf, payloadOf, type RuleDeps } from '../services/rul
  *    one `SUBSCRIPTION_UNPAID_3D` row per created subscription (3 calendar days after its creation date, Africa/Cairo) and one `SUBSCRIPTION_UNPAID_MONTH_END` row for the batch
  *    (the start of the final five calendar days of the month). Whether a reminder is actually sent is decided when it fires, from the CURRENT status (see the reminder processor).
  *  - SubscriptionCreated (one individual subscription after the bulk run): schedules its own 3-day reminder.
- *  - SubscriptionPaid: the student's Parent ONLY is told that the payment was recorded, and the pending 3-day reminder is cancelled.
+ *  - PaymentRecorded (Module 34's payment workflow): the student's Parent ONLY is told that the payment was recorded (never the Subscription Collector). The notification is triggered by the
+ *    payment, once per payment.
+ *  - SubscriptionPaid (the status change that Module 34's payment causes): the pending 3-day reminder is cancelled. It notifies nobody.
  *  - SubscriptionWaived: the pending 3-day reminder is cancelled (a waived month is never reminded).
  * Every notification uses a once-only key, so a redelivered event creates nothing twice; scheduling is an upsert on (kind, subject), so it is also safe to repeat.
  */
@@ -64,15 +67,24 @@ export function createSubscriptionRuleHandlers(deps: RuleDeps): EventHandler[] {
       name: 'notification-rules.subscription-paid',
       eventTypes: [SubscriptionEventTypes.SUBSCRIPTION_PAID],
       async handle(event: DomainEvent): Promise<void> {
-        const p = payloadOf<SubscriptionEventPayload>(event);
+        const subscriptionId = idOf(payloadOf<SubscriptionEventPayload>(event).subscriptionId);
+        if (!subscriptionId) return;
+        await deps.state.suppressPending(subscriptionId, [REMINDER_KINDS.SUBSCRIPTION_UNPAID_3D], deps.clock.now());
+      },
+    },
+    {
+      name: 'notification-rules.payment-recorded',
+      eventTypes: [PaymentEventTypes.PAYMENT_RECORDED],
+      async handle(event: DomainEvent): Promise<void> {
+        const p = payloadOf<PaymentRecordedPayload>(event);
+        const paymentId = idOf(p.paymentId);
         const subscriptionId = idOf(p.subscriptionId);
         const studentId = idOf(p.studentId);
-        if (!subscriptionId || !studentId) return;
-        await deps.state.suppressPending(subscriptionId, [REMINDER_KINDS.SUBSCRIPTION_UNPAID_3D], deps.clock.now());
+        if (!paymentId || !subscriptionId || !studentId) return;
         const student = await deps.students.find(studentId);
         if (!student) return;
         const month = idOf(p.month) ?? '—';
-        await notifyParentsOf(deps, student, TEMPLATE_KEYS.subscriptionPaidParent, { student: student.fullName, month }, { subscriptionId, studentId, month }, dedupKeys.subscriptionPaid(subscriptionId));
+        await notifyParentsOf(deps, student, TEMPLATE_KEYS.subscriptionPaidParent, { student: student.fullName, month }, { subscriptionId, studentId, month, paymentId }, dedupKeys.paymentRecorded(paymentId));
       },
     },
     {

@@ -125,6 +125,22 @@ export class GroupService {
     return buildPageResult(await Promise.all(items.map((g) => this.toDto(g, tx))), total, page);
   }
 
+  /**
+   * READ-ONLY (owner-approved 2026-11-17, used by Module 37's reporting scope): the ids of the groups the Teacher of this verified user id CURRENTLY teaches, i.e. their ACTIVE groups (the same set
+   * as `listOwnGroups`). A user without a Teacher record, or a Teacher without active groups, gets an empty list. It changes nothing and exposes no repository: ids only.
+   */
+  async listCurrentGroupIdsOfTeacherUser(userId: string, tx?: TransactionContext): Promise<string[]> {
+    const teacher = await this.teachers.findByUserId(userId, tx);
+    if (!teacher) return [];
+    const ids: string[] = [];
+    for (let page = 1; ; page += 1) {
+      const { items, total } = await this.groups.listActiveByTeacher(teacher.id, { page, pageSize: 100 }, 'asc', tx);
+      ids.push(...items.map((g) => g.id));
+      if (items.length === 0 || ids.length >= total) break;
+    }
+    return ids;
+  }
+
   async listHistory(groupId: string, tx?: TransactionContext): Promise<GroupHistoryDto[]> {
     if (!(await this.groups.findById(groupId, tx))) throw groupError('GROUP_NOT_FOUND');
     return this.groups.listHistory(groupId, tx);
@@ -391,7 +407,7 @@ export class GroupService {
 }
 
 /** What downstream modules (Sessions 24, Attendance 26, Schedule 23...) should depend on (read-only). */
-export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool'>;
+export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool' | 'listCurrentGroupIdsOfTeacherUser'>;
 
 /** Read-only name lookup for Module 36 (Excel Import). */
 export type GroupNameLookup = Pick<GroupService, 'findActiveByName' | 'listAssignmentHistoryOfStudent'>;

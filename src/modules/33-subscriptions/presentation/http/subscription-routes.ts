@@ -64,8 +64,6 @@ export const COLLECTOR_LIST_SPEC: ListQuerySpec = {
  *   GET    /subscriptions/collectors/me                               subscriptions.collector.read-own     SUBSCRIPTION_COLLECTOR                    the caller's own profile and current schools (no id accepted)
  *   GET    /subscriptions/:id                                         subscriptions.subscription.read      SCHOOL_MANAGER | the school's Collector   one subscription
  *   POST   /subscriptions/:id/waive                                   subscriptions.subscription.waive     SCHOOL_MANAGER of the school ONLY         UNPAID -> WAIVED (a Collector cannot waive)
- *   POST   /subscriptions/:id/mark-paid                               subscriptions.subscription.mark-paid     SCHOOL_MANAGER | the school's Collector   UNPAID -> PAID through the `markPaid` contract (Oldest-Unpaid Rule §59 enforced there)
- *   POST   /subscriptions/:id/mark-unpaid                             subscriptions.subscription.mark-unpaid   SCHOOL_MANAGER | the school's Collector   PAID -> UNPAID, ONLY for the current Africa/Cairo month (a past month is never changed back)
  * No endpoint collects a payment or stores an amount: payments and their reversal belong to Module 34.
  * The actor always comes from the verified token. ORGANIZATION_MANAGER, MAIN_ADMIN, PARENT, TEACHER have no subscription permission.
  */
@@ -199,22 +197,6 @@ export function createSubscriptionRouter(deps: SubscriptionRouterDeps): Router {
     validate(idParam),
     guard(SubscriptionPermissions.WAIVE, onSubscription),
     handle(async (req, res) => sendSuccess(res, await h.waive(req.params.id as string, sessionAuthRequired(req)))),
-  );
-
-  router.post(
-    '/:id/mark-paid',
-    auth,
-    validate(idParam),
-    guard(SubscriptionPermissions.MARK_PAID, onSubscription),
-    handle(async (req, res) => sendSuccess(res, await h.markPaid(req.params.id as string, sessionAuthRequired(req)))),
-  );
-
-  router.post(
-    '/:id/mark-unpaid',
-    auth,
-    validate(idParam),
-    guard(SubscriptionPermissions.MARK_UNPAID, onSubscription),
-    handle(async (req, res) => sendSuccess(res, await h.markUnpaid(req.params.id as string, sessionAuthRequired(req)))),
   );
 
   return router;

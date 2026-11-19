@@ -20,7 +20,9 @@ import {
   Subscription,
   SubscriptionBatch,
   SubscriptionGroupService,
+  SubscriptionPaymentTransitions,
   SubscriptionService,
+  type SubscriptionDto,
   type SchoolGroupRoster,
   type StudentRoster,
 } from '../../src/modules/33-subscriptions/public';
@@ -43,7 +45,10 @@ interface World {
   organizationId: string;
   studentIds: string[];
   roster: StudentRoster;
-  service: (now: string, unitOfWork?: UnitOfWork) => SubscriptionService;
+  service: (now: string, unitOfWork?: UnitOfWork) => SubscriptionService & {
+    markPaid: (subscriptionId: string, actorId: string, tx?: TransactionContext) => Promise<SubscriptionDto>;
+    reversePaid: (subscriptionId: string, actorId: string, tx?: TransactionContext) => Promise<SubscriptionDto>;
+  };
 }
 const created = { schools: new Set<string>(), students: new Set<string>() };
 function world(studentCount: number): World {
@@ -57,7 +62,16 @@ function world(studentCount: number): World {
     listActiveStudentIds: async () => [...studentIds],
   };
   const schools = { findById: async (id: string) => (id === schoolId ? { id, organizationId, status: 'ACTIVE' } : undefined) } as never;
-  const service = (now: string, unitOfWork: UnitOfWork = uow) => new SubscriptionService({ subscriptions: subRepo, roster, schools, unitOfWork, outbox: noopOutbox, clock: clock(now) });
+  const service = (now: string, unitOfWork: UnitOfWork = uow) => {
+    const subscriptions = new SubscriptionService({ subscriptions: subRepo, roster, schools, unitOfWork, outbox: noopOutbox, clock: clock(now) });
+    // Module 34's controlled contract (PAID <-> UNPAID), run in the caller's transaction or its own, with a payment id as in production (no payment row is needed for these status tests).
+    const transitions = new SubscriptionPaymentTransitions({ subscriptions: subRepo, outbox: noopOutbox, clock: clock(now) });
+    const within = <T>(tx: TransactionContext | undefined, work: (t: TransactionContext) => Promise<T>): Promise<T> => (tx ? work(tx) : unitOfWork.run(work));
+    return Object.assign(subscriptions, {
+      markPaid: (subscriptionId: string, actorId: string, tx?: TransactionContext) => within(tx, (t) => transitions.applyPaymentRecorded({ subscriptionId, paymentId: randomUUID(), actorId }, t)),
+      reversePaid: (subscriptionId: string, actorId: string, tx?: TransactionContext) => within(tx, (t) => transitions.applyPaymentReversed({ subscriptionId, paymentId: randomUUID(), actorId }, t)),
+    });
+  };
   return { schoolId, organizationId, studentIds, roster, service };
 }
 
@@ -330,7 +344,7 @@ describe('Module 33 SQL repositories and the real service (inside a rolled-back 
   });
 });
 
-describe('Module 33 group summary, mark-unpaid and the new repository read (real MariaDB, rolled-back transaction)', () => {
+describe('Module 33 group summary, payment reversal transition and the new repository read (real MariaDB, rolled-back transaction)', () => {
   it('listByStudentsMonth returns only the requested month and students, handles more ids than one query chunk, and invents nothing for students without a record', async () => {
     await inRolledBackTransaction(async (tx, _q, _f, savepointUow) => {
       const w = world(620); // more than the 500-id chunk
@@ -387,11 +401,11 @@ describe('Module 33 group summary, mark-unpaid and the new repository read (real
       await service.markPaid(oct, actor, tx);
       await service.markPaid(nov, actor, tx);
 
-      expect(await codeOf(service.markUnpaid(oct, actor, tx))).toBe('SUBSCRIPTION_MONTH_NOT_CURRENT');
-      expect((await service.markUnpaid(nov, actor, tx)).status).toBe('UNPAID');
+      expect(await codeOf(service.reversePaid(oct, actor, tx))).toBe('NEWER_PAID_SUBSCRIPTIONS_EXIST'); // an older month is never reversed behind a PAID newer one
+      expect((await service.reversePaid(nov, actor, tx)).status).toBe('UNPAID');
       const [row] = await q<{ status: string; paid_at: Date | null; paid_by: string | null }>('SELECT status, paid_at, paid_by FROM subscriptions WHERE id = :id', { id: nov });
       expect(row).toMatchObject({ status: 'UNPAID', paid_at: null, paid_by: null });
-      expect(await codeOf(service.markUnpaid(nov, actor, tx))).toBe('SUBSCRIPTION_ALREADY_UNPAID');
+      expect(await codeOf(service.reversePaid(nov, actor, tx))).toBe('SUBSCRIPTION_ALREADY_UNPAID');
       expect((await service.markPaid(nov, actor, tx)).status).toBe('PAID'); // Oldest-Unpaid still satisfied (October is PAID)
       await service.waiveSubscription(oct, actor, tx).catch(() => undefined); // PAID cannot be waived: unchanged
       const rows = await q<{ month: string; status: string }>('SELECT month, status FROM subscriptions WHERE student_id = :s ORDER BY month', { s: student });
@@ -508,7 +522,7 @@ describe('Module 33 concurrency (real parallel connections; committed data is de
       await service.createMonthlySubscriptions(w.schoolId, randomUUID());
       const sub = (await subRepo.findByStudentMonth(w.studentIds[0]!, '2026-11'))!;
       await service.markPaid(sub.id, randomUUID());
-      const outcomes = await Promise.all([1, 2, 3, 4].map(() => codeOf(service.markUnpaid(sub.id, randomUUID()))));
+      const outcomes = await Promise.all([1, 2, 3, 4].map(() => codeOf(service.reversePaid(sub.id, randomUUID()))));
       expect(outcomes.filter((o) => o === 'NO_ERROR')).toHaveLength(1);
       expect(outcomes.filter((o) => o === 'SUBSCRIPTION_ALREADY_UNPAID')).toHaveLength(3);
       expect((await subRepo.findById(sub.id))!.status).toBe('UNPAID');
@@ -522,7 +536,7 @@ describe('Module 33 concurrency (real parallel connections; committed data is de
       await service.createMonthlySubscriptions(w.schoolId, randomUUID());
       const sub = (await subRepo.findByStudentMonth(w.studentIds[0]!, '2026-11'))!;
       // start UNPAID: [pay, revert] -> pay-then-revert gives UNPAID (both succeed); revert-first (ALREADY_UNPAID) then pay gives PAID
-      const [payResult, revertResult] = await Promise.all([codeOf(service.markPaid(sub.id, randomUUID())), codeOf(service.markUnpaid(sub.id, randomUUID()))]);
+      const [payResult, revertResult] = await Promise.all([codeOf(service.markPaid(sub.id, randomUUID())), codeOf(service.reversePaid(sub.id, randomUUID()))]);
       const final = (await subRepo.findById(sub.id))!.snapshot;
       expect(payResult).toBe('NO_ERROR'); // an UNPAID subscription can always be paid by exactly this call
       if (revertResult === 'NO_ERROR') {
@@ -536,22 +550,28 @@ describe('Module 33 concurrency (real parallel connections; committed data is de
     }
   });
 
-  it('OLDEST-UNPAID with the new transition: reverting the current month while the next month is paid being attempted never leaves a newer PAID behind an unpaid month', async () => {
+  it('OLDEST-UNPAID with reversal: reversing an older month while the next month is being paid never leaves a newer PAID behind an unpaid month', async () => {
     for (let round = 0; round < 6; round += 1) {
       const w = world(1);
       const student = w.studentIds[0]!;
       await w.service('2026-10-10T09:00:00Z').createMonthlySubscriptions(w.schoolId, randomUUID());
       const oct = (await subRepo.findByStudentMonth(student, '2026-10'))!;
       await w.service('2026-10-20T09:00:00Z').markPaid(oct.id, randomUUID());
-      // the month turns: November's subscription is created; October (PAID) can no longer be changed back, November can be paid
       await w.service('2026-11-01T09:00:00Z').createMonthlySubscriptions(w.schoolId, randomUUID());
       const nov = (await subRepo.findByStudentMonth(student, '2026-11'))!;
       const service = w.service('2026-11-02T09:00:00Z');
-      const [revertOct, payNov] = await Promise.all([codeOf(service.markUnpaid(oct.id, randomUUID())), codeOf(service.markPaid(nov.id, randomUUID()))]);
-      expect(revertOct).toBe('SUBSCRIPTION_MONTH_NOT_CURRENT');
-      expect(payNov).toBe('NO_ERROR');
+      // both lock the student's subscriptions, so they are serialized: exactly one order happens and the Oldest-Unpaid Rule holds either way
+      const [revertOct, payNov] = await Promise.all([codeOf(service.reversePaid(oct.id, randomUUID())), codeOf(service.markPaid(nov.id, randomUUID()))]);
       const rows = await sequelize.query<{ month: string; status: string }>('SELECT month, status FROM subscriptions WHERE student_id = :s ORDER BY month', { replacements: { s: student }, type: QueryTypes.SELECT });
-      expect(rows.map((r) => r.status)).toEqual(['PAID', 'PAID']);
+      const statuses = rows.map((r) => r.status);
+      if (revertOct === 'NO_ERROR') {
+        expect(payNov).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST'); // October went back to UNPAID first, so November cannot be paid
+        expect(statuses).toEqual(['UNPAID', 'UNPAID']);
+      } else {
+        expect(revertOct).toBe('NEWER_PAID_SUBSCRIPTIONS_EXIST'); // November was paid first, so October cannot be reversed behind it
+        expect(payNov).toBe('NO_ERROR');
+        expect(statuses).toEqual(['PAID', 'PAID']);
+      }
     }
   });
 });

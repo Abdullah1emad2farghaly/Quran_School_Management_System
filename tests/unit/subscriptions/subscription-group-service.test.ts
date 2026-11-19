@@ -39,7 +39,7 @@ describe('group summary: the school\'s existing groups with paid / unpaid / tota
   it('counts PAID and UNPAID students from the real subscription records of the month; WAIVED are in the total only', async () => {
     const { t, school, manager, g1, g2, s1, s2, sub, summaryOf } = await setup();
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
-    await t.subscriptions.markPaid(await sub(s1[0]!.id), manager.id);
+    await t.payViaWorkflow(await sub(s1[0]!.id), manager.id);
     await t.subscriptions.waiveSubscription(await sub(s1[1]!.id), manager.id);
 
     expect(await summaryOf(g1.id)).toMatchObject({ month: '2026-11', subscriptionsCreated: true, paidStudents: 1, unpaidStudents: 1, waivedStudents: 1, withoutSubscription: 0, totalStudents: 3 });
@@ -77,8 +77,8 @@ describe('group summary: the school\'s existing groups with paid / unpaid / tota
     const { t, school, manager, g1, s1, sub, summaryOf } = await setup();
     t.setNow('2026-10-10T09:00:00Z');
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
-    await t.subscriptions.markPaid(await sub(s1[0]!.id, '2026-10'), manager.id);
-    await t.subscriptions.markPaid(await sub(s1[1]!.id, '2026-10'), manager.id);
+    await t.payViaWorkflow(await sub(s1[0]!.id, '2026-10'), manager.id);
+    await t.payViaWorkflow(await sub(s1[1]!.id, '2026-10'), manager.id);
     t.setNow('2026-11-10T09:00:00Z');
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
 
@@ -94,7 +94,7 @@ describe('group summary: the school\'s existing groups with paid / unpaid / tota
   it('counts only regular/active students: INACTIVE and ARCHIVED students are excluded from every count', async () => {
     const { t, school, manager, g1, s1, sub, summaryOf } = await setup();
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
-    await t.subscriptions.markPaid(await sub(s1[0]!.id), manager.id);
+    await t.payViaWorkflow(await sub(s1[0]!.id), manager.id);
     await t.students.deactivateStudent(s1[0]!.id, 'paused', manager.id); // a PAID student who is no longer regular/active
     await t.students.archiveStudent(s1[2]!.id, 'left', manager.id);
     expect(await summaryOf(g1.id)).toMatchObject({ paidStudents: 0, unpaidStudents: 1, totalStudents: 1 });
@@ -114,7 +114,7 @@ describe('group summary: the school\'s existing groups with paid / unpaid / tota
   it('a student of another group never appears in this group\'s counts', async () => {
     const { t, school, manager, g1, g2, s2, sub, summaryOf } = await setup();
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
-    for (const s of s2) await t.subscriptions.markPaid(await sub(s.id), manager.id);
+    for (const s of s2) await t.payViaWorkflow(await sub(s.id), manager.id);
     expect(await summaryOf(g2.id)).toMatchObject({ paidStudents: 2 });
     expect(await summaryOf(g1.id)).toMatchObject({ paidStudents: 0 });
   });
@@ -155,7 +155,7 @@ describe('group students: every regular/active student of ONE group with the sta
   it('returns the group\'s students with their status (PAID / UNPAID / WAIVED / null when there is no record), and only that group\'s students', async () => {
     const { t, school, manager, g1, g2, s1, s2, sub } = await setup();
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
-    await t.subscriptions.markPaid(await sub(s1[0]!.id), manager.id);
+    await t.payViaWorkflow(await sub(s1[0]!.id), manager.id);
     await t.subscriptions.waiveSubscription(await sub(s1[1]!.id), manager.id);
     const late = await t.newStudentInGroup(school.id, manager.id, g1.id);
 
@@ -210,7 +210,7 @@ describe('group students: every regular/active student of ONE group with the sta
     const { t, school, manager, g1, s1, sub } = await setup();
     t.setNow('2026-10-10T09:00:00Z');
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
-    await t.subscriptions.markPaid(await sub(s1[0]!.id, '2026-10'), manager.id);
+    await t.payViaWorkflow(await sub(s1[0]!.id, '2026-10'), manager.id);
     t.setNow('2026-11-10T09:00:00Z');
     await t.subscriptions.createMonthlySubscriptions(school.id, manager.id);
     const oct = (await t.groupSummaries.listGroupStudents(school.id, g1.id, { month: '2026-10', page: page() })).items;

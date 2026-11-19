@@ -31,8 +31,8 @@ async function setup() {
 
 describe('GET /subscriptions/schools/:schoolId/groups', () => {
   it('returns the school\'s groups with paid / unpaid / total, waived in the total only, and a localized-free JSON shape', async () => {
-    const { app, authA, authC, schoolA, g1, g2, s1, sub } = await setup();
-    await request(app).post(`${SUBSCRIPTIONS}/${await sub(s1[0]!.id)}/mark-paid`).set(authA);
+    const { app, t, authA, authC, schoolA, managerA, g1, g2, s1, sub } = await setup();
+    await t.payViaWorkflow(await sub(s1[0]!.id), managerA.id);
     await request(app).post(`${SUBSCRIPTIONS}/${await sub(s1[1]!.id)}/waive`).set(authA);
 
     for (const auth of [authA, authC]) {
@@ -86,7 +86,7 @@ describe('GET /subscriptions/schools/:schoolId/groups', () => {
 describe('GET /subscriptions/schools/:schoolId/groups/:groupId/students', () => {
   it('lists the group\'s students with their status for the month, including WAIVED and "no record" explicitly', async () => {
     const { app, t, authA, authC, schoolA, managerA, g1, s1, s2, sub } = await setup();
-    await request(app).post(`${SUBSCRIPTIONS}/${await sub(s1[0]!.id)}/mark-paid`).set(authA);
+    await t.payViaWorkflow(await sub(s1[0]!.id), managerA.id);
     await request(app).post(`${SUBSCRIPTIONS}/${await sub(s1[1]!.id)}/waive`).set(authA);
     const late = await t.newStudentInGroup(schoolA.id, managerA.id, g1.id);
 
@@ -149,159 +149,26 @@ describe('GET /subscriptions/schools/:schoolId/groups/:groupId/students', () => 
   });
 });
 
-describe('POST /subscriptions/:id/mark-paid', () => {
-  it('marks an UNPAID subscription PAID, publishes SubscriptionPaid exactly once, and refuses a second call', async () => {
-    const { app, t, authA, s1, sub } = await setup();
+describe('Module 33 exposes no payment-status endpoint (Module 34 owns PAID <-> UNPAID)', () => {
+  it('POST /subscriptions/:id/mark-paid and /mark-unpaid no longer exist for anyone, and the status never changes', async () => {
+    const { app, authA, authC, s1, sub } = await setup();
     const id = await sub(s1[0]!.id);
-    const res = await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ id, status: 'PAID', studentId: s1[0]!.id });
-    expect(res.body.data.paidAt).toBeTruthy();
-    expect(t.events('SubscriptionPaid')).toHaveLength(1);
-    const again = await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    expect(again.status).toBe(409);
-    expect(again.body.error.code).toBe('SUBSCRIPTION_ALREADY_PAID');
-    expect(t.events('SubscriptionPaid')).toHaveLength(1);
+    for (const auth of [authA, authC]) {
+      for (const action of ['mark-paid', 'mark-unpaid']) {
+        const res = await request(app).post(`${SUBSCRIPTIONS}/${id}/${action}`).set(auth);
+        expect([404, 405], `${action}`).toContain(res.status);
+      }
+    }
+    expect((await request(app).get(`${SUBSCRIPTIONS}/${id}`).set(authA)).body.data.status).toBe('UNPAID');
   });
 
-  it('enforces the Oldest-Unpaid Rule through HTTP and rejects a WAIVED subscription', async () => {
-    const { app, t, authA, schoolA, managerA, s1 } = await setup();
-    // give student s1[0] an OLDER month (October) that stays unpaid
-    const oct = (await import('../../src/modules/33-subscriptions/public')).Subscription.openInBatch({ studentId: s1[0]!.id, schoolId: schoolA.id, organizationId: t.org.id, month: '2026-10', createdBy: managerA.id, batchId: (await t.subscriptionRepo.findByStudentMonth(s1[0]!.id, '2026-11'))!.id, clock: t.clock });
-    await t.unitOfWork.run((tx) => t.subscriptionRepo.insert(oct, tx));
-    const nov = (await t.subscriptionRepo.findByStudentMonth(s1[0]!.id, '2026-11'))!.id;
-    const blocked = await request(app).post(`${SUBSCRIPTIONS}/${nov}/mark-paid`).set(authA);
-    expect(blocked.status).toBe(422);
-    expect(blocked.body.error.code).toBe('OLDER_UNPAID_SUBSCRIPTIONS_EXIST');
-    expect((await t.subscriptionRepo.findById(nov))!.status).toBe('UNPAID');
-    expect(t.events('SubscriptionPaid')).toHaveLength(0);
-    // pay October first (via the contract), then November succeeds
-    await t.subscriptions.markPaid(oct.id, managerA.id);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${nov}/mark-paid`).set(authA)).status).toBe(200);
-
-    const waivedId = await (async () => {
-      const id = (await t.subscriptionRepo.findByStudentMonth(s1[1]!.id, '2026-11'))!.id;
-      await request(app).post(`${SUBSCRIPTIONS}/${id}/waive`).set(authA);
-      return id;
-    })();
-    const waived = await request(app).post(`${SUBSCRIPTIONS}/${waivedId}/mark-paid`).set(authA);
-    expect(waived.status).toBe(422);
-    expect(waived.body.error.code).toBe('SUBSCRIPTION_NOT_UNPAID');
-  });
-
-  it('is available to the school\'s manager and its CURRENT collector only', async () => {
-    const { app, t, login, authA, authB, authC, schoolA, managerA, collector, s1, s2, sub } = await setup();
+  it('the group endpoints show a status change made by the payment workflow immediately (summary and student list agree)', async () => {
+    const { app, t, authA, managerA, schoolA, g1, s1, sub } = await setup();
     const id = await sub(s1[0]!.id);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`)).status).toBe(401);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authB)).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(await login(t.orgAdmin))).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(await login(await t.h.createUser({ role: 'PARENT' })))).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${UNKNOWN}/mark-paid`).set(authA)).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/not-a-uuid/mark-paid`).set(authA)).status).toBe(400);
-    expect((await t.subscriptionRepo.findById(id))!.status).toBe('UNPAID');
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authC)).status).toBe(200); // the linked collector
-    await request(app).delete(`${forSchool(schoolA.id)}/collectors/${collector.collector.userId}`).set(authA);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${await sub(s2[0]!.id)}/mark-paid`).set(authC)).status).toBe(403); // the ended link grants nothing
-    expect(managerA.id).toBeDefined();
-  });
-
-  it('is concurrency-safe: simultaneous requests pay the subscription once', async () => {
-    const { app, t, authA, s1, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    const results = await Promise.all([1, 2, 3, 4].map(() => request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA)));
-    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
-    expect(t.events('SubscriptionPaid')).toHaveLength(1);
-    for (const r of results.filter((x) => x.status !== 200)) expect([409, 422]).toContain(r.status);
-  });
-});
-
-describe('POST /subscriptions/:id/mark-unpaid', () => {
-  it('changes a PAID subscription of the current month to UNPAID and publishes no SubscriptionPaid', async () => {
-    const { app, t, authA, authC, s1, s2, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    const res = await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authA);
-    expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ id, status: 'UNPAID', paidAt: null });
-    expect(t.events('SubscriptionPaid')).toHaveLength(1); // only the original payment
-    expect(t.events('SubscriptionMarkedUnpaid')).toHaveLength(1);
-    // the linked collector may do it too
-    const id2 = await sub(s2[0]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${id2}/mark-paid`).set(authC);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id2}/mark-unpaid`).set(authC)).status).toBe(200);
-  });
-
-  it('rejects an already UNPAID, a WAIVED and a PAST-month subscription with distinct errors', async () => {
-    const { app, t, authA, schoolA, managerA, s1, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    const already = await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authA);
-    expect(already.status).toBe(409);
-    expect(already.body.error.code).toBe('SUBSCRIPTION_ALREADY_UNPAID');
-
-    const waivedId = await sub(s1[1]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${waivedId}/waive`).set(authA);
-    const waived = await request(app).post(`${SUBSCRIPTIONS}/${waivedId}/mark-unpaid`).set(authA);
-    expect(waived.status).toBe(422);
-    expect(waived.body.error.code).toBe('SUBSCRIPTION_NOT_PAID');
-
-    // a PAID subscription of OCTOBER while the clock is in November: never changed back
-    const { Subscription } = await import('../../src/modules/33-subscriptions/public');
-    const october = Subscription.openInBatch({ studentId: s1[2]!.id, schoolId: schoolA.id, organizationId: t.org.id, month: '2026-10', createdBy: managerA.id, batchId: (await t.subscriptionRepo.findByStudentMonth(s1[2]!.id, '2026-11'))!.id, clock: t.clock });
-    await t.unitOfWork.run((tx) => t.subscriptionRepo.insert(october, tx));
-    await t.subscriptions.markPaid(october.id, managerA.id);
-    const past = await request(app).post(`${SUBSCRIPTIONS}/${october.id}/mark-unpaid`).set(authA);
-    expect(past.status).toBe(422);
-    expect(past.body.error.code).toBe('SUBSCRIPTION_MONTH_NOT_CURRENT');
-    expect((await t.subscriptionRepo.findById(october.id))!.status).toBe('PAID');
-    expect(t.events('SubscriptionMarkedUnpaid')).toHaveLength(0);
-  });
-
-  it('follows the Cairo month boundary over HTTP', async () => {
-    const { app, t, authA, s1, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    t.setNow('2026-11-30T21:59:59Z'); // 23:59:59 on 30 Nov in Cairo
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authA)).status).toBe(200);
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    t.setNow('2026-11-30T22:00:00Z'); // 00:00 on 1 Dec in Cairo
-    const res = await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authA);
-    expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe('SUBSCRIPTION_MONTH_NOT_CURRENT');
-  });
-
-  it('enforces authorization (roles, school, organization, current assignment) and validates the id', async () => {
-    const { app, t, login, authA, authB, authC, schoolA, collector, s1, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`)).status).toBe(401);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authB)).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(await login(t.orgAdmin))).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(await login(await t.h.createUser({ role: 'TEACHER' })))).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${UNKNOWN}/mark-unpaid`).set(authA)).status).toBe(403);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/bad-id/mark-unpaid`).set(authA)).status).toBe(400);
-    expect((await t.subscriptionRepo.findById(id))!.status).toBe('PAID');
-    await request(app).delete(`${forSchool(schoolA.id)}/collectors/${collector.collector.userId}`).set(authA);
-    expect((await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authC)).status).toBe(403);
-    expect((await t.subscriptionRepo.findById(id))!.status).toBe('PAID');
-  });
-
-  it('is concurrency-safe: simultaneous requests change it once and publish one SubscriptionMarkedUnpaid', async () => {
-    const { app, t, authA, s1, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
-    const results = await Promise.all([1, 2, 3, 4].map(() => request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authA)));
-    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
-    expect(t.events('SubscriptionMarkedUnpaid')).toHaveLength(1);
-    expect(t.events('SubscriptionPaid')).toHaveLength(1);
-  });
-
-  it('the group endpoints show the new status immediately (summary and student list agree)', async () => {
-    const { app, authA, schoolA, g1, s1, sub } = await setup();
-    const id = await sub(s1[0]!.id);
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-paid`).set(authA);
+    await t.payViaWorkflow(id, managerA.id);
     let summary = (await request(app).get(`${forSchool(schoolA.id)}/groups`).set(authA)).body.data.find((g: { groupId: string }) => g.groupId === g1.id);
     expect(summary).toMatchObject({ paidStudents: 1, unpaidStudents: 2 });
-    await request(app).post(`${SUBSCRIPTIONS}/${id}/mark-unpaid`).set(authA);
+    await t.reverseViaWorkflow(id, managerA.id);
     summary = (await request(app).get(`${forSchool(schoolA.id)}/groups`).set(authA)).body.data.find((g: { groupId: string }) => g.groupId === g1.id);
     expect(summary).toMatchObject({ paidStudents: 0, unpaidStudents: 3, totalStudents: 3 });
     const students = (await request(app).get(`${forSchool(schoolA.id)}/groups/${g1.id}/students`).set(authA)).body.data;

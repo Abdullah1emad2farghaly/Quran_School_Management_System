@@ -14,7 +14,7 @@ export const SUBSCRIPTION_ERROR_MESSAGES: readonly ErrorMessageEntry[] = [
   { code: C.SUBSCRIPTION_NOT_UNPAID, message: { ar: 'يمكن فقط تغيير حالة الاشتراك غير المدفوع.', en: 'Only an unpaid subscription can be changed.' } },
   { code: C.SUBSCRIPTION_ALREADY_PAID, message: { ar: 'هذا الاشتراك مدفوع بالفعل.', en: 'This subscription is already paid.' } },
   { code: C.OLDER_UNPAID_SUBSCRIPTIONS_EXIST, message: { ar: 'لا يمكن دفع شهر أحدث قبل أن تكون كل الأشهر الأقدم مدفوعة أو معفاة.', en: 'A newer month cannot be paid until every older month is paid or waived.' } },
-  { code: C.SUBSCRIPTION_MONTH_NOT_CURRENT, message: { ar: 'لا يمكن تغيير الاشتراك إلى غير مدفوع إلا خلال شهره الحالي؛ اشتراك الشهر السابق لا يُغيَّر إلى غير مدفوع أبدًا.', en: 'A subscription can be changed to unpaid only during its own current month; a subscription of a past month is never changed to unpaid.' } },
+  { code: C.SUBSCRIPTION_TRANSITION_NOT_ALLOWED, message: { ar: 'لا يمكن تغيير حالة الدفع للاشتراك إلا من خلال عملية الدفع.', en: 'A subscription payment status can only change through the payment workflow.' } },
   { code: C.SUBSCRIPTION_NOT_PAID, message: { ar: 'يمكن فقط تغيير الاشتراك المدفوع إلى غير مدفوع.', en: 'Only a paid subscription can be changed to unpaid.' } },
   { code: C.SUBSCRIPTION_ALREADY_UNPAID, message: { ar: 'هذا الاشتراك غير مدفوع بالفعل.', en: 'This subscription is already unpaid.' } },
   { code: C.NEWER_PAID_SUBSCRIPTIONS_EXIST, message: { ar: 'لا يمكن تغيير هذا الاشتراك إلى غير مدفوع لأن شهرًا أحدث له مدفوع.', en: 'This subscription cannot be changed to unpaid because a newer month of the same student is paid.' } },

@@ -18,7 +18,8 @@ export const dedupKeys = {
   sessionHalfTime: (sessionId: string): string => `session-half-time:${sessionId}`,
   sessionEvaluationWarning: (sessionId: string): string => `session-evaluation-warning:${sessionId}`,
   subscriptionsCreated: (eventId: string): string => `subscriptions-created:${eventId}`,
-  subscriptionPaid: (subscriptionId: string): string => `subscription-paid:${subscriptionId}`,
+  /** One per recorded PAYMENT (a subscription paid again after a reversal is a new payment and notifies the Parent again). */
+  paymentRecorded: (paymentId: string): string => `payment-recorded:${paymentId}`,
   /** One per subscription, ever: the 3-day reminder can never reach the same parent twice for the same subscription. */
   subscriptionUnpaid3d: (subscriptionId: string): string => `subscription-unpaid-3d:${subscriptionId}`,
   /** One per subscription (a subscription belongs to exactly one school and month), so once per school and month for every parent. */
