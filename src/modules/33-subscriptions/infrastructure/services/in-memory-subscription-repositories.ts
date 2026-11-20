@@ -151,4 +151,3 @@ export class InMemoryCollectorLinkRepository implements CollectorLinkRepository 
     saved.forEach(([k, v]) => this.rows.set(k, v));
   }
 }
-

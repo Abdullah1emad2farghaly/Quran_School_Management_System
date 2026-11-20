@@ -10,7 +10,7 @@ import type { AttendanceCorrection } from '../../domain/entities/attendance-reco
 import { attendanceError } from '../../domain/errors/attendance-errors';
 import { MAX_BATCH_RECORDS, SYSTEM_ACTOR_ID, SYSTEM_CANCELLATION_REASON, isAttendanceStatus, type ActorRole, type AttendanceStatus, type SubjectType } from '../../domain/value-objects/attendance-status';
 import { toAttendanceDto, type AttendanceBatchResultDto, type AttendanceChangeResultDto, type AttendanceRecordDto, type SessionAttendanceDto } from '../dto/attendance-dto';
-import type { AttendanceRepository } from '../ports/attendance-repository';
+import type { AttendanceReportQuery, AttendanceReportRow, AttendanceRepository } from '../ports/attendance-repository';
 import type { StudentEvaluationGuard } from '../ports/student-evaluation-guard';
 
 export interface AttendanceServiceDeps {
@@ -216,6 +216,11 @@ export class AttendanceService {
   }
 
   /** A student's attendance over time (the route guard allows the School Manager of the school and the student's own Parent). Newest session first by default. */
+  /** Read-only aggregate for reports (Module 38). The caller (the report) has already proven every id lies inside the requester's scope and applies the student join date (§67). */
+  summarizeForReport(query: AttendanceReportQuery): Promise<AttendanceReportRow[]> {
+    return this.attendance.summarizeForReport(query);
+  }
+
   async listStudentAttendance(studentId: string, input: AttendanceListInput, tx?: TransactionContext): Promise<PageResult<AttendanceRecordDto>> {
     const { items, total } = await this.attendance.listByStudent(studentId, input.direction ?? 'desc', input.page, tx);
     return buildPageResult(items.map(toAttendanceDto), total, input.page);
@@ -364,3 +369,6 @@ function parseStudentChanges(records: unknown): Change[] {
     return { subjectId: rec.studentId, status, reason: rec.reason };
   });
 }
+
+/** The read-only aggregate Module 38 (Reports) depends on. */
+export type AttendanceReportLookup = Pick<AttendanceService, 'summarizeForReport'>;

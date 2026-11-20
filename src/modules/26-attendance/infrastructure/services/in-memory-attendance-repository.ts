@@ -1,5 +1,5 @@
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../00-shared-kernel/public';
-import type { AttendanceRepository } from '../../application/ports/attendance-repository';
+import type { AttendanceReportQuery, AttendanceReportRow, AttendanceRepository } from '../../application/ports/attendance-repository';
 import { AttendanceRecord, type AttendanceCorrection, type AttendanceRecordSnapshot } from '../../domain/entities/attendance-record';
 import type { SubjectType } from '../../domain/value-objects/attendance-status';
 
@@ -37,6 +37,35 @@ export class InMemoryAttendanceRepository implements AttendanceRepository {
       .filter((r) => r.subjectType === 'STUDENT' && r.subjectId === studentId)
       .sort((a, b) => (direction === 'asc' ? 1 : -1) * (a.scheduledStart.getTime() - b.scheduledStart.getTime()) || a.id.localeCompare(b.id));
     return { items: all.slice(pageOffset(page), pageOffset(page) + page.pageSize).map((r) => AttendanceRecord.rehydrate({ ...r })), total: all.length };
+  }
+
+  async summarizeForReport(query: AttendanceReportQuery): Promise<AttendanceReportRow[]> {
+    const types = new Set<string>(query.subjectTypes);
+    const schools = query.schoolIds && new Set(query.schoolIds);
+    const groups = query.groupIds && new Set(query.groupIds);
+    const students = query.studentIds && new Set(query.studentIds);
+    const totals = new Map<string, AttendanceReportRow>();
+    for (const r of this.rows.values()) {
+      if (!types.has(r.subjectType)) continue;
+      if (schools && !schools.has(r.schoolId)) continue;
+      if (groups && !groups.has(r.groupId)) continue;
+      if (students && !students.has(r.subjectId)) continue;
+      if (query.fromDate !== undefined && r.occurrenceDate < query.fromDate) continue;
+      if (query.toDate !== undefined && r.occurrenceDate > query.toDate) continue;
+      const key = `${r.schoolId}|${r.groupId}|${r.subjectType}|${r.subjectId}|${r.status}`;
+      const found = totals.get(key);
+      totals.set(key, {
+        schoolId: r.schoolId,
+        groupId: r.groupId,
+        subjectType: r.subjectType,
+        subjectId: r.subjectId,
+        status: r.status,
+        count: (found?.count ?? 0) + 1,
+        firstDate: found && found.firstDate < r.occurrenceDate ? found.firstDate : r.occurrenceDate,
+      });
+    }
+    const key = (r: AttendanceReportRow) => `${r.schoolId}|${r.groupId}|${r.subjectType}|${r.subjectId}|${r.status}`;
+    return [...totals.values()].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   }
 
   async listCorrectionsOfSession(sessionId: string, _tx?: TransactionContext): Promise<AttendanceCorrection[]> {

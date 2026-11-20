@@ -4,8 +4,8 @@
 // AttendanceCorrected). No student is ever marked automatically (only a Teacher who did not check in by the end of the session, or who cancels it, is recorded ABSENT by the system) and nothing is deleted. Other modules depend on `AttendanceService` (reads) and on the events
 // (AttendanceRecorded / AttendanceCorrected, prepared for Module 35); permissions go through the Authorization Engine (`registerAttendanceAuthorization`).
 export { createMarkTeacherAbsentOnSessionEndHandler } from '../application/handlers/mark-teacher-absent-on-session-end';
-export { AttendanceService, type SessionEndFacts, type SystemAbsenceOutcome, type AttendanceServiceDeps, type StudentAttendanceInput, type TeacherCheckInInput, type ManagerAttendanceInput, type AttendanceListInput } from '../application/services/attendance-service';
-export type { AttendanceRepository } from '../application/ports/attendance-repository';
+export { AttendanceService, type AttendanceReportLookup, type SessionEndFacts, type SystemAbsenceOutcome, type AttendanceServiceDeps, type StudentAttendanceInput, type TeacherCheckInInput, type ManagerAttendanceInput, type AttendanceListInput } from '../application/services/attendance-service';
+export type { AttendanceRepository, AttendanceReportQuery, AttendanceReportRow } from '../application/ports/attendance-repository';
 export type { StudentEvaluationGuard } from '../application/ports/student-evaluation-guard';
 export type { AttendanceRecordDto, AttendanceBatchResultDto, AttendanceChangeResultDto, AttendanceOutcome, SessionAttendanceDto } from '../application/dto/attendance-dto';
 export { AttendancePermissions, registerAttendanceAuthorization, type AttendanceAuthorizationDeps } from '../application/services/attendance-authorization';

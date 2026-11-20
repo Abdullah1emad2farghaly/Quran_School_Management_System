@@ -93,6 +93,85 @@ describe('Module 38 endpoints conform to their OpenAPI documentation (real respo
     api.conforms(await request(app).get(`${REPORTS}/payment/xlsx?period=FOREVER`).set(authA)); // 400
     api.conforms(await request(app).get(`${REPORTS}/payment/xlsx?period=ACROSS_TIME`)); // 401
 
+  });
+
+  it('attendance report: JSON, CSV and Excel, with their error responses', async () => {
+    const { app, t, login, firstLoginAndChange, recordAttendance } = await createReportsApi();
+    const schoolA = await t.newSchool('مدرسة النور');
+    const schoolB = await t.newSchool('مدرسة الهدى');
+    const managerA = await t.newSchoolManager(schoolA.id);
+    const managerB = await t.newSchoolManager(schoolB.id);
+    const group = await t.newGroup(schoolA.id, managerA.id, 'حلقة الفجر');
+    const parent = await t.newParent(schoolA.id, managerA.id);
+    const student = await t.registerStudent(schoolA.id, parent.id, managerA.id, { joinDate: '2026-09-01' });
+    await t.groups.assignStudent(group.id, student.id, managerA.id);
+    const teacherId = '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e';
+    const mark = (subjectType: 'STUDENT' | 'TEACHER', subjectId: string, status: 'PRESENT' | 'ABSENT', date: string) =>
+      recordAttendance({ schoolId: schoolA.id, groupId: group.id, subjectType, subjectId, status, date });
+    mark('STUDENT', student.id, 'ABSENT', '2026-08-20'); // before the join date: never reported
+    mark('STUDENT', student.id, 'PRESENT', '2026-10-05');
+    mark('STUDENT', student.id, 'ABSENT', '2026-10-12');
+    mark('STUDENT', student.id, 'PRESENT', '2026-11-02');
+    mark('TEACHER', teacherId, 'PRESENT', '2026-11-02');
+    t.setNow('2026-11-10T09:00:00Z');
+    const collector = await t.newCollector(schoolA.id, managerA.id);
+    const authA = await login(managerA);
+    const authB = await login(managerB);
+    const authOrg = await login(t.orgAdmin);
+    const { auth: authC } = await firstLoginAndChange(collector);
+
+    // ---- JSON: the numbers follow the owning modules' data, and nothing before the join date
+    const all = api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME`).set(authA));
+    expect(all.status).toBe(200);
+    expect(all.body.data.rows).toEqual([
+      { subjectType: 'STUDENT', subjectId: student.id, subjectName: student.fullName, schoolId: schoolA.id, schoolName: 'مدرسة النور', groupId: group.id, groupName: 'حلقة الفجر', present: 2, absent: 1, total: 3 },
+      { subjectType: 'TEACHER', subjectId: teacherId, subjectName: null, schoolId: schoolA.id, schoolName: 'مدرسة النور', groupId: group.id, groupName: 'حلقة الفجر', present: 1, absent: 0, total: 1 },
+    ]);
+    expect(all.body.data.totals).toEqual({ students: { present: 2, absent: 1, total: 3 }, teachers: { present: 1, absent: 0, total: 1 } });
+    const thisMonth = api.conforms(await request(app).get(`${REPORTS}/attendance?period=THIS_MONTH&groupId=${group.id}`).set(authA));
+    expect(thisMonth.body.data.totals.students).toEqual({ present: 1, absent: 0, total: 1 });
+    const custom = api.conforms(await request(app).get(`${REPORTS}/attendance?period=CUSTOM&startDate=2026-10-01&endDate=2026-10-31&studentId=${student.id}`).set(authA));
+    expect(custom.body.data.rows.map((r: { subjectType: string }) => r.subjectType)).toEqual(['STUDENT']); // a student filter has no teacher rows
+    expect(custom.body.data.totals.students).toEqual({ present: 1, absent: 1, total: 2 });
+    // the Organization Manager reports on every school of their organization; School Manager B sees nothing of school A
+    expect(api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME`).set(authOrg)).body.data.rows).toHaveLength(2);
+    expect(api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME`).set(authB)).body.data.rows).toEqual([]);
+
+    // ---- JSON: errors
+    api.conforms(await request(app).get(`${REPORTS}/attendance`).set(authA)); // 400 period missing
+    api.conforms(await request(app).get(`${REPORTS}/attendance?period=FOREVER`).set(authA)); // 400 INVALID_REPORT_PERIOD
+    api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME&groupId=not-a-uuid`).set(authA)); // 400
+    api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME&studentId=not-a-uuid`).set(authA)); // 400
+    for (const filter of [`groupId=${group.id}`, `studentId=${student.id}`, `schoolId=${schoolA.id}`]) {
+      const outside = api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME&${filter}`).set(authB));
+      expect(outside.status).toBe(403);
+      expect(outside.body.error.code).toBe('REPORT_SCOPE_FORBIDDEN');
+    }
+    const noReport = api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME`).set(authC)); // a Collector has no attendance report
+    expect(noReport.status).toBe(403);
+    expect(noReport.body.error.code).toBe('REPORT_NOT_ALLOWED');
+    api.conforms(await request(app).get(`${REPORTS}/attendance?period=ACROSS_TIME`)); // 401
+
+    // ---- CSV
+    const csv = api.conforms(await request(app).get(`${REPORTS}/attendance/csv?period=ACROSS_TIME`).set(authA));
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-disposition']).toContain('attendance-report-across-time.csv');
+    expect(csv.text).toContain('حلقة الفجر');
+    api.conforms(await request(app).get(`${REPORTS}/attendance/csv?period=ACROSS_TIME&groupId=${group.id}`).set(authB)); // 403
+    api.conforms(await request(app).get(`${REPORTS}/attendance/csv`).set(authA)); // 400
+    api.conforms(await request(app).get(`${REPORTS}/attendance/csv?period=ACROSS_TIME`)); // 401
+
+    // ---- Excel
+    const xlsx = api.conforms(await request(app).get(`${REPORTS}/attendance/xlsx?period=THIS_MONTH`).set(authA));
+    expect(xlsx.status).toBe(200);
+    expect(xlsx.headers['content-type']).toContain('spreadsheetml');
+    api.conforms(await request(app).get(`${REPORTS}/attendance/xlsx?period=ACROSS_TIME&groupId=${group.id}`).set(authB)); // 403
+    api.conforms(await request(app).get(`${REPORTS}/attendance/xlsx?period=FOREVER`).set(authA)); // 400
+    api.conforms(await request(app).get(`${REPORTS}/attendance/xlsx?period=ACROSS_TIME`)); // 401
+  });
+
+  it('exercised every documented operation of Module 38', () => {
+    expect(api.operationCount('38')).toBe(6);
     api.assertAllExercised('38');
   });
 });

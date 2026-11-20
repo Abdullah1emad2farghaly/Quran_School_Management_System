@@ -315,6 +315,16 @@ export class GroupService {
     return group ? this.toDto(group, tx) : undefined;
   }
 
+  /** Read-only names of groups for reports (Module 38). A group that does not exist simply has no entry. */
+  async listNamesByIds(groupIds: readonly string[], tx?: TransactionContext): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    for (const id of new Set(groupIds)) {
+      const group = await this.groups.findById(id, tx);
+      if (group) names.set(id, group.snapshot.name);
+    }
+    return names;
+  }
+
   async findScopeById(groupId: string, tx?: TransactionContext): Promise<GroupScopeDto | undefined> {
     const group = await this.groups.findById(groupId, tx);
     if (!group) return undefined;
@@ -407,7 +417,7 @@ export class GroupService {
 }
 
 /** What downstream modules (Sessions 24, Attendance 26, Schedule 23...) should depend on (read-only). */
-export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool' | 'listCurrentGroupIdsOfTeacherUser'>;
+export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool' | 'listCurrentGroupIdsOfTeacherUser' | 'listNamesByIds'>;
 
 /** Read-only name lookup for Module 36 (Excel Import). */
 export type GroupNameLookup = Pick<GroupService, 'findActiveByName' | 'listAssignmentHistoryOfStudent'>;

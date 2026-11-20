@@ -50,4 +50,15 @@ describe('report read contracts of Modules 16, 33 and 34', () => {
     expect(await t.service.listSchoolIdsOfOrganizations([])).toEqual([]);
     expect(await t.service.listSchoolIdsOfOrganizations(['00000000-0000-4000-8000-000000000000'])).toEqual([]);
   });
+
+  it('student facts (name and join date) and group names for reports: a missing id has no entry', async () => {
+    const { t, schoolA, managerA } = await fixture();
+    const parent = await t.newParent(schoolA.id, managerA.id);
+    const student = await t.registerStudent(schoolA.id, parent.id, managerA.id, { joinDate: '2026-09-01' });
+    const group = await t.newGroup(schoolA.id, managerA.id, 'حلقة الفجر');
+    const missing = '00000000-0000-4000-8000-000000000000';
+    expect(await t.students.listReportFacts([student.id, missing, student.id])).toEqual([{ id: student.id, fullName: student.fullName, joinDate: '2026-09-01' }]);
+    expect(await t.students.listReportFacts([])).toEqual([]);
+    expect([...(await t.groups.listNamesByIds([group.id, missing])).entries()]).toEqual([[group.id, 'حلقة الفجر']]);
+  });
 });

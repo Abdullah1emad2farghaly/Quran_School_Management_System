@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import request from 'supertest';
 import { registerAllErrorMessages } from '../../src/app/bootstrap/register-error-messages';
@@ -5,7 +6,8 @@ import { errorHandler, notFoundHandler } from '../../src/app/middleware/error-ha
 import { requestContextMiddleware } from '../../src/app/middleware/request-context.middleware';
 import { createAuthRouter, createRequireAuthentication } from '../../src/modules/10-sessions-jwt/public';
 import { ReportPeriodService, ReportScopeResolver, type ReportScopeSources } from '../../src/modules/37-reports-core/public';
-import { PublicPaymentReportSources, ReportService, createReportRouter } from '../../src/modules/38-report-modules/public';
+import { InMemoryAttendanceRepository, type ActorRole, type AttendanceStatus, type SubjectType } from '../../src/modules/26-attendance/public';
+import { PublicAttendanceReportSources, PublicPaymentReportSources, ReportService, createReportRouter } from '../../src/modules/38-report-modules/public';
 import { createPaymentsHarness } from './payments-harness';
 
 export const REPORTS = '/api/v1/reports';
@@ -19,11 +21,12 @@ export const AUTH = '/api/v1/auth';
 export async function createReportsApi() {
   registerAllErrorMessages();
   const t = await createPaymentsHarness();
+  const attendanceRepo = new InMemoryAttendanceRepository();
   const sources: ReportScopeSources = {
     organizationIdsOfAdmin: (userId) => t.organizations.listAdministeredOrganizationIds(userId),
     schoolIdsOfManager: (userId) => t.service.listManagedSchoolIds(userId),
     schoolIdsOfCollector: (userId) => t.collectors.listActiveSchoolIds(userId),
-    groupIdsOfTeacher: async () => [],
+    groupIdsOfTeacher: (userId) => t.groups.listCurrentGroupIdsOfTeacherUser(userId),
     studentIdsOfParent: async () => [],
     geographicAreasOfManager: async () => undefined,
   };
@@ -31,6 +34,13 @@ export async function createReportsApi() {
     scopes: new ReportScopeResolver(sources),
     periods: new ReportPeriodService({ clock: t.clock }),
     payments: new PublicPaymentReportSources({ schools: t.service, subscriptions: t.subscriptions, payments: t.payments }),
+    attendance: new PublicAttendanceReportSources({
+      schools: t.service,
+      students: t.students,
+      teachers: t.teachers,
+      groups: t.groups,
+      attendance: { summarizeForReport: (query) => attendanceRepo.summarizeForReport(query) },
+    }),
     clock: t.clock,
   });
   const requireAuthentication = createRequireAuthentication(() => t.h.service);
@@ -68,5 +78,15 @@ export async function createReportsApi() {
     if (changed.status !== 204) throw new Error(`change-password failed: ${JSON.stringify(changed.body)}`);
     return { blocked, auth: await login({ phone: u.phone, password: 'new-pass-12' }) };
   };
-  return { app, t, login, firstLoginAndChange, reports };
+  /** Stores one attendance record straight in the in-memory store (the report only reads it; recording is Module 26's own, separately tested, workflow). */
+  const recordAttendance = (r: { schoolId: string; groupId: string; subjectType: SubjectType; subjectId: string; status: AttendanceStatus; date: string }) => {
+    const id = randomUUID();
+    const at = new Date(`${r.date}T09:00:00Z`);
+    const who = '00000000-0000-0000-0000-000000000001';
+    attendanceRepo.rows.set(id, {
+      id, sessionId: randomUUID(), schoolId: r.schoolId, groupId: r.groupId, subjectType: r.subjectType, subjectId: r.subjectId, status: r.status, occurrenceDate: r.date,
+      scheduledStart: at, recordedBy: who, recordedByRole: 'SCHOOL_MANAGER' as ActorRole, recordedAt: at, updatedBy: who, updatedByRole: 'SCHOOL_MANAGER' as ActorRole, updatedAt: at,
+    });
+  };
+  return { app, t, login, firstLoginAndChange, reports, attendanceRepo, recordAttendance };
 }

@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { AttendanceRepository } from '../../../../application/ports/attendance-repository';
+import type { AttendanceReportQuery, AttendanceReportRow, AttendanceRepository } from '../../../../application/ports/attendance-repository';
 import { AttendanceRecord, type AttendanceCorrection } from '../../../../domain/entities/attendance-record';
 import type { ActorRole, AttendanceStatus, SubjectType } from '../../../../domain/value-objects/attendance-status';
 
@@ -97,6 +97,39 @@ export class SequelizeAttendanceRepository implements AttendanceRepository {
     const rows = await this.db.query<RecordRow>(`${RECORD_SELECT} WHERE subject_type = 'STUDENT' AND subject_id = :studentId ORDER BY scheduled_start ${order}, id ASC LIMIT :limit OFFSET :offset`, { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) });
     const counted = await this.db.query<{ total: number | string }>(`SELECT COUNT(*) AS total FROM attendance_records WHERE subject_type = 'STUDENT' AND subject_id = :studentId`, { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) });
     return { items: rows.map(toRecord), total: Number(counted[0]?.total ?? 0) };
+  }
+
+  async summarizeForReport(query: AttendanceReportQuery): Promise<AttendanceReportRow[]> {
+    const lists: Array<[readonly string[] | undefined, string, string]> = [
+      [query.schoolIds, 'r.school_id', 'schoolIds'],
+      [query.groupIds, 'r.group_id', 'groupIds'],
+      [query.studentIds, 'r.subject_id', 'studentIds'],
+    ];
+    if (query.subjectTypes.length === 0 || lists.some(([ids]) => ids !== undefined && ids.length === 0)) return [];
+    const replacements: Record<string, unknown> = { types: [...query.subjectTypes] };
+    let where = 'r.subject_type IN (:types)';
+    for (const [ids, column, name] of lists) {
+      if (ids === undefined) continue;
+      where += ` AND ${column} IN (:${name})`;
+      replacements[name] = [...new Set(ids)];
+    }
+    if (query.fromDate !== undefined) {
+      where += ' AND r.occurrence_date >= :fromDate';
+      replacements.fromDate = query.fromDate;
+    }
+    if (query.toDate !== undefined) {
+      where += ' AND r.occurrence_date <= :toDate';
+      replacements.toDate = query.toDate;
+    }
+    const rows = await this.db.query<{ schoolId: string; groupId: string; subjectType: SubjectType; subjectId: string; status: AttendanceStatus; total: number | string; firstDate: string }>(
+      `SELECT r.school_id AS schoolId, r.group_id AS groupId, r.subject_type AS subjectType, r.subject_id AS subjectId, r.status AS status, COUNT(*) AS total,
+              DATE_FORMAT(MIN(r.occurrence_date), '%Y-%m-%d') AS firstDate
+         FROM attendance_records r WHERE ${where}
+        GROUP BY r.school_id, r.group_id, r.subject_type, r.subject_id, r.status
+        ORDER BY r.school_id, r.group_id, r.subject_type, r.subject_id, r.status`,
+      { replacements, type: QueryTypes.SELECT },
+    );
+    return rows.map((r) => ({ schoolId: r.schoolId, groupId: r.groupId, subjectType: r.subjectType, subjectId: r.subjectId, status: r.status, count: Number(r.total), firstDate: r.firstDate }));
   }
 
   async listCorrectionsOfSession(sessionId: string, tx?: TransactionContext): Promise<AttendanceCorrection[]> {

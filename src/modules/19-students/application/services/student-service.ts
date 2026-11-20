@@ -233,6 +233,19 @@ export class StudentService {
     return { id: s.id, schoolId: s.schoolId, organizationId: s.organizationId, parentId: s.parentId, status: s.status };
   }
 
+  /**
+   * Read-only facts Module 38 (Reports) needs about many students at once: the name and the JOIN DATE (a business date; student data before it is never reported, §67).
+   * A student that does not exist simply has no entry. Nothing here is a permission: the caller has already proven the ids lie inside the requester's scope.
+   */
+  async listReportFacts(studentIds: readonly string[], tx?: TransactionContext): Promise<StudentReportFactsDto[]> {
+    const facts: StudentReportFactsDto[] = [];
+    for (const id of new Set(studentIds)) {
+      const student = await this.students.findById(id, tx);
+      if (student) facts.push({ id, fullName: student.snapshot.fullName, joinDate: student.snapshot.joinDate });
+    }
+    return facts;
+  }
+
   async findById(studentId: string, tx?: TransactionContext): Promise<StudentDto | undefined> {
     const student = await this.students.findById(studentId, tx);
     return student ? this.toDto(student, tx) : undefined;
@@ -290,7 +303,14 @@ export class StudentService {
 }
 
 /** What downstream modules (Groups 20, Attendance 26, Subscriptions 33...) should depend on (read-only). */
-export type StudentLookup = Pick<StudentService, 'findById' | 'findScopeById'>;
+export type StudentLookup = Pick<StudentService, 'findById' | 'findScopeById' | 'listReportFacts'>;
+
+export interface StudentReportFactsDto {
+  readonly id: string;
+  readonly fullName: string;
+  /** `YYYY-MM-DD` (Africa/Cairo). */
+  readonly joinDate: string;
+}
 
 /** Read-only National ID lookup for Module 36 (Excel Import). */
 export type StudentNationalIdLookup = Pick<StudentService, 'findByNationalId'>;

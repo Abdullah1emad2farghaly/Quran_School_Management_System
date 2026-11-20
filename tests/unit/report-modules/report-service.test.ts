@@ -40,7 +40,7 @@ function build(assignments: { admin?: string[]; manager?: string[]; collector?: 
       return new Map(Object.entries(data.names ?? {}));
     },
   };
-  const service = new ReportService({ scopes: new ReportScopeResolver(scopeSources), periods: new ReportPeriodService({ clock }), payments, clock });
+  const service = new ReportService({ scopes: new ReportScopeResolver(scopeSources), periods: new ReportPeriodService({ clock }), payments, attendance: {} as never, clock });
   return { service, calls, queries };
 }
 
