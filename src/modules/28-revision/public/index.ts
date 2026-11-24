@@ -6,9 +6,9 @@
 // Events: RevisionAssignmentDefined / Modified / Cancelled, RevisionRecorded, RevisionRecordCorrected. Permissions go through `registerRevisionAuthorization`.
 export {
   RevisionService,
-  type RevisionServiceDeps, type GpsInput, type DefineAssignmentInput, type RecordRevisionInput, type CorrectRecordInput, type StudentRecordsInput,
+  type RevisionReportLookup, type RevisionServiceDeps, type GpsInput, type DefineAssignmentInput, type RecordRevisionInput, type CorrectRecordInput, type StudentRecordsInput,
 } from '../application/services/revision-service';
-export type { RevisionRepository } from '../application/ports/revision-repository';
+export type { RevisionRepository, RevisionReportQuery, RevisionReportRow } from '../application/ports/revision-repository';
 export type { AssignmentDto, RecordDto, SessionRevisionDto, RecordBatchResultDto, RecordCorrectionResultDto, ScheduledRevisionDto } from '../application/dto/revision-dto';
 export { RevisionPermissions, registerRevisionAuthorization, type RevisionAuthorizationDeps } from '../application/services/revision-authorization';
 export { REVISION_ERROR_MESSAGES } from '../application/services/revision-error-messages';

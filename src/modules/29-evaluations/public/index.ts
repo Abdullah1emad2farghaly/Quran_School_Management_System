@@ -5,8 +5,8 @@
 // `EvaluationService` (reads: `getSessionEvaluationStatus` feeds the pre-end warning of the Notifications modules 31-34; `findEvaluatedStudents` is Module 26's veto) and on the
 // events (EvaluationRecorded / EvaluationScoresUpdated, the integration data for the Parent notification). Permissions go through the Authorization Engine
 // (`registerEvaluationAuthorization`). Nothing is notified inside this module.
-export { EvaluationService, type EvaluationServiceDeps, type RecordEvaluationsInput, type EvaluationListInput } from '../application/services/evaluation-service';
-export type { EvaluationRepository } from '../application/ports/evaluation-repository';
+export { EvaluationService, type EvaluationReportLookup, type EvaluationServiceDeps, type RecordEvaluationsInput, type EvaluationListInput } from '../application/services/evaluation-service';
+export type { EvaluationRepository, EvaluationReportQuery, EvaluationReportRow, EvaluationReportCategoryTotals } from '../application/ports/evaluation-repository';
 export type {
   EvaluationDto, EvaluationScoreDto, EvaluationOutcome, EvaluationChangeResultDto, EvaluationBatchResultDto, SessionEvaluationsDto, SessionEvaluationStatusDto, StudentEvaluationStatusDto, AttendanceView,
 } from '../application/dto/evaluation-dto';

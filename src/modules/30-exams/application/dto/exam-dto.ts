@@ -66,6 +66,24 @@ export interface StudentExamOutcomeDto {
   readonly result: { readonly scores: readonly number[]; readonly total: number; readonly maxTotal: number; readonly recordedAt: Date } | null;
 }
 
+/**
+ * One exam of the Student report (Module 38). `scores` and `total` are the RECORDED ones (Module 30 results are immutable); for an ABSENT student both are empty/null: no score exists.
+ * `maxTotal` is the exam's own maximum (question count x maximum score per question), a property of the exam. Nothing is summed across exams.
+ */
+export interface StudentExamReportRowDto {
+  readonly examId: string;
+  readonly schoolId: string;
+  /** The group the student was targeted in (the group at the time). */
+  readonly groupId: string;
+  readonly startAt: Date;
+  readonly outcome: 'EXAMINED' | 'ABSENT';
+  readonly questionCount: number;
+  readonly maxScorePerQuestion: number;
+  readonly scores: readonly number[];
+  readonly total: number | null;
+  readonly maxTotal: number;
+}
+
 export interface PendingGroupDto {
   readonly groupId: string;
   readonly groupName: string;

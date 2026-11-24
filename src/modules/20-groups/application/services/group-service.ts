@@ -8,7 +8,8 @@ import { GroupAssignment } from '../../domain/entities/group-assignment';
 import { groupError } from '../../domain/errors/group-errors';
 import { groupNameKey, normalizeGroupName, normalizeGroupReason, requireLearningMode, requireProgression, requireStartingSurah, type GroupStatus } from '../../domain/value-objects/group-settings';
 import { toAssignmentDto, toGroupDto, type GroupDto, type GroupHistoryDto, type GroupScopeDto, type GroupStudentDto, type StudentAssignmentDto } from '../dto/group-dto';
-import type { GroupRepository, GroupSortKey } from '../ports/group-repository';
+import { clipStint, teachingStints } from '../../domain/services/teaching-stints';
+import type { GroupRepository, GroupRosterReportQuery, GroupSortKey } from '../ports/group-repository';
 import type { GroupSchedulePort } from '../ports/group-schedule-port';
 
 export interface CreateGroupInput {
@@ -277,6 +278,34 @@ export class GroupService {
   }
 
   /** Every group period of a student, oldest first (the old periods keep the group they were in). */
+  /**
+   * Read-only, for the Group report (Module 38): the assignment periods of the group that overlap the half-open range [`from`, `toExclusive`), straight from the authoritative assignment history (ended periods
+   * included; a student archived or made inactive keeps their past periods). Nothing is rebuilt from the current roster, and nothing is written. The caller has already proven the group lies inside the requester's scope.
+   */
+  listAssignmentsOfGroupForReport(query: GroupRosterReportQuery, tx?: TransactionContext): Promise<GroupRosterReportRowDto[]> {
+    return this.groups.listAssignmentsOfGroupForReport(query, tx);
+  }
+
+  /**
+   * Read-only, for the Teacher report (Module 38): every stint in which the Teacher taught a group of the GIVEN schools (only those schools are ever read; the caller passes the requester's authorized schools), derived
+   * exclusively from the groups' authoritative history (the first teacher at creation, every TEACHER_CHANGED, the archiving; never from who owns the group now), clipped to the half-open range [`from`, `toExclusive`)
+   * (either bound optional). `to` is null while the Teacher still teaches the group and nothing ends the stint inside the range. A Teacher who left a school (or came back) keeps their past stints. Ordered by group name,
+   * then by when the stint began. Writes nothing.
+   */
+  async listGroupsTaughtByTeacherForReport(query: { readonly teacherId: string; readonly schoolIds: readonly string[]; readonly from?: Date; readonly toExclusive?: Date }, tx?: TransactionContext): Promise<TaughtGroupStintDto[]> {
+    const timelines = await this.groups.listTeacherTimelinesForReport({ teacherId: query.teacherId, schoolIds: query.schoolIds }, tx);
+    const range = { ...(query.from !== undefined ? { from: query.from } : {}), ...(query.toExclusive !== undefined ? { toExclusive: query.toExclusive } : {}) };
+    const stints: TaughtGroupStintDto[] = [];
+    for (const timeline of timelines) {
+      for (const stint of teachingStints(timeline.events, query.teacherId)) {
+        const clipped = clipStint(stint, range);
+        if (!clipped) continue;
+        stints.push({ groupId: timeline.groupId, schoolId: timeline.schoolId, groupName: timeline.groupName, learningMode: timeline.learningMode, from: clipped.from, to: clipped.to, stillTeaching: stint.to === null });
+      }
+    }
+    return stints.sort((a, b) => a.groupName.localeCompare(b.groupName) || a.groupId.localeCompare(b.groupId) || a.from.getTime() - b.from.getTime());
+  }
+
   async listAssignmentHistoryOfStudent(studentId: string, tx?: TransactionContext): Promise<StudentAssignmentDto[]> {
     const names = new Map<string, string | null>();
     const rows: StudentAssignmentDto[] = [];
@@ -417,6 +446,24 @@ export class GroupService {
 }
 
 /** What downstream modules (Sessions 24, Attendance 26, Schedule 23...) should depend on (read-only). */
+/** One stint in which a Teacher taught a group (Module 38 Teacher report). `to` is null while the Teacher still teaches it; `stillTeaching` says the stint was open (not ended by a history event). */
+export interface TaughtGroupStintDto {
+  readonly groupId: string;
+  readonly schoolId: string;
+  readonly groupName: string;
+  readonly learningMode: string;
+  readonly from: Date;
+  readonly to: Date | null;
+  readonly stillTeaching: boolean;
+}
+
+/** One assignment period of a student in a group, as the Group report needs it. */
+export interface GroupRosterReportRowDto {
+  readonly studentId: string;
+  readonly assignedAt: Date;
+  readonly unassignedAt: Date | null;
+}
+
 export type GroupLookup = Pick<GroupService, 'findScopeById' | 'lockScopeById' | 'isStudentInGroupOfTeacher' | 'countGroupsOfTeacherInSchool' | 'listCurrentGroupIdsOfTeacherUser' | 'listNamesByIds'>;
 
 /** Read-only name lookup for Module 36 (Excel Import). */

@@ -13,7 +13,7 @@ import { MAX_BATCH_RECORDS, sameQuranRange, type RevisionRange } from '../../dom
 import {
   toAssignmentDto, toRecordDto, type AssignmentDto, type RecordBatchResultDto, type RecordCorrectionResultDto, type RecordDto, type ScheduledRevisionDto, type SessionRevisionDto,
 } from '../dto/revision-dto';
-import type { RevisionRepository } from '../ports/revision-repository';
+import type { RevisionReportQuery, RevisionReportRow, RevisionRepository } from '../ports/revision-repository';
 import type { RevisionRangeResolver } from './revision-range-resolver';
 
 export interface RevisionServiceDeps {
@@ -251,6 +251,14 @@ export class RevisionService {
   }
 
   /**
+   * PUBLIC READ for the reports (Module 38, additive, read-only): revision records counted per school, group of the record, student and fulfilment state, filtered by schools, groups,
+   * students and a half-open range of session start instants. Creates and changes nothing; the caller (Module 38) has already proven every id lies inside the requester's reporting scope.
+   */
+  summarizeForReport(query: RevisionReportQuery, tx?: TransactionContext): Promise<RevisionReportRow[]> {
+    return this.repo.summarizeForReport(query, tx);
+  }
+
+  /**
    * PUBLIC READ for the future Notifications modules (Master Specification §63, half-session reminder): was revision SCHEDULED for this session (a specific assignment
    * explicitly defined before it started), and which records exist. Creates and changes nothing; a missing record never justifies creating one.
    */
@@ -410,3 +418,6 @@ function parseRecordItems(records: unknown): Array<{ studentId: string; range: u
     return { studentId: rec.studentId, range: rec.range };
   });
 }
+
+/** The read-only aggregate Module 38 (Reports) depends on. */
+export type RevisionReportLookup = Pick<RevisionService, 'summarizeForReport'>;

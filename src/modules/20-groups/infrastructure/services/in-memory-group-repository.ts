@@ -1,5 +1,5 @@
 import type { PageRequest, TransactionContext } from '../../../00-shared-kernel/public';
-import type { GroupListQuery, GroupRepository } from '../../application/ports/group-repository';
+import type { GroupListQuery, GroupRepository, GroupRosterReportQuery, GroupRosterReportRow, GroupTeacherTimelineQuery, GroupTeacherTimelineRow } from '../../application/ports/group-repository';
 import { Group, type GroupSnapshot } from '../../domain/entities/group';
 import { GroupAssignment, type GroupAssignmentSnapshot } from '../../domain/entities/group-assignment';
 import type { GroupHistoryEntry } from '../../domain/entities/group-history-entry';
@@ -89,6 +89,31 @@ export class InMemoryGroupRepository implements GroupRepository {
   }
   async listAssignmentsOfStudent(studentId: string, _tx?: TransactionContext): Promise<GroupAssignment[]> {
     return this.assignments.filter((a) => a.studentId === studentId).map((a) => GroupAssignment.rehydrate(a));
+  }
+  async listAssignmentsOfGroupForReport(query: GroupRosterReportQuery, _tx?: TransactionContext): Promise<GroupRosterReportRow[]> {
+    return this.assignments
+      .filter(
+        (a) =>
+          a.groupId === query.groupId &&
+          (query.toExclusive === undefined || a.assignedAt.getTime() < query.toExclusive.getTime()) &&
+          (query.from === undefined || a.unassignedAt === null || a.unassignedAt.getTime() > query.from.getTime()),
+      )
+      .map((a) => ({ studentId: a.studentId, assignedAt: a.assignedAt, unassignedAt: a.unassignedAt }))
+      .sort((a, b) => a.assignedAt.getTime() - b.assignedAt.getTime() || a.studentId.localeCompare(b.studentId));
+  }
+  async listTeacherTimelinesForReport(query: GroupTeacherTimelineQuery, _tx?: TransactionContext): Promise<GroupTeacherTimelineRow[]> {
+    const schools = new Set(query.schoolIds);
+    const rows: GroupTeacherTimelineRow[] = [];
+    for (const [groupId, group] of this.groups) {
+      if (!schools.has(group.schoolId)) continue;
+      const events = this.history.filter((h) => h.groupId === groupId && (h.action === 'CREATED' || h.action === 'TEACHER_CHANGED' || h.action === 'ARCHIVED'));
+      if (!events.some((e) => e.newTeacherId === query.teacherId)) continue;
+      rows.push({
+        groupId, schoolId: group.schoolId, groupName: group.name, learningMode: group.learningMode,
+        events: events.map((e) => ({ action: e.action as 'CREATED' | 'TEACHER_CHANGED' | 'ARCHIVED', occurredAt: e.occurredAt, newTeacherId: e.newTeacherId })),
+      });
+    }
+    return rows;
   }
   async isStudentInActiveGroupOfTeacher(studentId: string, teacherId: string, _tx?: TransactionContext): Promise<boolean> {
     const current = this.assignments.find((a) => a.studentId === studentId && a.unassignedAt === null);

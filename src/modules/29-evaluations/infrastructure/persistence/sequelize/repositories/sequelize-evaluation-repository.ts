@@ -1,9 +1,9 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { EvaluationRepository } from '../../../../application/ports/evaluation-repository';
+import type { EvaluationReportQuery, EvaluationReportRow, EvaluationRepository } from '../../../../application/ports/evaluation-repository';
 import { Evaluation, type EvaluationScore } from '../../../../domain/entities/evaluation';
-import type { EvaluationCategory } from '../../../../domain/value-objects/evaluation-rules';
+import { EVALUATION_CATEGORIES, type EvaluationCategory } from '../../../../domain/value-objects/evaluation-rules';
 
 type Queryable = Pick<Sequelize, 'query'>;
 type D = Date | string;
@@ -12,6 +12,8 @@ interface EvaluationRow {
   id: string; sessionId: string; schoolId: string; groupId: string; studentId: string; occurrenceDate: string; scheduledStart: D; note: string | null;
   recordedBy: string; recordedAt: D; updatedBy: string; updatedAt: D;
 }
+interface ReportCountRow { schoolId: string; groupId: string; studentId: string; total: number | string; firstStart: D }
+interface ReportScoreRow { schoolId: string; groupId: string; studentId: string; category: EvaluationCategory; scored: number | string; sumHundredths: number | string }
 interface ScoreRow { evaluationId: string; category: EvaluationCategory; score: number | string; memorizationAssignmentId: string | null; revisionAssignmentId: string | null }
 
 const EVALUATION_SELECT = `
@@ -104,6 +106,54 @@ export class SequelizeEvaluationRepository implements EvaluationRepository {
   async listBySession(sessionId: string, tx?: TransactionContext): Promise<Evaluation[]> {
     const rows = await this.db.query<EvaluationRow>(`${EVALUATION_SELECT} WHERE session_id = :sessionId ORDER BY recorded_at ASC, id ASC`, { replacements: { sessionId }, type: QueryTypes.SELECT, transaction: this.t(tx) });
     return this.hydrate(rows, '', tx);
+  }
+
+  async summarizeForReport(query: EvaluationReportQuery, tx?: TransactionContext): Promise<EvaluationReportRow[]> {
+    const lists: Array<[readonly string[] | undefined, string, string]> = [
+      [query.schoolIds, 'e.school_id', 'schoolIds'],
+      [query.groupIds, 'e.group_id', 'groupIds'],
+      [query.studentIds, 'e.student_id', 'studentIds'],
+      [query.recordedByUserIds, 'e.recorded_by', 'recordedByUserIds'],
+    ];
+    if (lists.some(([ids]) => ids !== undefined && ids.length === 0)) return [];
+    const replacements: Record<string, unknown> = {};
+    let where = '1 = 1';
+    for (const [ids, column, name] of lists) {
+      if (ids === undefined) continue;
+      where += ` AND ${column} IN (:${name})`;
+      replacements[name] = [...new Set(ids)];
+    }
+    if (query.from !== undefined) {
+      where += ' AND e.scheduled_start >= :from';
+      replacements.from = query.from;
+    }
+    if (query.toExclusive !== undefined) {
+      where += ' AND e.scheduled_start < :toExclusive';
+      replacements.toExclusive = query.toExclusive;
+    }
+    const counts = await this.db.query<ReportCountRow>(
+      `SELECT e.school_id AS schoolId, e.group_id AS groupId, e.student_id AS studentId, COUNT(*) AS total, MIN(e.scheduled_start) AS firstStart
+         FROM evaluations e WHERE ${where}
+        GROUP BY e.school_id, e.group_id, e.student_id
+        ORDER BY e.school_id, e.group_id, e.student_id`,
+      { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) },
+    );
+    const scores = await this.db.query<ReportScoreRow>(
+      `SELECT e.school_id AS schoolId, e.group_id AS groupId, e.student_id AS studentId, s.category AS category, COUNT(*) AS scored, SUM(ROUND(s.score * 100)) AS sumHundredths
+         FROM evaluations e JOIN evaluation_scores s ON s.evaluation_id = e.id WHERE ${where}
+        GROUP BY e.school_id, e.group_id, e.student_id, s.category`,
+      { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) },
+    );
+    return counts.map((c: ReportCountRow) => {
+      const mine = scores.filter((s: ReportScoreRow) => s.schoolId === c.schoolId && s.groupId === c.groupId && s.studentId === c.studentId);
+      return {
+        schoolId: c.schoolId, groupId: c.groupId, studentId: c.studentId, evaluations: Number(c.total), firstStart: asDate(c.firstStart),
+        categories: EVALUATION_CATEGORIES.filter((cat) => mine.some((s: ReportScoreRow) => s.category === cat)).map((cat) => {
+          const s = mine.find((x: ReportScoreRow) => x.category === cat)!;
+          return { category: cat, count: Number(s.scored), sumHundredths: Number(s.sumHundredths) };
+        }),
+      };
+    });
   }
 
   async listByStudent(studentId: string, direction: 'asc' | 'desc', page: PageRequest, tx?: TransactionContext): Promise<{ items: Evaluation[]; total: number }> {

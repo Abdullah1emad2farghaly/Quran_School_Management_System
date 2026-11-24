@@ -1,6 +1,7 @@
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../00-shared-kernel/public';
-import type { EvaluationRepository } from '../../application/ports/evaluation-repository';
+import type { EvaluationReportCategoryTotals, EvaluationReportQuery, EvaluationReportRow, EvaluationRepository } from '../../application/ports/evaluation-repository';
 import { Evaluation, type EvaluationSnapshot } from '../../domain/entities/evaluation';
+import { EVALUATION_CATEGORIES } from '../../domain/value-objects/evaluation-rules';
 
 const copy = (s: EvaluationSnapshot): EvaluationSnapshot => ({ ...s, scores: s.scores.map((x) => ({ ...x })) });
 
@@ -35,6 +36,42 @@ export class InMemoryEvaluationRepository implements EvaluationRepository {
 
   async listBySession(sessionId: string, _tx?: TransactionContext): Promise<Evaluation[]> {
     return [...this.rows.values()].filter((r) => r.sessionId === sessionId).sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime() || a.id.localeCompare(b.id)).map((r) => Evaluation.rehydrate(copy(r)));
+  }
+
+  async summarizeForReport(query: EvaluationReportQuery, _tx?: TransactionContext): Promise<EvaluationReportRow[]> {
+    const schools = query.schoolIds && new Set(query.schoolIds);
+    const groups = query.groupIds && new Set(query.groupIds);
+    const students = query.studentIds && new Set(query.studentIds);
+    const recorders = query.recordedByUserIds && new Set(query.recordedByUserIds);
+    const rows = new Map<string, { schoolId: string; groupId: string; studentId: string; evaluations: number; firstStart: Date; totals: Map<string, { count: number; sum: number }> }>();
+    for (const r of this.rows.values()) {
+      if (schools && !schools.has(r.schoolId)) continue;
+      if (groups && !groups.has(r.groupId)) continue;
+      if (students && !students.has(r.studentId)) continue;
+      if (recorders && !recorders.has(r.recordedBy)) continue;
+      if (query.from !== undefined && r.scheduledStart.getTime() < query.from.getTime()) continue;
+      if (query.toExclusive !== undefined && r.scheduledStart.getTime() >= query.toExclusive.getTime()) continue;
+      const key = `${r.schoolId}|${r.groupId}|${r.studentId}`;
+      let row = rows.get(key);
+      if (!row) {
+        row = { schoolId: r.schoolId, groupId: r.groupId, studentId: r.studentId, evaluations: 0, firstStart: r.scheduledStart, totals: new Map() };
+        rows.set(key, row);
+      }
+      row.evaluations += 1;
+      if (r.scheduledStart.getTime() < row.firstStart.getTime()) row.firstStart = r.scheduledStart;
+      for (const s of r.scores) {
+        const t = row.totals.get(s.category) ?? { count: 0, sum: 0 };
+        t.count += 1;
+        t.sum += Math.round(s.score * 100);
+        row.totals.set(s.category, t);
+      }
+    }
+    return [...rows.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([, r]) => ({
+        schoolId: r.schoolId, groupId: r.groupId, studentId: r.studentId, evaluations: r.evaluations, firstStart: r.firstStart,
+        categories: EVALUATION_CATEGORIES.filter((c) => r.totals.has(c)).map((c): EvaluationReportCategoryTotals => ({ category: c, count: r.totals.get(c)!.count, sumHundredths: r.totals.get(c)!.sum })),
+      }));
   }
 
   async listByStudent(studentId: string, direction: 'asc' | 'desc', page: PageRequest, _tx?: TransactionContext) {

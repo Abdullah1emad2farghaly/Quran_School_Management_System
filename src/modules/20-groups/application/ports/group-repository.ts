@@ -41,6 +41,49 @@ export interface GroupRepository {
   listCurrentAssignmentsPage(groupId: string, page: PageRequest, direction: 'asc' | 'desc', tx?: TransactionContext): Promise<{ items: GroupAssignment[]; total: number }>;
   /** Every period of the student, oldest first. */
   listAssignmentsOfStudent(studentId: string, tx?: TransactionContext): Promise<GroupAssignment[]>;
+  /**
+   * Read-only, for the Group report (Module 38): the assignment periods of the GROUP that overlap the half-open range [`from`, `toExclusive`) (either bound optional), oldest first. An overlapping period
+   * is one that started before `toExclusive` and was not ended before `from` (an open one has no end). The caller has already proven the group lies inside the requester's scope.
+   */
+  listAssignmentsOfGroupForReport(query: GroupRosterReportQuery, tx?: TransactionContext): Promise<GroupRosterReportRow[]>;
+  /**
+   * Read-only, for the Teacher report (Module 38): for every group of the given schools that EVER had the Teacher as its teacher, the group's identity and the events of its authoritative history that decide who teaches it
+   * (CREATED, TEACHER_CHANGED, ARCHIVED), in the history's own order. Only the given schools are ever read (the caller passes the requester's authorized schools).
+   */
+  listTeacherTimelinesForReport(query: GroupTeacherTimelineQuery, tx?: TransactionContext): Promise<GroupTeacherTimelineRow[]>;
   /** True when the student is currently in an ACTIVE group whose Teacher is `teacherId`. */
   isStudentInActiveGroupOfTeacher(studentId: string, teacherId: string, tx?: TransactionContext): Promise<boolean>;
+}
+
+export interface GroupRosterReportQuery {
+  readonly groupId: string;
+  readonly from?: Date;
+  readonly toExclusive?: Date;
+}
+
+/** One assignment period of a student in the group (the authoritative assignment history, never rebuilt from the current roster). `unassignedAt` is null while the period is open. */
+export interface GroupRosterReportRow {
+  readonly studentId: string;
+  readonly assignedAt: Date;
+  readonly unassignedAt: Date | null;
+}
+
+export interface GroupTeacherTimelineQuery {
+  readonly teacherId: string;
+  /** The schools to look in (an empty list matches nothing). */
+  readonly schoolIds: readonly string[];
+}
+
+export interface GroupTeacherTimelineEvent {
+  readonly action: 'CREATED' | 'TEACHER_CHANGED' | 'ARCHIVED';
+  readonly occurredAt: Date;
+  readonly newTeacherId: string | null;
+}
+
+export interface GroupTeacherTimelineRow {
+  readonly groupId: string;
+  readonly schoolId: string;
+  readonly groupName: string;
+  readonly learningMode: string;
+  readonly events: readonly GroupTeacherTimelineEvent[];
 }

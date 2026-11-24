@@ -29,4 +29,31 @@ export interface RevisionRepository {
   listRecordsByStudent(studentId: string, direction: 'asc' | 'desc', page: PageRequest, tx?: TransactionContext): Promise<{ items: RevisionRecord[]; total: number }>;
   listCorrectionsOfSession(sessionId: string, tx?: TransactionContext): Promise<RevisionCorrection[]>;
   listAssignmentHistoryOfSession(sessionId: string, tx?: TransactionContext): Promise<AssignmentHistoryEntry[]>;
+  /**
+   * Read-only aggregate for reports (Module 38): the records matching EVERY given filter, counted per school, group (the group of the record, i.e. the group at the time), student and
+   * fulfilment state (`matches`: true = fulfilment, false = a different range, null = nothing was scheduled), with the earliest session start. The CURRENT value of a corrected record
+   * counts (the original stays in the correction history). An omitted list or instant is not a filter; an empty list matches nothing.
+   */
+  summarizeForReport(query: RevisionReportQuery, tx?: TransactionContext): Promise<RevisionReportRow[]>;
+}
+
+export interface RevisionReportQuery {
+  readonly schoolIds?: readonly string[];
+  readonly groupIds?: readonly string[];
+  readonly studentIds?: readonly string[];
+  /** Inclusive lower bound on the session's scheduled start (UTC instant). */
+  readonly from?: Date;
+  /** Exclusive upper bound on the session's scheduled start (UTC instant). */
+  readonly toExclusive?: Date;
+}
+
+export interface RevisionReportRow {
+  readonly schoolId: string;
+  readonly groupId: string;
+  readonly studentId: string;
+  /** The stored fulfilment state of the records counted in this row (computed by Module 28 when recorded). */
+  readonly matches: boolean | null;
+  readonly count: number;
+  /** The earliest scheduled session start among the counted records (lets the report prove a student's records start on or after the join date, §67). */
+  readonly firstStart: Date;
 }

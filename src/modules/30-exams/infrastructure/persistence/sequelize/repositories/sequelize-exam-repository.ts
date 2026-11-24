@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { ExamRepository, ExamStudentRow, LockMode, StudentExamOutcomeRow } from '../../../../application/ports/exam-repository';
+import type { ExamRepository, ExamStudentRow, LockMode, StudentExamOutcomeRow, StudentExamReportQuery, StudentExamReportRow } from '../../../../application/ports/exam-repository';
 import { Exam, type ExaminerAssignment } from '../../../../domain/entities/exam';
 import type { ExamResult, ExamResultSnapshot } from '../../../../domain/entities/exam-result';
 import type { ExamStatus } from '../../../../domain/value-objects/exam-rules';
@@ -236,5 +236,43 @@ export class SequelizeExamRepository implements ExamRepository {
       out.push({ exam, status: row.status, result });
     }
     return { items: out, total: Number(counted[0]?.n ?? 0) };
+  }
+  /** Read-only, for the Student report (Module 38). One joined query over the frozen target list and the exams (`ix_exam_students_student`), then the recorded results of the EXAMINED rows. */
+  async listOutcomesOfStudentForReport(query: StudentExamReportQuery, tx?: TransactionContext): Promise<StudentExamReportRow[]> {
+    if (query.groupIds !== undefined && query.groupIds.length === 0) return [];
+    const replacements: Record<string, unknown> = { studentId: query.studentId };
+    let bounds = '';
+    if (query.from !== undefined) {
+      bounds += ' AND e.start_at >= :from';
+      replacements.from = query.from;
+    }
+    if (query.toExclusive !== undefined) {
+      bounds += ' AND e.start_at < :toExclusive';
+      replacements.toExclusive = query.toExclusive;
+    }
+    if (query.groupIds !== undefined) {
+      bounds += ' AND s.group_id IN (:groupIds)';
+      replacements.groupIds = [...new Set(query.groupIds)];
+    }
+    const rows = await this.db.query<{ examId: string; groupId: string; status: 'EXAMINED' | 'ABSENT'; schoolId: string; startAt: D; questionCount: number | string; maxScore: number | string }>(
+      `SELECT s.exam_id AS examId, s.group_id AS groupId, s.status AS status, e.school_id AS schoolId, e.start_at AS startAt, e.question_count AS questionCount, e.max_score AS maxScore FROM exam_students s JOIN exams e ON e.id = s.exam_id WHERE s.student_id = :studentId AND s.status IN ('EXAMINED', 'ABSENT') AND e.deleted_at IS NULL${bounds} ORDER BY e.start_at, e.id`,
+      { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) },
+    );
+    const examined = rows.filter((r) => r.status === 'EXAMINED').map((r) => r.examId);
+    const results = new Map<string, ExamResultSnapshot>();
+    if (examined.length > 0) {
+      const found = await this.db.query<never>(
+        'SELECT id, exam_id AS examId, school_id AS schoolId, group_id AS groupId, student_id AS studentId, total_score AS total, examiner_teacher_id AS examinerTeacherId, examiner_user_id AS examinerUserId, recorded_at AS recordedAt FROM exam_results WHERE student_id = :studentId AND exam_id IN (:examIds)',
+        { replacements: { studentId: query.studentId, examIds: examined }, type: QueryTypes.SELECT, transaction: this.t(tx) },
+      );
+      for (const r of await this.hydrateResults(found, tx)) results.set(r.examId, r);
+    }
+    return rows.map((r) => {
+      const result = r.status === 'EXAMINED' ? results.get(r.examId) : undefined;
+      return {
+        examId: r.examId, schoolId: r.schoolId, groupId: r.groupId, startAt: asDate(r.startAt), outcome: r.status, questionCount: Number(r.questionCount), maxScore: Number(r.maxScore),
+        scores: result ? [...result.scores] : [], total: result ? result.total : null,
+      };
+    });
   }
 }

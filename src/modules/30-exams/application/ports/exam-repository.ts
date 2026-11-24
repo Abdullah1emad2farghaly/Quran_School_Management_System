@@ -21,6 +21,35 @@ export interface StudentExamOutcomeRow {
   readonly result: ExamResultSnapshot | null;
 }
 
+/**
+ * Read-only query for the Student report (Module 38): one student's RECORDED outcomes (EXAMINED or ABSENT; a student whose outcome is not recorded yet has no row) of the exams that
+ * STARTED inside [`from`, `toExclusive`) (UTC instants, the exam's start time), optionally only for the given groups (the group the student was targeted in, i.e. the group at the time).
+ * The caller (the report) has already proven the student and the groups lie inside the requester's scope.
+ */
+export interface StudentExamReportQuery {
+  readonly studentId: string;
+  readonly from?: Date;
+  readonly toExclusive?: Date;
+  /** Only outcomes whose target group is one of these; omitted: every group. An empty list matches nothing. */
+  readonly groupIds?: readonly string[];
+}
+
+export interface StudentExamReportRow {
+  readonly examId: string;
+  readonly schoolId: string;
+  /** The group the student was targeted in (the group at the time). */
+  readonly groupId: string;
+  readonly startAt: Date;
+  readonly outcome: 'EXAMINED' | 'ABSENT';
+  readonly questionCount: number;
+  /** The uniform maximum score of every question. */
+  readonly maxScore: number;
+  /** One score per question, in order; EMPTY for ABSENT (no result exists). */
+  readonly scores: readonly number[];
+  /** The recorded total; null for ABSENT. */
+  readonly total: number | null;
+}
+
 export type LockMode = 'UPDATE' | 'SHARE';
 
 /**
@@ -59,4 +88,6 @@ export interface ExamRepository {
   listResultsOfExam(examId: string, tx?: TransactionContext): Promise<ExamResultSnapshot[]>;
   /** A student's EXAMINED and ABSENT outcomes, by the exam's start, newest first. */
   listOutcomesOfStudent(studentId: string, page: PageRequest, tx?: TransactionContext): Promise<{ items: StudentExamOutcomeRow[]; total: number }>;
+  /** Read-only, for the Student report (Module 38): a student's recorded outcomes of the exams that started in the period, oldest first (exam start, then exam id). */
+  listOutcomesOfStudentForReport(query: StudentExamReportQuery, tx?: TransactionContext): Promise<StudentExamReportRow[]>;
 }

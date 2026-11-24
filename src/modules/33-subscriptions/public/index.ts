@@ -10,7 +10,7 @@ export { SubscriptionPermissions, SUBSCRIPTION_SCHOOL_TARGET_TYPE, SUBSCRIPTION_
 export { SUBSCRIPTION_ERROR_MESSAGES } from '../application/services/subscription-error-messages';
 export type { GroupSubscriptionSummaryDto, GroupStudentSubscriptionDto } from '../application/dto/subscription-dto';
 export type { SubscriptionDto, SubscriptionViewDto, SubscriptionScopeDto, SubscriptionBatchDto, BulkCreationResultDto, CollectorDto, CollectorSchoolLinkDto } from '../application/dto/subscription-dto';
-export type { SubscriptionRepository, SubscriptionListQuery, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../application/ports/subscription-repository';
+export type { SubscriptionRepository, SubscriptionListQuery, StudentSubscriptionReportQuery, StudentSubscriptionReportRow, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../application/ports/subscription-repository';
 export type { CollectorLinkRepository } from '../application/ports/collector-link-repository';
 export type { StudentRoster, RosterStudent } from '../application/ports/student-roster';
 export type { SchoolGroupRoster, RosterGroup, RosterGroupStudent } from '../application/ports/school-group-roster';

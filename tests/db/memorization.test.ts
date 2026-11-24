@@ -183,4 +183,50 @@ describe('SequelizeMemorizationRepository', () => {
       expect(page.items[0]!.snapshot.matchesAssignment).toBe(false); // the later session first
     });
   });
+
+  it('summarizes records for the reports: counted per school, group, student and fulfilment state, filtered by ids and the half-open instant range, the corrected value counting once', async () => {
+    await withFixture(async ({ tx }) => {
+      const schoolId = randomUUID();
+      const otherSchoolId = randomUUID();
+      const groupId = randomUUID();
+      const studentId = randomUUID();
+      const make = (school: string, group: string, student: string, matches: boolean | null) =>
+        MemorizationRecord.record({ sessionId: randomUUID(), schoolId: school, groupId: group, studentId: student, assignmentId: matches === null ? null : randomUUID(), range: rangeOf(1, 5), matchesAssignment: matches, actorUserId: randomUUID(), clock });
+      const early = new Date('2026-11-02T09:00:00.000Z');
+      const middle = new Date('2026-11-09T09:00:00.000Z');
+      const late = new Date('2026-11-16T09:00:00.000Z');
+      const first = make(schoolId, groupId, studentId, true);
+      const second = make(schoolId, groupId, studentId, true);
+      const third = make(schoolId, groupId, studentId, false);
+      const unscheduled = make(schoolId, groupId, studentId, null);
+      const elsewhere = make(otherSchoolId, randomUUID(), randomUUID(), true);
+      await repo.insertRecords([first], early, tx);
+      await repo.insertRecords([second], middle, tx);
+      await repo.insertRecords([third], late, tx);
+      await repo.insertRecords([unscheduled], late, tx);
+      await repo.insertRecords([elsewhere], middle, tx);
+
+      const all = await repo.summarizeForReport({ studentIds: [studentId] }, tx);
+      const byState = Object.fromEntries(all.map((r) => [String(r.matches), r.count]));
+      expect(byState).toEqual({ true: 2, false: 1, null: 1 });
+      expect(all.find((r) => r.matches === true)!.firstStart.toISOString()).toBe('2026-11-02T09:00:00.000Z'); // the earliest session start of the counted records
+      expect(all.every((r) => r.schoolId === schoolId && r.groupId === groupId && r.studentId === studentId)).toBe(true);
+
+      // filters narrow (AND); from is inclusive and toExclusive is exclusive
+      expect((await repo.summarizeForReport({ schoolIds: [otherSchoolId] }, tx)).map((r) => r.count)).toEqual([1]);
+      expect(await repo.summarizeForReport({ schoolIds: [schoolId], groupIds: [randomUUID()] }, tx)).toEqual([]);
+      const window = await repo.summarizeForReport({ studentIds: [studentId], from: middle, toExclusive: late }, tx);
+      expect(window.map((r) => [r.matches, r.count])).toEqual([[true, 1]]);
+      expect(await repo.summarizeForReport({ studentIds: [studentId], from: early, toExclusive: early }, tx)).toEqual([]);
+      // an empty list matches nothing, never everything
+      expect(await repo.summarizeForReport({ studentIds: [] }, tx)).toEqual([]);
+
+      // a correction changes the CURRENT value counted; the record is still counted once
+      const locked = (await repo.lockRecord(third.snapshot.id, tx))!;
+      const entry = locked.correct({ range: rangeOf(1, 3), matchesAssignment: true, reason: null, actorUserId: randomUUID(), clock })!;
+      await repo.applyRecordCorrection(locked, entry, tx);
+      const corrected = await repo.summarizeForReport({ studentIds: [studentId] }, tx);
+      expect(Object.fromEntries(corrected.map((r) => [String(r.matches), r.count]))).toEqual({ true: 3, null: 1 });
+    });
+  });
 });

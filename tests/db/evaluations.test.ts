@@ -362,3 +362,46 @@ describe('attendance / evaluation mutual exclusion under concurrency (committed 
     }
   });
 });
+
+describe('SequelizeEvaluationRepository.summarizeForReport (read-only aggregate for the reports, Module 38)', () => {
+  it('counts evaluations per school, group and student with the count and exact sum in hundredths per category, filtered by ids, recorder and the half-open instant range; the current scores count', async () => {
+    await withFixture(async ({ tx }) => {
+      const schoolId = randomUUID();
+      const otherSchoolId = randomUUID();
+      const groupId = randomUUID();
+      const studentId = randomUUID();
+      const teacherUser = randomUUID();
+      const otherUser = randomUUID();
+      const mem = randomUUID();
+      const rev = randomUUID();
+      const make = (school: string, group: string, student: string, start: string, actor: string, scores: ReturnType<typeof score>[]) =>
+        newEvaluation({ schoolId: school, groupId: group, studentId: student, scheduledStart: new Date(start), occurrenceDate: start.slice(0, 10), actorUserId: actor, scores });
+      const first = make(schoolId, groupId, studentId, '2026-11-02T09:00:00.000Z', teacherUser, [score('MEMORIZATION', 8.5, mem, null), score('PERFORMANCE', 9, mem, null)]);
+      const second = make(schoolId, groupId, studentId, '2026-11-09T09:00:00.000Z', teacherUser, [score('MEMORIZATION', 7.25, mem, null), score('REVISION', 6, null, rev)]);
+      const third = make(schoolId, groupId, studentId, '2026-11-16T09:00:00.000Z', otherUser, [score('PERFORMANCE', 5, mem, null), score('TAJWEED', 10, mem, null)]);
+      const elsewhere = make(otherSchoolId, randomUUID(), randomUUID(), '2026-11-09T09:00:00.000Z', otherUser, [score('MEMORIZATION', 3.33, mem, null)]);
+      for (const e of [first, second, third, elsewhere]) expect(await repo.insertIfAbsent(e, tx)).toBe(true);
+      const shape = (rows: Awaited<ReturnType<typeof repo.summarizeForReport>>) => rows.map((r) => `${r.evaluations}:${r.categories.map((c) => `${c.category}=${c.count}/${c.sumHundredths}`).join(',')}`);
+
+      const all = await repo.summarizeForReport({ studentIds: [studentId] }, tx);
+      expect(all).toHaveLength(1);
+      expect(all[0]).toMatchObject({ schoolId, groupId, studentId });
+      expect(all[0]!.firstStart.toISOString()).toBe('2026-11-02T09:00:00.000Z');
+      expect(shape(all)).toEqual(['3:MEMORIZATION=2/1575,REVISION=1/600,PERFORMANCE=2/1400,TAJWEED=1/1000']); // exact integer sums, fixed category order
+
+      // filters narrow (AND)
+      expect(shape(await repo.summarizeForReport({ studentIds: [studentId], recordedByUserIds: [teacherUser] }, tx))).toEqual(['2:MEMORIZATION=2/1575,REVISION=1/600,PERFORMANCE=1/900']);
+      expect(shape(await repo.summarizeForReport({ studentIds: [studentId], from: new Date('2026-11-09T09:00:00.000Z'), toExclusive: new Date('2026-11-16T09:00:00.000Z') }, tx))).toEqual(['1:MEMORIZATION=1/725,REVISION=1/600']); // from inclusive, toExclusive exclusive
+      expect(shape(await repo.summarizeForReport({ schoolIds: [otherSchoolId] }, tx))).toEqual(['1:MEMORIZATION=1/333']);
+      expect(await repo.summarizeForReport({ schoolIds: [schoolId], groupIds: [randomUUID()] }, tx)).toEqual([]);
+      // an empty list matches nothing, never everything
+      for (const query of [{ studentIds: [] }, { schoolIds: [] }, { groupIds: [] }, { recordedByUserIds: [] }]) expect(await repo.summarizeForReport(query, tx)).toEqual([]);
+
+      // a score change overwrites the score (no history): the CURRENT score is the one counted
+      const [locked] = await repo.lockBySessionAndStudents(first.snapshot.sessionId, [studentId], tx);
+      locked!.changeScores({ scores: [{ category: 'MEMORIZATION', score: 9.99 }], actorUserId: randomUUID(), clock }); // a different user than the recorder, like the existing saveScores test: saveScores insists the `updated_by`/`updated_at` UPDATE changes the row
+      await repo.saveScores(locked!, tx);
+      expect(shape(await repo.summarizeForReport({ studentIds: [studentId] }, tx))).toEqual(['3:MEMORIZATION=2/1724,REVISION=1/600,PERFORMANCE=2/1400,TAJWEED=1/1000']);
+    });
+  });
+});

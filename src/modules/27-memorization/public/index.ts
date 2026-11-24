@@ -6,9 +6,9 @@
 // Events: MemorizationAssignmentDefined / Modified / Cancelled, MemorizationRecorded, MemorizationRecordCorrected. Permissions go through `registerMemorizationAuthorization`.
 export {
   MemorizationService,
-  type MemorizationServiceDeps, type GpsInput, type DefineAssignmentInput, type RecordMemorizationInput, type CorrectRecordInput, type StudentRecordsInput,
+  type MemorizationReportLookup, type MemorizationServiceDeps, type GpsInput, type DefineAssignmentInput, type RecordMemorizationInput, type CorrectRecordInput, type StudentRecordsInput,
 } from '../application/services/memorization-service';
-export type { MemorizationRepository } from '../application/ports/memorization-repository';
+export type { MemorizationRepository, MemorizationReportQuery, MemorizationReportRow } from '../application/ports/memorization-repository';
 export type { AssignmentDto, RecordDto, SessionMemorizationDto, RecordBatchResultDto, RecordCorrectionResultDto, ScheduledMemorizationDto } from '../application/dto/memorization-dto';
 export { MemorizationPermissions, registerMemorizationAuthorization, type MemorizationAuthorizationDeps } from '../application/services/memorization-authorization';
 export { MEMORIZATION_ERROR_MESSAGES } from '../application/services/memorization-error-messages';

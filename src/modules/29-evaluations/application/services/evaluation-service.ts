@@ -17,7 +17,7 @@ import {
 import {
   toEvaluationDto, type AttendanceView, type EvaluationBatchResultDto, type EvaluationChangeResultDto, type EvaluationDto, type SessionEvaluationStatusDto, type SessionEvaluationsDto, type StudentEvaluationStatusDto,
 } from '../dto/evaluation-dto';
-import type { EvaluationRepository } from '../ports/evaluation-repository';
+import type { EvaluationReportQuery, EvaluationReportRow, EvaluationRepository } from '../ports/evaluation-repository';
 
 export interface EvaluationServiceDeps {
   readonly evaluations: EvaluationRepository;
@@ -236,6 +236,14 @@ export class EvaluationService {
     return { sessionId, evaluations: (await this.repo.listBySession(sessionId, tx)).map(toEvaluationDto) };
   }
 
+  /**
+   * PUBLIC READ for the reports (Module 38, additive, read-only): evaluations counted per school, group of the evaluation and student, with the count and the exact sum (in hundredths) of the scores per
+   * category. It creates and changes nothing, never returns a note, and the caller (Module 38) has already proven every id lies inside the requester's reporting scope.
+   */
+  summarizeForReport(query: EvaluationReportQuery, tx?: TransactionContext): Promise<EvaluationReportRow[]> {
+    return this.repo.summarizeForReport(query, tx);
+  }
+
   /** A student's evaluations over time (the route guard allows the School Manager of the school and the student's own Parent). Newest session first by default. */
   async listStudentEvaluations(studentId: string, input: EvaluationListInput, tx?: TransactionContext): Promise<PageResult<EvaluationDto>> {
     const { items, total } = await this.repo.listByStudent(studentId, input.direction ?? 'desc', input.page, tx);
@@ -320,3 +328,6 @@ function parseEntries(records: unknown): Entry[] {
     return { studentId: rec.studentId, scores, note: normalizeNote(rec.note) };
   });
 }
+
+/** The read-only aggregate Module 38 (Reports) depends on. */
+export type EvaluationReportLookup = Pick<EvaluationService, 'summarizeForReport'>;

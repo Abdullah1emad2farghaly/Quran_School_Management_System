@@ -1,10 +1,11 @@
 # Reports Core (Module 37)
 
 Master Specification §66-§71 (reporting rules), §102 (reports are read models, not the source of truth), §97 (selective CQRS). Release 0.50.0.
-**Status: shared reporting foundation implemented (0.50.0 period rules, locally verified by the owner; 0.51.0 scope foundation). Module 38 (endpoints, reports, exports) is deferred.**
+**Status: shared reporting foundation implemented (0.50.0 period rules, locally verified by the owner; 0.51.0 scope foundation). Module 38 (endpoints, reports, exports) is IN PROGRESS, built in slices on top of this foundation; see `docs/REPORT-MODULES.md` (PAYMENT, ATTENDANCE, MEMORIZATION, REVISION and EVALUATION reports implemented so far).**
 
 ## What this slice contains (everything here is decided by the specification)
 - **Report periods (§66):** `THIS_MONTH` (first day of the current month in Africa/Cairo -> now), `LAST_MONTH` (the previous full calendar month), `ACROSS_TIME` (no date bounds; the authorized scope, never the period, limits the data), `CUSTOM` (inclusive start and end dates, internally the half-open interval `[start, end + 1 day)`).
+- **Used by the STUDENT report (Module 38, 0.57.0):** the student scope proof (`restrictToScope` + the owning module's membership check) before any read.
 - **Student effective start (§67):** `MAX(student join date, requested report start)`; student data before the join date is never reported. A student who joined after the period ended has an empty window.
 - **Time (§71):** instants are UTC, business dates are Africa/Cairo. Egypt observes daylight saving time, so a Cairo midnight is found with the platform time-zone data, never a fixed offset: a day can be 23 hours (2026-04-24, the clocks skip midnight) or 25 hours (2026-10-29). Tested.
 - **Public contract** (`src/modules/37-reports-core/public`): `ReportPeriodService` (`resolvePeriod`, `studentWindow`), the pure functions `resolveReportPeriod` / `studentReportWindow` / `startOfBusinessDay`, and the error codes `INVALID_REPORT_PERIOD`, `REPORT_CUSTOM_DATES_REQUIRED`, `REPORT_PERIOD_DATES_NOT_ALLOWED`, `INVALID_REPORT_DATE`, `REPORT_PERIOD_START_AFTER_END` (Arabic and English messages registered). Module 38 must use this contract for periods so no report re-implements them.
@@ -56,15 +57,36 @@ Starting point: the recommended matrix of this document (role lines) verified ag
 If the owner wants a different per-type table, only `REPORT_AVAILABILITY` changes.
 
 ### Export
-Approved (2026-11-17) as part of Module 38 (PDF, XLSX, CSV, same authorization and scope as the report). **Not started.** Module 37 only provides the scope rules exports must reuse.
+Approved (2026-11-17) as part of Module 38 (PDF, XLSX, CSV, same authorization and scope as the report). **CSV and XLSX are implemented for the PAYMENT, ATTENDANCE, MEMORIZATION, REVISION and EVALUATION reports (Module 38, 0.52.0-0.56.0); PDF is not started** (needs a PDF library and Arabic text shaping, awaiting the owner's decision). Module 37 only provides the scope rules exports reuse.
 
 ### Open items
 - Authoritative geographic-manager assignment source (needed before those roles can report).
 - Explicit reporting authorization for MAIN_ADMIN.
-- Module 38 (report endpoints, the 12 reports, exports): NOT STARTED / DEFERRED.
+- Module 38 (report endpoints, the 12 reports, exports): IN PROGRESS. 5 of the 12 reports are implemented (Payment, Attendance, Memorization, Revision, Evaluation; JSON, CSV, Excel); the other 7 and PDF are not started (`docs/REPORT-MODULES.md`).
 
 ## Tests
 `tests/unit/reports/report-period.test.ts` (25) and `report-boundaries.test.ts` (period rules, 0.50.0); `tests/unit/reports/report-scope.test.ts` (13: scope per role, MAIN_ADMIN/STUDENT/unknown denied, geographic managers denied while no assignment exists and scoped once one exists, empty assignment denies, active role only, availability matrix, requested-id checks, public adapter) and the extended `report-boundaries.test.ts` (no table/route/permission/report-specific code, adapter uses public contracts only, only `src/config/reports.ts` builds the resolver, Module 38 has no source files). Module 20: `tests/unit/groups/group-service.test.ts` (`listCurrentGroupIdsOfTeacherUser`).
 
 ## Module 38 (slice 1, 0.52.0)
 The first report built on this foundation is the PAYMENT report; see `docs/REPORT-MODULES.md`. It uses `ReportScopeResolver.authorize`, `restrictToScope`, `authorizeRequestedIds` and `ReportPeriodService` exactly as described above and adds no rule to this module.
+
+## Module 38 (slice 2, 0.54.0): MEMORIZATION report
+Reuses this module unchanged (period rules, `studentWindow`, scope resolver, availability matrix: no change here). Details, the rules applied and the interpretations to confirm: `docs/REPORT-MODULES.md`. **Pagination:** the Master Specification (section on API conventions, default 20 / maximum 100) and `PAGINATION` in Module 00 define the standard list pagination; no approved exception exists for reports in the specification, this file or the earlier decisions. The MEMORIZATION JSON report therefore follows it (see REPORT-MODULES.md); the earlier PAYMENT and ATTENDANCE reports (verified, 0.52.0/0.53.0) were delivered unpaginated and are NOT changed in this delivery: bringing them in line needs your approval because it changes verified API behavior.
+
+## Module 38 (slice 3, 0.55.0): REVISION report
+Reuses this module unchanged (period rules, `studentWindow`, scope resolver, availability matrix: REVISION was already allowed for the same roles as MEMORIZATION). Built exactly like the MEMORIZATION report and with the same standard pagination; details in `docs/REPORT-MODULES.md`.
+
+## Module 38 (slice 4, 0.56.0): EVALUATION report
+Reuses this module unchanged (period rules, `studentWindow`, scope resolver, availability matrix: EVALUATION was already allowed for the same roles). It differs from the other learning reports in two ways documented in `docs/REPORT-MODULES.md`: its figures are the per-category count and arithmetic mean of the stored scores (no combined score), and a Teacher is limited to the evaluations they recorded (Module 29 decision 2). Same standard pagination.
+
+## Module 38 (slice 5, 0.57.0): STUDENT report
+Reuses this module unchanged (period rules, `studentWindow`, scope resolver, `restrictToScope`, availability matrix: STUDENT was already allowed for Organization Manager, School Manager, Teacher and Parent; geographic managers, MAIN_ADMIN, Collector and STUDENT stay denied). It is about ONE student (`studentId` required), proves that student inside the requester's scope before reading anything, and reuses the ATTENDANCE, MEMORIZATION, REVISION and EVALUATION reports for four of its seven sections; details in `docs/REPORT-MODULES.md`.
+
+## Module 38 (slice 6, 0.58.0): PARENT report
+Reuses this module unchanged (period rules, scope resolver, `restrictToScope`, availability matrix: PARENT was already allowed for Organization Manager, School Manager and Parent; Teacher, Collector, MAIN_ADMIN, geographic managers and Student stay denied). It proves the Parent inside the requester's scope before any child is read, then builds each child's report with the STUDENT report (so each child repeats the scope proof); details in `docs/REPORT-MODULES.md`.
+
+## Module 38 (slice 7, 0.59.0): GROUP report
+Reuses this module unchanged (period rules, `studentWindow`, scope resolver, `restrictToScope`, availability matrix: GROUP was already allowed for Organization Manager, School Manager and Teacher; the Parent, Collector, MAIN_ADMIN, geographic managers and Student stay denied). It proves the group inside the requester's scope before anything is read and reuses the ATTENDANCE, MEMORIZATION, REVISION and EVALUATION reports for the group; details in `docs/REPORT-MODULES.md`.
+
+## Module 38 (slice 8, 0.60.0): TEACHER report
+Reuses this module unchanged (period rules, scope resolver, availability matrix: TEACHER is allowed to the Organization Manager and the School Manager only; a Teacher, the Parent, Collector, MAIN_ADMIN, geographic managers and Student stay denied). It resolves the requester's authorized schools from the scope and gives ONLY those school ids to every later read, so nothing of the Teacher's work in other schools or organizations is ever read; details in `docs/REPORT-MODULES.md`.

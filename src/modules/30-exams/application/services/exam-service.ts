@@ -8,12 +8,12 @@ import type { SmartGuard } from '../../../25-smart-guard/public';
 import { Exam, type ExamConfigInput } from '../../domain/entities/exam';
 import { ExamResult } from '../../domain/entities/exam-result';
 import { examError } from '../../domain/errors/exam-errors';
-import { EXAM_REMINDER_HOURS, EXAM_SMART_GUARD_LEAD_MINUTES, type ExamStatus } from '../../domain/value-objects/exam-rules';
+import { EXAM_REMINDER_HOURS, EXAM_SMART_GUARD_LEAD_MINUTES, fromHundredths, toHundredths, type ExamStatus } from '../../domain/value-objects/exam-rules';
 import {
-  maxTotalOf, toExamDto, toPendingStudentDto, toResultDto, toScheduleDto, type ExamDto, type ExamReminderStatusDto, type ExamResultReceiptDto, type ExamResultsDto, type ExamScheduleDto, type PendingGroupDto,
+  maxTotalOf, type StudentExamReportRowDto, toExamDto, toPendingStudentDto, toResultDto, toScheduleDto, type ExamDto, type ExamReminderStatusDto, type ExamResultReceiptDto, type ExamResultsDto, type ExamScheduleDto, type PendingGroupDto,
   type PendingStudentDto, type StudentExamOutcomeDto,
 } from '../dto/exam-dto';
-import type { ExamRepository, ExamStudentRow } from '../ports/exam-repository';
+import type { ExamRepository, ExamStudentRow, StudentExamReportQuery } from '../ports/exam-repository';
 import { EXAMINER_VISIBLE_STATUSES, type ExamScope } from './exam-authorization';
 
 export interface ExamServiceDeps {
@@ -367,6 +367,26 @@ export class ExamService {
     return asPage(dtos, total, page) as PageResult<StudentExamOutcomeDto>;
   }
 
+  /**
+   * Read-only, for the Student report (Module 38): a student's RECORDED outcomes (EXAMINED or ABSENT) of the exams that started inside the period, oldest first. Pending outcomes are never included.
+   * No score is created or combined here: the recorded scores and total are returned as stored, an ABSENT outcome has none. The caller has already proven the student and groups lie inside the requester's scope.
+   */
+  async listStudentOutcomesForReport(query: StudentExamReportQuery): Promise<StudentExamReportRowDto[]> {
+    const rows = await this.repo.listOutcomesOfStudentForReport(query);
+    return rows.map((r) => ({
+      examId: r.examId,
+      schoolId: r.schoolId,
+      groupId: r.groupId,
+      startAt: r.startAt,
+      outcome: r.outcome,
+      questionCount: r.questionCount,
+      maxScorePerQuestion: r.maxScore,
+      scores: r.outcome === 'ABSENT' ? [] : [...r.scores],
+      total: r.outcome === 'ABSENT' ? null : r.total,
+      maxTotal: fromHundredths(toHundredths(r.maxScore) * r.questionCount),
+    }));
+  }
+
   /** The target groups with how many students are still pending (DRAFT and SCHEDULED: the live list; afterwards: the frozen list). */
   async listPendingGroups(examId: string): Promise<PendingGroupDto[]> {
     const exam = await this.repo.findById(examId);
@@ -508,3 +528,5 @@ export class ExamService {
   }
 }
 
+/** Read-only lookup for the Student report (Module 38). */
+export type ExamReportLookup = Pick<ExamService, 'listStudentOutcomesForReport'>;

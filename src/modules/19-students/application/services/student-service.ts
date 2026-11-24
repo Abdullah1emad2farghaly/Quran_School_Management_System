@@ -246,6 +246,24 @@ export class StudentService {
     return facts;
   }
 
+  /**
+   * Read-only, for the Parent report (Module 38): ALL the Parent's children (ANY lifecycle status: ARCHIVED and INACTIVE included, and the status is NOT returned), optionally only those in the given
+   * schools (`schoolIds` empty: none). The caller (the report) has already proven the Parent and the schools lie inside the requester's scope; nothing here is a permission, a route or a change.
+   * Ordered by name, then id.
+   */
+  async listChildrenOfParentForReport(query: { readonly parentId: string; readonly schoolIds?: readonly string[] }, tx?: TransactionContext): Promise<StudentChildReportDto[]> {
+    if (query.schoolIds !== undefined && query.schoolIds.length === 0) return [];
+    const children: StudentChildReportDto[] = [];
+    for (let page = 1; ; page += 1) {
+      const listing = { sort: 'fullName', direction: 'asc', page: { page, pageSize: 100 } } as const;
+      const { items, total } =
+        query.schoolIds === undefined ? await this.students.listByParent(query.parentId, listing, tx) : await this.students.listByParentInSchools(query.parentId, query.schoolIds, listing, tx);
+      children.push(...items.map((s) => ({ id: s.snapshot.id, schoolId: s.snapshot.schoolId, fullName: s.snapshot.fullName, joinDate: s.snapshot.joinDate })));
+      if (items.length === 0 || children.length >= total) break;
+    }
+    return children.sort((a, b) => a.fullName.localeCompare(b.fullName) || a.id.localeCompare(b.id));
+  }
+
   async findById(studentId: string, tx?: TransactionContext): Promise<StudentDto | undefined> {
     const student = await this.students.findById(studentId, tx);
     return student ? this.toDto(student, tx) : undefined;
@@ -304,6 +322,18 @@ export class StudentService {
 
 /** What downstream modules (Groups 20, Attendance 26, Subscriptions 33...) should depend on (read-only). */
 export type StudentLookup = Pick<StudentService, 'findById' | 'findScopeById' | 'listReportFacts'>;
+
+/** Read-only lookup for the Parent report (Module 38). */
+export type StudentChildrenReportLookup = Pick<StudentService, 'listChildrenOfParentForReport'>;
+
+/** A child of a Parent as the Parent report needs it: no lifecycle status. */
+export interface StudentChildReportDto {
+  readonly id: string;
+  readonly schoolId: string;
+  readonly fullName: string;
+  /** `YYYY-MM-DD` (Africa/Cairo). */
+  readonly joinDate: string;
+}
 
 export interface StudentReportFactsDto {
   readonly id: string;

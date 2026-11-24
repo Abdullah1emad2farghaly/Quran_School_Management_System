@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { MemorizationRepository } from '../../../../application/ports/memorization-repository';
+import type { MemorizationReportQuery, MemorizationReportRow, MemorizationRepository } from '../../../../application/ports/memorization-repository';
 import { MemorizationAssignment, subjectKeyOf, type AssignmentHistoryEntry } from '../../../../domain/entities/memorization-assignment';
 import { MemorizationRecord, type MemorizationCorrection } from '../../../../domain/entities/memorization-record';
 import type { AssignmentAction, AssignmentStatus, MemorizationRange } from '../../../../domain/value-objects/memorization-range';
@@ -20,6 +20,9 @@ interface RecordRow {
 
 interface CorrectionRow {
   id: string; recordId: string; sessionId: string; studentId: string; previousRange: string; newRange: string; previousMatches: number | null; newMatches: number | null; reason: string | null; changedBy: string; changedAt: D;
+}
+interface ReportCountRow {
+  schoolId: string; groupId: string; studentId: string; matches: number | null; total: number | string; firstStart: D;
 }
 interface HistoryRow {
   id: string; assignmentId: string; sessionId: string; action: AssignmentAction; previousRange: string | null; newRange: string | null; changedBy: string; changedAt: D;
@@ -172,6 +175,38 @@ export class SequelizeMemorizationRepository implements MemorizationRepository {
     const rows = await this.db.query<RecordRow>(`${RECORD_SELECT} WHERE student_id = :studentId ORDER BY session_scheduled_start ${order}, recorded_at ${order}, id ASC LIMIT :limit OFFSET :offset`, { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) });
     const counted = await this.db.query<{ total: number | string }>(`SELECT COUNT(*) AS total FROM memorization_records WHERE student_id = :studentId`, { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) });
     return { items: rows.map(toRecord), total: Number(counted[0]?.total ?? 0) };
+  }
+
+  async summarizeForReport(query: MemorizationReportQuery, tx?: TransactionContext): Promise<MemorizationReportRow[]> {
+    const lists: Array<[readonly string[] | undefined, string, string]> = [
+      [query.schoolIds, 'r.school_id', 'schoolIds'],
+      [query.groupIds, 'r.group_id', 'groupIds'],
+      [query.studentIds, 'r.student_id', 'studentIds'],
+    ];
+    if (lists.some(([ids]) => ids !== undefined && ids.length === 0)) return [];
+    const replacements: Record<string, unknown> = {};
+    let where = '1 = 1';
+    for (const [ids, column, name] of lists) {
+      if (ids === undefined) continue;
+      where += ` AND ${column} IN (:${name})`;
+      replacements[name] = [...new Set(ids)];
+    }
+    if (query.from !== undefined) {
+      where += ' AND r.session_scheduled_start >= :from';
+      replacements.from = query.from;
+    }
+    if (query.toExclusive !== undefined) {
+      where += ' AND r.session_scheduled_start < :toExclusive';
+      replacements.toExclusive = query.toExclusive;
+    }
+    const rows = await this.db.query<ReportCountRow>(
+      `SELECT r.school_id AS schoolId, r.group_id AS groupId, r.student_id AS studentId, r.matches_assignment AS matches, COUNT(*) AS total, MIN(r.session_scheduled_start) AS firstStart
+         FROM memorization_records r WHERE ${where}
+        GROUP BY r.school_id, r.group_id, r.student_id, r.matches_assignment
+        ORDER BY r.school_id, r.group_id, r.student_id, r.matches_assignment`,
+      { replacements, type: QueryTypes.SELECT, transaction: this.t(tx) },
+    );
+    return rows.map((r: ReportCountRow) => ({ schoolId: r.schoolId, groupId: r.groupId, studentId: r.studentId, matches: bool(r.matches), count: Number(r.total), firstStart: asDate(r.firstStart) }));
   }
 
   async listCorrectionsOfSession(sessionId: string, tx?: TransactionContext): Promise<MemorizationCorrection[]> {

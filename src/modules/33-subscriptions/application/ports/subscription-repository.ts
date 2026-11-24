@@ -46,6 +46,21 @@ export interface SubscriptionRepository {
   listUnpaidOfSchoolMonth(schoolId: string, month: string, tx?: TransactionContext): Promise<Subscription[]>;
   /** Read-only aggregate for reports (Module 38): how many subscriptions each school has per billing month and status. `fromMonth` / `toMonth` (`YYYY-MM`, inclusive) are optional bounds. */
   countByStatus(query: SubscriptionStatusCountQuery, tx?: TransactionContext): Promise<SubscriptionStatusCount[]>;
+  /** Read-only, for the Student report (Module 38): one student's subscriptions (billing month and the status RECORDED NOW), oldest month first. `fromMonth` / `toMonth` (`YYYY-MM`, inclusive) are optional bounds. */
+  listForStudentReport(query: StudentSubscriptionReportQuery, tx?: TransactionContext): Promise<StudentSubscriptionReportRow[]>;
+}
+
+export interface StudentSubscriptionReportQuery {
+  readonly studentId: string;
+  readonly fromMonth?: string;
+  readonly toMonth?: string;
+}
+
+export interface StudentSubscriptionReportRow {
+  /** `YYYY-MM` (Africa/Cairo). */
+  readonly month: string;
+  /** The status recorded NOW (not a snapshot of the past). */
+  readonly status: SubscriptionStatus;
 }
 
 export interface SubscriptionStatusCountQuery {

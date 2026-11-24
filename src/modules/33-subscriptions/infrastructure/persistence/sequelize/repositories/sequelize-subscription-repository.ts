@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import type { TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { SubscriptionListQuery, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../../../../application/ports/subscription-repository';
+import type { StudentSubscriptionReportQuery, StudentSubscriptionReportRow, SubscriptionListQuery, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../../../../application/ports/subscription-repository';
 import { Subscription } from '../../../../domain/entities/subscription';
 import { SubscriptionBatch } from '../../../../domain/entities/subscription-batch';
 import { subscriptionError } from '../../../../domain/errors/subscription-errors';
@@ -199,6 +199,23 @@ export class SequelizeSubscriptionRepository implements SubscriptionRepository {
       for (const r of rows) found.push({ schoolId: r.schoolId, month: r.month, status: r.status as SubscriptionStatusCount['status'], count: Number(r.total) });
     }
     return found;
+  }
+
+  async listForStudentReport(query: StudentSubscriptionReportQuery, tx?: TransactionContext): Promise<StudentSubscriptionReportRow[]> {
+    const replacements: Record<string, unknown> = { studentId: query.studentId };
+    let bounds = '';
+    if (query.fromMonth !== undefined) {
+      bounds += ' AND s.month >= :fromMonth';
+      replacements.fromMonth = query.fromMonth;
+    }
+    if (query.toMonth !== undefined) {
+      bounds += ' AND s.month <= :toMonth';
+      replacements.toMonth = query.toMonth;
+    }
+    const rows = await this.db.query<{ month: string; status: string }>(`SELECT s.month AS month, s.status AS status FROM subscriptions s WHERE s.student_id = :studentId${bounds} ORDER BY s.month`, {
+      replacements, type: QueryTypes.SELECT, transaction: this.t(tx),
+    });
+    return rows.map((r) => ({ month: r.month, status: r.status as StudentSubscriptionReportRow['status'] }));
   }
 
   // ---------------------------------------------------------------------------------------------- mapping

@@ -72,7 +72,7 @@ function fixture() {
     studentIdsOfParent: async () => [ST1],
     geographicAreasOfManager: async () => undefined,
   };
-  const service = new ReportService({ scopes: new ReportScopeResolver(scopeSources), periods: new ReportPeriodService({ clock }), payments: {} as never, attendance: sources, clock });
+  const service = new ReportService({ scopes: new ReportScopeResolver(scopeSources), periods: new ReportPeriodService({ clock }), payments: {} as never, attendance: sources, memorization: {} as never, revision: {} as never, evaluation: {} as never, clock });
   return { service, reads };
 }
 

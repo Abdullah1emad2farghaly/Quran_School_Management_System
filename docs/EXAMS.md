@@ -58,7 +58,7 @@ At COMPLETED every PENDING target becomes ABSENT (`exam_students.status`). **No 
 | Assigned examiner | `GET /exams/assigned`, `GET /exams/{id}`, `GET /exams/{id}/groups`, `GET /exams/{id}/groups/{groupId}/students` (**pending only**, with group and status). **Never any result**, not even their own. After ENDED (or removal) all of it is denied |
 | Parent | `GET /exams/schedule` (scheduled exams of the schools of their children), `GET /exams/students/{id}` (their own children's recorded results and ABSENT only; never pending, never another family's) |
 | Teacher not assigned, Student | nothing |
-| Organization / geographic managers, Main Admin | nothing directly (the future Reports module) |
+| Organization / geographic managers, Main Admin | nothing directly (the Reports modules read through `ExamService.listStudentOutcomesForReport`, below) |
 
 ## API (`/api/v1/exams`, 19 operations, all in Swagger)
 POST `/`, GET `/schools/{schoolId}`, GET `/schedule`, GET `/assigned`, GET `/students/{id}`, GET `/{id}`, PATCH `/{id}`, DELETE `/{id}`, POST `/{id}/schedule|cancel|complete|end`, PUT `/{id}/end-time`, POST `/{id}/examiners`, DELETE `/{id}/examiners/{teacherId}`, GET `/{id}/results`, GET `/{id}/groups`, GET `/{id}/groups/{groupId}/students`, POST `/{id}/results`.
@@ -95,3 +95,6 @@ Every change and transition takes the exam row `FOR UPDATE`; a result submission
 - API conformance over the real Authorization Engine, Smart Guard, groups, teachers and parents: all 19 operations exercised, including the exam-scoped examiner permission (denied for an unassigned Teacher, a removed examiner and after ENDED), Parent/Manager/other-school reads, and the lifecycle (`tests/api-docs/conformance/exams.test.ts`).
 - Real database (`tests/db/exams.test.ts`, 21): schema constraints (including NULL-safe checks), repository, and the concurrency / recovery scenarios above. Mutation checks (removing the shared lock on submissions, and removing the exclusive lock on changes and transitions) make the deterministic race tests fail; the files were restored and the tests pass again.
 - Full verification in the authoring environment (a real MariaDB 10.11): `npm run typecheck` and `npm run build` clean; `npm test` 1,846 passed / 8 skipped; `npm run api:verify` 96 passed; `npm run test:db` (all modules) passed, including the 21 exam tests. The database tests also caught and fixed a NULL-in-CHECK defect in `exam_examiners` (a release without a reason slipped past the constraint) before delivery.
+
+## Read-only contract for the Student report (0.57.0)
+`ExamService.listStudentOutcomesForReport({ studentId, from?, toExclusive?, groupIds? })` returns one student's RECORDED outcomes (EXAMINED with the recorded scores and total, or ABSENT with none) of the exams that STARTED in the half-open range, oldest first, optionally only for the given groups (the group the student was targeted in). Pending outcomes and deleted exams are never returned. It writes nothing, adds no permission, no route, no event and no migration (it uses `ix_exam_students_student`). Module 38 (STUDENT report) is its only user and applies the requester's scope before calling it.

@@ -103,3 +103,6 @@ Interpretations (flagged, easy to change): reminders are due at the START of the
 - Payments, reversals and every PAID ↔ UNPAID change belong to Module 34 (this module has no such operation). No un-waive and no waive reason (not specified).
 - The group reads use the group assignments as they are NOW (not their history); they load the school's groups and members per request (adequate for school-sized data).
 - One School Manager per school is notified by rule D (the schema allows one active manager).
+
+## Read-only contract for the Student report (0.57.0)
+`SubscriptionService.listStudentSubscriptionsForReport({ studentId, fromMonth?, toMonth? })` returns one student's subscriptions (billing month and the status recorded NOW), oldest month first, with inclusive month bounds. It writes nothing, adds no permission and no route, and Module 33's authorization is unchanged: the STUDENT report (Module 38) shows this data only to the Organization Manager and the School Manager; Teacher and Parent never receive it. No migration (it uses `uq_subscriptions_student_month`).

@@ -9,7 +9,7 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-describe('Module 38 boundaries (slice 1: PAYMENT and ATTENDANCE reports)', () => {
+describe('Module 38 boundaries (slices 1-6: PAYMENT, ATTENDANCE, MEMORIZATION, REVISION, EVALUATION, STUDENT and PARENT reports)', () => {
   const root = path.resolve(__dirname, '../../../src/modules/38-report-modules');
   const files = sourceFiles(root);
   const rel = (f: string) => f.split(path.sep).join('/');
@@ -21,7 +21,7 @@ describe('Module 38 boundaries (slice 1: PAYMENT and ATTENDANCE reports)', () =>
     expect(modules.filter(({ spec }) => !/\/\d{2}-[a-z-]+\/public$/.test(spec))).toEqual([]);
     const deps = new Set(modules.map(({ spec }) => Number(/\/(\d{2})-/.exec(spec)![1])));
     expect([...deps].filter((n) => n >= 38)).toEqual([]);
-    expect([...deps].sort((a, b) => a - b)).toEqual([0, 4, 16, 18, 19, 20, 26, 33, 34, 37]);
+    expect([...deps].sort((a, b) => a - b)).toEqual([0, 4, 16, 17, 18, 19, 20, 26, 27, 28, 29, 30, 33, 34, 37]);
   });
 
   it('owns no table and no repository: it reads only through public contracts and never imports a database library', () => {

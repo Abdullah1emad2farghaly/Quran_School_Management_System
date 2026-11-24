@@ -1,6 +1,6 @@
 import type { TransactionContext } from '../../../00-shared-kernel/public';
 import type { CollectorLinkRepository } from '../../application/ports/collector-link-repository';
-import type { SubscriptionListQuery, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../../application/ports/subscription-repository';
+import type { StudentSubscriptionReportQuery, StudentSubscriptionReportRow, SubscriptionListQuery, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../../application/ports/subscription-repository';
 import { CollectorSchoolLink, type CollectorSchoolLinkSnapshot } from '../../domain/entities/collector-school-link';
 import { Subscription, type SubscriptionSnapshot } from '../../domain/entities/subscription';
 import { SubscriptionBatch, type SubscriptionBatchSnapshot } from '../../domain/entities/subscription-batch';
@@ -92,6 +92,13 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
       totals.set(key, { schoolId: r.schoolId, month: r.month, status: r.status, count: (totals.get(key)?.count ?? 0) + 1 });
     }
     return [...totals.values()].sort((a, b) => (a.schoolId < b.schoolId ? -1 : a.schoolId > b.schoolId ? 1 : a.month < b.month ? -1 : a.month > b.month ? 1 : a.status < b.status ? -1 : a.status > b.status ? 1 : 0));
+  }
+
+  async listForStudentReport(query: StudentSubscriptionReportQuery, _tx?: TransactionContext): Promise<StudentSubscriptionReportRow[]> {
+    return [...this.rows.values()]
+      .filter((r) => r.studentId === query.studentId && (query.fromMonth === undefined || r.month >= query.fromMonth) && (query.toMonth === undefined || r.month <= query.toMonth))
+      .map((r) => ({ month: r.month, status: r.status }))
+      .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
   }
 
   snapshot(): { rows: Array<[string, SubscriptionSnapshot]>; batches: Array<[string, SubscriptionBatchSnapshot]> } {

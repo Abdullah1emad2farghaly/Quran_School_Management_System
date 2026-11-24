@@ -75,3 +75,6 @@ The MANAGEMENT/`STUDENT` scope resolver is **role-aware** and answers `true` onl
 1. Record the three approved decisions in `docs/MASTER-SPECIFICATION.md` (not done: only you decide when the specification is amended).
 2. Defaults chosen by the implementation, easy to change: `ARCHIVED` final; only name and join date updatable; archived students still block the Parent unlink; minimal Teacher view; join date defaults to today.
 3. (Done in 0.26.0) Module 20 replaced the Teacher stand-in; the Student's group is Module 20 data (`docs/GROUPS.md`).
+
+## Read-only contract for the Parent report (0.58.0)
+`StudentService.listChildrenOfParentForReport({ parentId, schoolIds? })` returns ALL of a Parent's children of ANY lifecycle status (ARCHIVED and INACTIVE included) as `{ id, schoolId, fullName, joinDate }`, ordered by name then id, optionally only those in the given schools (an empty list: none). The status is never returned. It reads through the existing `listByParent` / `listByParentInSchools` queries, writes nothing, adds no permission, no route, no event and no migration. Module 38 (PARENT report) is its only user and proves the Parent and the schools inside the requester's scope before calling it.

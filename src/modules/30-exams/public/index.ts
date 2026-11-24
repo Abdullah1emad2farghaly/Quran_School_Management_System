@@ -4,11 +4,11 @@
 // `checkProtectedAction`). Other modules depend on `ExamService` (reads: `getExamReminderStatus` feeds the 24-hour reminder of the Notifications modules 31-34) and on the events
 // (ExamExaminerAssigned, ExamScheduled, ExamResultRecorded, ...). Permissions go through the Authorization Engine (`registerExamAuthorization`). Nothing is notified inside this module.
 export {
-  ExamService, type ExamServiceDeps, type CreateExamInput, type UpdateExamInput, type SubmitExamResultInput, type ListExamsInput,
+  ExamService, type ExamReportLookup, type ExamServiceDeps, type CreateExamInput, type UpdateExamInput, type SubmitExamResultInput, type ListExamsInput,
 } from '../application/services/exam-service';
-export type { ExamRepository, ExamStudentRow, ExamStudentStatus, StudentExamOutcomeRow, LockMode } from '../application/ports/exam-repository';
+export type { ExamRepository, ExamStudentRow, ExamStudentStatus, StudentExamOutcomeRow, StudentExamReportQuery, StudentExamReportRow, LockMode } from '../application/ports/exam-repository';
 export type {
-  ExamDto, ExaminerDto, ExamScheduleDto, ExamResultDto, ExamResultsDto, ExamAbsentDto, StudentExamOutcomeDto, PendingGroupDto, PendingStudentDto, ExamResultReceiptDto, ExamReminderStatusDto,
+  ExamDto, ExaminerDto, ExamScheduleDto, ExamResultDto, ExamResultsDto, ExamAbsentDto, StudentExamOutcomeDto, StudentExamReportRowDto, PendingGroupDto, PendingStudentDto, ExamResultReceiptDto, ExamReminderStatusDto,
 } from '../application/dto/exam-dto';
 export { ExamPermissions, EXAMINER_VISIBLE_STATUSES, registerExamAuthorization, type ExamAuthorizationDeps, type ExamScope } from '../application/services/exam-authorization';
 export { EXAM_ERROR_MESSAGES } from '../application/services/exam-error-messages';

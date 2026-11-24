@@ -7,7 +7,7 @@ import { subscriptionError } from '../../domain/errors/subscription-errors';
 import { currentBillingMonth, isBillingMonth } from '../../domain/value-objects/billing-month';
 import { type SubscriptionStatus } from '../../domain/value-objects/subscription-status';
 import { toBatchDto, toSubscriptionDto, type BulkCreationResultDto, type SubscriptionBatchDto, type SubscriptionDto, type SubscriptionScopeDto, type SubscriptionViewDto } from '../dto/subscription-dto';
-import type { SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../ports/subscription-repository';
+import type { StudentSubscriptionReportQuery, StudentSubscriptionReportRow, SubscriptionRepository, SubscriptionStatusCount, SubscriptionStatusCountQuery } from '../ports/subscription-repository';
 import type { StudentRoster } from '../ports/student-roster';
 
 export interface ListSubscriptionsInput {
@@ -174,6 +174,15 @@ export class SubscriptionService {
   /** Read-only aggregate for reports (Module 38): subscriptions per school, billing month and status. The caller (the report) has already proven the schools lie inside the requester's scope. */
   countStatusesForReport(query: SubscriptionStatusCountQuery, tx?: TransactionContext): Promise<SubscriptionStatusCount[]> {
     return this.subscriptions.countByStatus(query, tx);
+  }
+
+  /**
+   * Read-only, for the Student report (Module 38): one student's subscriptions, oldest month first, with the status RECORDED NOW (the report must not present it as a historical snapshot).
+   * The caller (the report) has already proven the student lies inside the requester's scope AND that the requester may see subscriptions (Organization Manager or School Manager only);
+   * this method adds no permission and exposes nothing over HTTP.
+   */
+  listStudentSubscriptionsForReport(query: StudentSubscriptionReportQuery, tx?: TransactionContext): Promise<StudentSubscriptionReportRow[]> {
+    return this.subscriptions.listForStudentReport(query, tx);
   }
 
   /** The student's name comes from the Students module (public contract); a student that cannot be read shows no name rather than failing the list. */

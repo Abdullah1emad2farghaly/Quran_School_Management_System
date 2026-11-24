@@ -14,7 +14,7 @@ import { MAX_BATCH_RECORDS, sameQuranRange, toMemorizationRange, type Memorizati
 import {
   toAssignmentDto, toRecordDto, type AssignmentDto, type RecordBatchResultDto, type RecordCorrectionResultDto, type RecordDto, type ScheduledMemorizationDto, type SessionMemorizationDto,
 } from '../dto/memorization-dto';
-import type { MemorizationRepository } from '../ports/memorization-repository';
+import type { MemorizationReportQuery, MemorizationReportRow, MemorizationRepository } from '../ports/memorization-repository';
 
 export interface MemorizationServiceDeps {
   readonly memorization: MemorizationRepository;
@@ -251,6 +251,14 @@ export class MemorizationService {
   }
 
   /**
+   * PUBLIC READ for the reports (Module 38, additive, read-only): memorization records counted per school, group of the record, student and fulfilment state, filtered by schools, groups,
+   * students and a half-open range of session start instants. Creates and changes nothing; the caller (Module 38) has already proven every id lies inside the requester's reporting scope.
+   */
+  summarizeForReport(query: MemorizationReportQuery, tx?: TransactionContext): Promise<MemorizationReportRow[]> {
+    return this.repo.summarizeForReport(query, tx);
+  }
+
+  /**
    * PUBLIC READ for the future Notifications modules (Master Specification §63, half-session reminder): was memorization SCHEDULED for this session (a specific assignment
    * explicitly defined before it started), and which records exist. Creates and changes nothing; a missing record never justifies creating one.
    */
@@ -411,3 +419,6 @@ function parseRecordItems(records: unknown): Array<{ studentId: string; range: u
     return { studentId: rec.studentId, range: rec.range };
   });
 }
+
+/** The read-only aggregate Module 38 (Reports) depends on. */
+export type MemorizationReportLookup = Pick<MemorizationService, 'summarizeForReport'>;

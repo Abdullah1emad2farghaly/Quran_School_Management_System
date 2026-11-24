@@ -1,5 +1,5 @@
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../00-shared-kernel/public';
-import type { MemorizationRepository } from '../../application/ports/memorization-repository';
+import type { MemorizationReportQuery, MemorizationReportRow, MemorizationRepository } from '../../application/ports/memorization-repository';
 import { MemorizationAssignment, type AssignmentHistoryEntry, type MemorizationAssignmentSnapshot } from '../../domain/entities/memorization-assignment';
 import { MemorizationRecord, type MemorizationCorrection, type MemorizationRecordSnapshot } from '../../domain/entities/memorization-record';
 
@@ -77,6 +77,25 @@ export class InMemoryMemorizationRepository implements MemorizationRepository {
   }
   async listAssignmentHistoryOfSession(sessionId: string, _tx?: TransactionContext) {
     return this.assignmentHistory.filter((e) => e.sessionId === sessionId).map((e) => ({ ...e }));
+  }
+  async summarizeForReport(query: MemorizationReportQuery, _tx?: TransactionContext): Promise<MemorizationReportRow[]> {
+    const schools = query.schoolIds && new Set(query.schoolIds);
+    const groups = query.groupIds && new Set(query.groupIds);
+    const students = query.studentIds && new Set(query.studentIds);
+    const keyOf = (r: { schoolId: string; groupId: string; studentId: string; matches: boolean | null }) => `${r.schoolId}|${r.groupId}|${r.studentId}|${r.matches === null ? 'N' : r.matches ? 'T' : 'F'}`;
+    const totals = new Map<string, MemorizationReportRow>();
+    for (const r of this.records.values()) {
+      if (schools && !schools.has(r.schoolId)) continue;
+      if (groups && !groups.has(r.groupId)) continue;
+      if (students && !students.has(r.studentId)) continue;
+      if (query.from !== undefined && r.sessionScheduledStart.getTime() < query.from.getTime()) continue;
+      if (query.toExclusive !== undefined && r.sessionScheduledStart.getTime() >= query.toExclusive.getTime()) continue;
+      const row = { schoolId: r.schoolId, groupId: r.groupId, studentId: r.studentId, matches: r.matchesAssignment };
+      const key = keyOf(row);
+      const found = totals.get(key);
+      totals.set(key, { ...row, count: (found?.count ?? 0) + 1, firstStart: found && found.firstStart.getTime() < r.sessionScheduledStart.getTime() ? found.firstStart : r.sessionScheduledStart });
+    }
+    return [...totals.values()].sort((a, b) => (keyOf(a) < keyOf(b) ? -1 : keyOf(a) > keyOf(b) ? 1 : 0));
   }
   private hydrate(row: MemorizationRecordSnapshot & { sessionScheduledStart: Date }): MemorizationRecord {
     const { sessionScheduledStart: _ignored, ...snapshot } = row;

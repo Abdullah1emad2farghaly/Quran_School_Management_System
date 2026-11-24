@@ -1,5 +1,5 @@
 import { pageOffset, type PageRequest, type TransactionContext } from '../../../00-shared-kernel/public';
-import type { ExamRepository, ExamStudentRow, LockMode, StudentExamOutcomeRow } from '../../application/ports/exam-repository';
+import type { ExamRepository, ExamStudentRow, LockMode, StudentExamOutcomeRow, StudentExamReportQuery, StudentExamReportRow } from '../../application/ports/exam-repository';
 import { Exam, type ExamSnapshot } from '../../domain/entities/exam';
 import type { ExamResult, ExamResultSnapshot } from '../../domain/entities/exam-result';
 import type { ExamStatus } from '../../domain/value-objects/exam-rules';
@@ -120,5 +120,23 @@ export class InMemoryExamRepository implements ExamRepository {
         result: r.status === 'EXAMINED' ? ([...this.results.values()].find((x) => x.examId === r.examId && x.studentId === studentId) ?? null) : null,
       })),
     };
+  }
+  async listOutcomesOfStudentForReport(query: StudentExamReportQuery): Promise<StudentExamReportRow[]> {
+    const groups = query.groupIds === undefined ? undefined : new Set(query.groupIds);
+    const rows: StudentExamReportRow[] = [];
+    for (const s of this.students) {
+      if (s.studentId !== query.studentId || (s.status !== 'EXAMINED' && s.status !== 'ABSENT')) continue;
+      const exam = this.exams.get(s.examId);
+      if (!exam || exam.deletedAt !== null) continue;
+      if (query.from !== undefined && exam.startAt.getTime() < query.from.getTime()) continue;
+      if (query.toExclusive !== undefined && exam.startAt.getTime() >= query.toExclusive.getTime()) continue;
+      if (groups !== undefined && !groups.has(s.groupId)) continue;
+      const result = s.status === 'EXAMINED' ? [...this.results.values()].find((x) => x.examId === s.examId && x.studentId === query.studentId) : undefined;
+      rows.push({
+        examId: s.examId, schoolId: exam.schoolId, groupId: s.groupId, startAt: exam.startAt, outcome: s.status, questionCount: exam.questionCount, maxScore: exam.maxScore,
+        scores: result ? [...result.scores] : [], total: result ? result.total : null,
+      });
+    }
+    return rows.sort((a, b) => a.startAt.getTime() - b.startAt.getTime() || a.examId.localeCompare(b.examId));
   }
 }

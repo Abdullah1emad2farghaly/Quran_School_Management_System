@@ -1,7 +1,7 @@
 import { QueryTypes, UniqueConstraintError, type Sequelize } from 'sequelize';
 import type { PageRequest, TransactionContext } from '../../../../../00-shared-kernel/public';
 import { sequelizeTransactionOf } from '../../../../../02-database/public';
-import type { GroupListQuery, GroupRepository } from '../../../../application/ports/group-repository';
+import type { GroupListQuery, GroupRepository, GroupRosterReportQuery, GroupRosterReportRow, GroupTeacherTimelineEvent, GroupTeacherTimelineQuery, GroupTeacherTimelineRow } from '../../../../application/ports/group-repository';
 import { Group } from '../../../../domain/entities/group';
 import { GroupAssignment, type AssignmentEndReason } from '../../../../domain/entities/group-assignment';
 import type { GroupHistoryEntry } from '../../../../domain/entities/group-history-entry';
@@ -174,6 +174,39 @@ export class SequelizeGroupRepository implements GroupRepository {
   listAssignmentsOfStudent(studentId: string, tx?: TransactionContext): Promise<GroupAssignment[]> {
     return this.assignmentsWhere('student_id = :value', { value: studentId }, 'ORDER BY assigned_at ASC, id ASC', '', tx);
   }
+  async listAssignmentsOfGroupForReport(query: GroupRosterReportQuery, tx?: TransactionContext): Promise<GroupRosterReportRow[]> {
+    const replacements: Record<string, unknown> = { value: query.groupId };
+    let bounds = '';
+    if (query.toExclusive !== undefined) {
+      bounds += ' AND assigned_at < :toExclusive';
+      replacements.toExclusive = query.toExclusive;
+    }
+    if (query.from !== undefined) {
+      bounds += ' AND (unassigned_at IS NULL OR unassigned_at > :from)';
+      replacements.from = query.from;
+    }
+    const assignments = await this.assignmentsWhere(`group_id = :value${bounds}`, replacements, 'ORDER BY assigned_at ASC, id ASC', '', tx);
+    return assignments.map((a) => ({ studentId: a.snapshot.studentId, assignedAt: a.snapshot.assignedAt, unassignedAt: a.snapshot.unassignedAt }));
+  }
+  async listTeacherTimelinesForReport(query: GroupTeacherTimelineQuery, tx?: TransactionContext): Promise<GroupTeacherTimelineRow[]> {
+    if (query.schoolIds.length === 0) return [];
+    const rows = await this.db.query<{ groupId: string; schoolId: string; groupName: string; learningMode: string; action: 'CREATED' | 'TEACHER_CHANGED' | 'ARCHIVED'; occurredAt: Date | string; newTeacherId: string | null }>(
+      `SELECT g.id AS groupId, g.school_id AS schoolId, g.name AS groupName, g.learning_mode AS learningMode, h.action AS action, h.occurred_at AS occurredAt, h.new_teacher_id AS newTeacherId
+         FROM school_groups g JOIN group_history h ON h.group_id = g.id
+        WHERE g.school_id IN (:schoolIds) AND h.action IN ('CREATED', 'TEACHER_CHANGED', 'ARCHIVED')
+          AND g.id IN (SELECT t.group_id FROM group_history t JOIN school_groups tg ON tg.id = t.group_id WHERE tg.school_id IN (:schoolIds) AND t.new_teacher_id = :teacherId)
+        ORDER BY g.id, h.seq ASC`,
+      { replacements: { schoolIds: [...new Set(query.schoolIds)], teacherId: query.teacherId }, type: QueryTypes.SELECT, transaction: this.t(tx) },
+    );
+    const byGroup = new Map<string, { groupId: string; schoolId: string; groupName: string; learningMode: string; events: GroupTeacherTimelineEvent[] }>();
+    for (const r of rows) {
+      const entry = byGroup.get(r.groupId) ?? { groupId: r.groupId, schoolId: r.schoolId, groupName: r.groupName, learningMode: r.learningMode, events: [] as GroupTeacherTimelineEvent[] };
+      entry.events.push({ action: r.action, occurredAt: asDate(r.occurredAt), newTeacherId: r.newTeacherId });
+      byGroup.set(r.groupId, entry);
+    }
+    return [...byGroup.values()];
+  }
+
   async isStudentInActiveGroupOfTeacher(studentId: string, teacherId: string, tx?: TransactionContext): Promise<boolean> {
     const rows = await this.db.query<{ ok: number }>(
       'SELECT 1 AS ok FROM group_students gs JOIN school_groups g ON g.id = gs.group_id WHERE gs.student_id = :studentId AND gs.active = 1 AND g.teacher_id = :teacherId AND g.active = 1 LIMIT 1',
